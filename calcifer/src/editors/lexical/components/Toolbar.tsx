@@ -16,6 +16,7 @@ import { mergeRegister } from '@lexical/utils'
 import { $isHeadingNode, $isQuoteNode, $createHeadingNode, $createQuoteNode, type HeadingTagType } from '@lexical/rich-text'
 import { $findMatchingParent } from '@lexical/utils'
 import { $isRootOrShadowRoot } from 'lexical'
+import { $isListNode, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, INSERT_CHECK_LIST_COMMAND, REMOVE_LIST_COMMAND } from '@lexical/list'
 import { Toggle } from '~/components/ui/toggle'
 import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
@@ -31,6 +32,9 @@ import {
   TextSubscriptIcon,
   TextSuperscriptIcon,
   EraserIcon,
+  ListBulletsIcon,
+  ListNumbersIcon,
+  ListChecksIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
 import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
@@ -74,7 +78,9 @@ export function Toolbar() {
             })
 
       if (element !== null) {
-        if ($isHeadingNode(element)) {
+        if ($isListNode(element)) {
+          setBlockType(element.getListType())
+        } else if ($isHeadingNode(element)) {
           setBlockType(element.getTag())
         } else if ($isQuoteNode(element)) {
           setBlockType('blockquote')
@@ -137,6 +143,30 @@ export function Toolbar() {
       })
     })
   }, [editor])
+
+  const toggleBulletList = useCallback(() => {
+    if (blockType === 'bullet') {
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)
+    } else {
+      editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)
+    }
+  }, [editor, blockType])
+
+  const toggleOrderedList = useCallback(() => {
+    if (blockType === 'number') {
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)
+    } else {
+      editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)
+    }
+  }, [editor, blockType])
+
+  const toggleCheckList = useCallback(() => {
+    if (blockType === 'check') {
+      editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)
+    } else {
+      editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined)
+    }
+  }, [editor, blockType])
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
@@ -237,6 +267,19 @@ export function Toolbar() {
           {icon}
         </Toggle>
       ))}
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Lists */}
+      <Toggle size="sm" pressed={blockType === 'bullet'} onPressedChange={toggleBulletList} aria-label="Bullet list">
+        <ListBulletsIcon />
+      </Toggle>
+      <Toggle size="sm" pressed={blockType === 'number'} onPressedChange={toggleOrderedList} aria-label="Numbered list">
+        <ListNumbersIcon />
+      </Toggle>
+      <Toggle size="sm" pressed={blockType === 'check'} onPressedChange={toggleCheckList} aria-label="Checklist">
+        <ListChecksIcon />
+      </Toggle>
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

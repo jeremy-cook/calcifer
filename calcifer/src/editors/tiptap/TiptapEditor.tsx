@@ -8,6 +8,8 @@ import { FontFamily } from '@tiptap/extension-font-family'
 import { Subscript } from '@tiptap/extension-subscript'
 import { Superscript } from '@tiptap/extension-superscript'
 import { TextAlign } from '@tiptap/extension-text-align'
+import { TaskList } from '@tiptap/extension-task-list'
+import { TaskItem } from '@tiptap/extension-task-item'
 import { Toolbar } from './components/Toolbar'
 import './TiptapEditor.css'
 
@@ -22,6 +24,8 @@ export function TiptapEditor() {
       Subscript,
       Superscript,
       TextAlign.configure({ types: ['heading', 'paragraph', 'blockquote'] }),
+      TaskList,
+      TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: 'Start typing…' }),
     ],
     content: '',

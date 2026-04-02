@@ -48,3 +48,69 @@
   font-style: italic;
   margin-block: 0.5em;
 }
+
+.tiptap ul:not([data-type='taskList']) {
+  list-style-type: '- ';
+  padding-left: 1.5rem;
+  margin-block: 0.5em;
+}
+
+.tiptap ul:not([data-type='taskList']) li::marker {
+  font-size: 1.25em;
+}
+
+.tiptap ul:not([data-type='taskList']) ul {
+  list-style-type: '- ';
+  margin-block: 0;
+}
+
+.tiptap ul:not([data-type='taskList']) ul ul {
+  list-style-type: '- ';
+}
+
+.tiptap ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-block: 0.5em;
+}
+
+.tiptap ol ol {
+  list-style-type: lower-alpha;
+  margin-block: 0;
+}
+
+.tiptap ol ol ol {
+  list-style-type: lower-roman;
+}
+
+/* Task list */
+.tiptap ul[data-type='taskList'] {
+  list-style: none;
+  padding-left: 0.25rem;
+  margin-block: 0.5em;
+}
+
+.tiptap ul[data-type='taskList'] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.tiptap ul[data-type='taskList'] li > label {
+  margin-top: 0.15em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.tiptap ul[data-type='taskList'] li > div {
+  flex: 1;
+}
+
+.tiptap ul[data-type='taskList'] li[data-checked='true'] > div {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}
+
+.tiptap ul[data-type='taskList'] ul[data-type='taskList'] {
+  margin-block: 0;
+}

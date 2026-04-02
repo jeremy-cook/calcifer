@@ -30,3 +30,79 @@
   font-style: italic;
   margin-block: 0.5em;
 }
+
+/* Lists */
+.lexical-content-editable .lexical-ul {
+  list-style-type: '- ';
+  padding-left: 1.5rem;
+  margin-block: 0.5em;
+}
+
+.lexical-content-editable .lexical-ul .lexical-listitem::marker {
+  font-size: 1.25em;
+}
+
+.lexical-content-editable .lexical-ul .lexical-ul {
+  list-style-type: '- ';
+  margin-block: 0;
+}
+
+.lexical-content-editable .lexical-ul .lexical-ul .lexical-ul {
+  list-style-type: '- ';
+}
+
+.lexical-content-editable .lexical-ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-block: 0.5em;
+}
+
+.lexical-content-editable .lexical-ol .lexical-ol {
+  list-style-type: lower-alpha;
+  margin-block: 0;
+}
+
+.lexical-content-editable .lexical-ol .lexical-ol .lexical-ol {
+  list-style-type: lower-roman;
+}
+
+/* Nested list items (no extra marker for container items) */
+.lexical-content-editable .lexical-nested-listitem {
+  list-style-type: none;
+}
+
+/* Checklist */
+.lexical-content-editable .lexical-listitem-checked,
+.lexical-content-editable .lexical-listitem-unchecked {
+  position: relative;
+  list-style-type: none;
+  padding-left: 1.75rem;
+  margin-left: -1.5rem;
+  outline: none;
+}
+
+.lexical-content-editable .lexical-listitem-checked::before,
+.lexical-content-editable .lexical-listitem-unchecked::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.25em;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.lexical-content-editable .lexical-listitem-checked::before {
+  background-color: var(--primary);
+  border-color: var(--primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='white'%3E%3Cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
+}
+
+.lexical-content-editable .lexical-listitem-checked > span {
+  text-decoration: line-through;
+  color: var(--muted-foreground);
+}

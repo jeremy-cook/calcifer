@@ -14,6 +14,9 @@ import {
   TextSubscriptIcon,
   TextSuperscriptIcon,
   EraserIcon,
+  ListBulletsIcon,
+  ListNumbersIcon,
+  ListChecksIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
 import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
@@ -64,6 +67,9 @@ export function Toolbar({ editor }: ToolbarProps) {
         isCode: ctx.editor.isActive('code'),
         isSubscript: ctx.editor.isActive('subscript'),
         isSuperscript: ctx.editor.isActive('superscript'),
+        isBulletList: ctx.editor.isActive('bulletList'),
+        isOrderedList: ctx.editor.isActive('orderedList'),
+        isTaskList: ctx.editor.isActive('taskList'),
         fontColor: (ctx.editor.getAttributes('textStyle').color as string) ?? '',
         highlight: (ctx.editor.getAttributes('highlight').color as string) ?? '',
         fontFamily: (ctx.editor.getAttributes('textStyle').fontFamily as string) ?? '',
@@ -73,7 +79,7 @@ export function Toolbar({ editor }: ToolbarProps) {
     },
   })
 
-  const { isBold, isItalic, isUnderline, isStrike, isCode, isSubscript, isSuperscript, fontColor, highlight, fontFamily, blockType, alignment } = state
+  const { isBold, isItalic, isUnderline, isStrike, isCode, isSubscript, isSuperscript, isBulletList, isOrderedList, isTaskList, fontColor, highlight, fontFamily, blockType, alignment } = state
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
@@ -177,6 +183,19 @@ export function Toolbar({ editor }: ToolbarProps) {
           {icon}
         </Toggle>
       ))}
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Lists */}
+      <Toggle size="sm" pressed={isBulletList} onPressedChange={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bullet list">
+        <ListBulletsIcon />
+      </Toggle>
+      <Toggle size="sm" pressed={isOrderedList} onPressedChange={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list">
+        <ListNumbersIcon />
+      </Toggle>
+      <Toggle size="sm" pressed={isTaskList} onPressedChange={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist">
+        <ListChecksIcon />
+      </Toggle>
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

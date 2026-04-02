@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@fontsource-variable/montserrat": "^5.2.8",
+    "@lexical/list": "^0.42.0",
     "@lexical/markdown": "^0.42.0",
     "@lexical/react": "^0.42.0",
     "@lexical/rich-text": "^0.42.0",
@@ -27,6 +28,8 @@
     "@tiptap/extension-placeholder": "^3.22.0",
     "@tiptap/extension-subscript": "^3.22.0",
     "@tiptap/extension-superscript": "^3.22.0",
+    "@tiptap/extension-task-item": "^3.22.0",
+    "@tiptap/extension-task-list": "^3.22.0",
     "@tiptap/extension-text-align": "^3.22.0",
     "@tiptap/extension-text-style": "^3.22.0",
     "@tiptap/extension-underline": "^3.22.0",

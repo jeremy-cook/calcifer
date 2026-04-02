@@ -11,6 +11,9 @@ importers:
       '@fontsource-variable/montserrat':
         specifier: ^5.2.8
         version: 5.2.8
+      '@lexical/list':
+        specifier: ^0.42.0
+        version: 0.42.0
       '@lexical/markdown':
         specifier: ^0.42.0
         version: 0.42.0
@@ -53,6 +56,12 @@ importers:
       '@tiptap/extension-superscript':
         specifier: ^3.22.0
         version: 3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0)
+      '@tiptap/extension-task-item':
+        specifier: ^3.22.0
+        version: 3.22.0(@tiptap/extension-list@3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0))
+      '@tiptap/extension-task-list':
+        specifier: ^3.22.0
+        version: 3.22.0(@tiptap/extension-list@3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0))
       '@tiptap/extension-text-align':
         specifier: ^3.22.0
         version: 3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))
@@ -1621,6 +1630,16 @@ packages:
     peerDependencies:
       '@tiptap/core': ^3.22.0
       '@tiptap/pm': ^3.22.0
+
+  '@tiptap/extension-task-item@3.22.0':
+    resolution: {integrity: sha512-VsS93AMKFC/A+obCAdcEQJyNv6+l5c6GX977QD8Suwv6mI2fAXoB1Kiw5nvU/WZXPBfA4ldSmVtbe+spaI+n8A==}
+    peerDependencies:
+      '@tiptap/extension-list': ^3.22.0
+
+  '@tiptap/extension-task-list@3.22.0':
+    resolution: {integrity: sha512-g9N9BbJCRvw4AGrunwA8I00Xa7f1DiLFLuvTI+/jJ3pqvwJkypswpGUuqflia8bYBMaAVYgtU1/91D1O5J6xww==}
+    peerDependencies:
+      '@tiptap/extension-list': ^3.22.0
 
   '@tiptap/extension-text-align@3.22.0':
     resolution: {integrity: sha512-wKX5uCCEl31KtBBqXFcKYHMivF9fzME4EwykYZk7qN3HoV+WJMl9D17s5r6TUayN++1G5IiW69UFFiwB9yDugw==}
@@ -5112,6 +5131,14 @@ snapshots:
     dependencies:
       '@tiptap/core': 3.22.0(@tiptap/pm@3.22.0)
       '@tiptap/pm': 3.22.0
+
+  '@tiptap/extension-task-item@3.22.0(@tiptap/extension-list@3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0))':
+    dependencies:
+      '@tiptap/extension-list': 3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0)
+
+  '@tiptap/extension-task-list@3.22.0(@tiptap/extension-list@3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0))':
+    dependencies:
+      '@tiptap/extension-list': 3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))(@tiptap/pm@3.22.0)
 
   '@tiptap/extension-text-align@3.22.0(@tiptap/core@3.22.0(@tiptap/pm@3.22.0))':
     dependencies:
