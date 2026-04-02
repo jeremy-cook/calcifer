@@ -1,13 +1,13 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Placeholder } from '@tiptap/extension-placeholder'
-import { Underline } from '@tiptap/extension-underline'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
 import { Highlight } from '@tiptap/extension-highlight'
 import { FontFamily } from '@tiptap/extension-font-family'
 import { Subscript } from '@tiptap/extension-subscript'
 import { Superscript } from '@tiptap/extension-superscript'
+import { TextAlign } from '@tiptap/extension-text-align'
 import { Toolbar } from './components/Toolbar'
 import './TiptapEditor.css'
 
@@ -15,13 +15,13 @@ export function TiptapEditor() {
   const editor = useEditor({
     extensions: [
       StarterKit,
-      Underline,
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),
       FontFamily,
       Subscript,
       Superscript,
+      TextAlign.configure({ types: ['heading', 'paragraph', 'blockquote'] }),
       Placeholder.configure({ placeholder: 'Start typing…' }),
     ],
     content: '',

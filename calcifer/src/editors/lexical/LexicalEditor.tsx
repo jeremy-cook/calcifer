@@ -5,7 +5,8 @@ import { ContentEditable } from '@lexical/react/LexicalContentEditable'
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin'
 import { LexicalErrorBoundary } from '@lexical/react/LexicalErrorBoundary'
 import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin'
-import { BOLD_STAR, BOLD_UNDERSCORE, INLINE_CODE, ITALIC_STAR, ITALIC_UNDERSCORE, STRIKETHROUGH } from '@lexical/markdown'
+import { BOLD_STAR, BOLD_UNDERSCORE, HEADING, INLINE_CODE, ITALIC_STAR, ITALIC_UNDERSCORE, QUOTE, STRIKETHROUGH } from '@lexical/markdown'
+import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { Toolbar } from './components/Toolbar'
 import { CodeExclusivityPlugin } from './plugins/CodeExclusivityPlugin'
 
@@ -18,6 +19,12 @@ const theme = {
     underlineStrikethrough: 'underline line-through',
     code: 'font-mono rounded bg-primary/10 text-primary px-1 py-0.5 text-sm',
   },
+  heading: {
+    h1: 'lexical-h1',
+    h2: 'lexical-h2',
+    h3: 'lexical-h3',
+  },
+  quote: 'lexical-blockquote',
 }
 
 function onError(error: Error) {
@@ -28,6 +35,7 @@ const initialConfig = {
   namespace: 'CalciferLexical',
   theme: theme,
   onError: onError,
+  nodes: [HeadingNode, QuoteNode],
 }
 
 export function LexicalEditor() {
@@ -48,7 +56,7 @@ export function LexicalEditor() {
           ErrorBoundary={LexicalErrorBoundary}
         />
         <HistoryPlugin />
-        <MarkdownShortcutPlugin transformers={[BOLD_STAR, BOLD_UNDERSCORE, ITALIC_STAR, ITALIC_UNDERSCORE, STRIKETHROUGH, INLINE_CODE]} />
+        <MarkdownShortcutPlugin transformers={[HEADING, QUOTE, BOLD_STAR, BOLD_UNDERSCORE, ITALIC_STAR, ITALIC_UNDERSCORE, STRIKETHROUGH, INLINE_CODE]} />
         <CodeExclusivityPlugin />
         </div>
       </div>

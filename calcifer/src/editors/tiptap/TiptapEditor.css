@@ -19,3 +19,32 @@
   pointer-events: none;
   height: 0;
 }
+
+.tiptap h1 {
+  font-size: var(--text-3xl);
+  font-weight: var(--font-weight-bold);
+  line-height: var(--text-3xl--line-height);
+  margin-block: 0.5em;
+}
+
+.tiptap h2 {
+  font-size: var(--text-2xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-2xl--line-height);
+  margin-block: 0.5em;
+}
+
+.tiptap h3 {
+  font-size: var(--text-xl);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--text-xl--line-height);
+  margin-block: 0.5em;
+}
+
+.tiptap blockquote {
+  border-left: 4px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+  margin-block: 0.5em;
+}

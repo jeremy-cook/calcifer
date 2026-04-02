@@ -16,33 +16,83 @@ import {
   EraserIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
-import { FONT_FAMILIES } from '~/editors/shared/formatting-options'
+import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
 
 interface ToolbarProps {
   editor: Editor
 }
 
+function getBlockType(editor: Editor): string {
+  if (editor.isActive('heading', { level: 1 })) return 'h1'
+  if (editor.isActive('heading', { level: 2 })) return 'h2'
+  if (editor.isActive('heading', { level: 3 })) return 'h3'
+  if (editor.isActive('blockquote')) return 'blockquote'
+  return 'paragraph'
+}
+
+function setBlockType(editor: Editor, value: string) {
+  switch (value) {
+    case 'paragraph':
+      editor.chain().focus().setParagraph().run()
+      break
+    case 'h1':
+      editor.chain().focus().toggleHeading({ level: 1 }).run()
+      break
+    case 'h2':
+      editor.chain().focus().toggleHeading({ level: 2 }).run()
+      break
+    case 'h3':
+      editor.chain().focus().toggleHeading({ level: 3 }).run()
+      break
+    case 'blockquote':
+      editor.chain().focus().toggleBlockquote().run()
+      break
+  }
+}
+
 export function Toolbar({ editor }: ToolbarProps) {
   const state = useEditorState({
     editor,
-    selector: (ctx) => ({
-      isBold: ctx.editor.isActive('bold'),
-      isItalic: ctx.editor.isActive('italic'),
-      isUnderline: ctx.editor.isActive('underline'),
-      isStrike: ctx.editor.isActive('strike'),
-      isCode: ctx.editor.isActive('code'),
-      isSubscript: ctx.editor.isActive('subscript'),
-      isSuperscript: ctx.editor.isActive('superscript'),
-      fontColor: (ctx.editor.getAttributes('textStyle').color as string) ?? '',
-      highlight: (ctx.editor.getAttributes('highlight').color as string) ?? '',
-      fontFamily: (ctx.editor.getAttributes('textStyle').fontFamily as string) ?? '',
-    }),
+    selector: (ctx) => {
+      const blockType = getBlockType(ctx.editor)
+      const attrNodeName = blockType.startsWith('h') ? 'heading' : blockType
+      return {
+        isBold: ctx.editor.isActive('bold'),
+        isItalic: ctx.editor.isActive('italic'),
+        isUnderline: ctx.editor.isActive('underline'),
+        isStrike: ctx.editor.isActive('strike'),
+        isCode: ctx.editor.isActive('code'),
+        isSubscript: ctx.editor.isActive('subscript'),
+        isSuperscript: ctx.editor.isActive('superscript'),
+        fontColor: (ctx.editor.getAttributes('textStyle').color as string) ?? '',
+        highlight: (ctx.editor.getAttributes('highlight').color as string) ?? '',
+        fontFamily: (ctx.editor.getAttributes('textStyle').fontFamily as string) ?? '',
+        blockType,
+        alignment: ((ctx.editor.getAttributes(attrNodeName).textAlign as string) || 'left') as Alignment,
+      }
+    },
   })
 
-  const { isBold, isItalic, isUnderline, isStrike, isCode, isSubscript, isSuperscript, fontColor, highlight, fontFamily } = state
+  const { isBold, isItalic, isUnderline, isStrike, isCode, isSubscript, isSuperscript, fontColor, highlight, fontFamily, blockType, alignment } = state
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
+      {/* Block type */}
+      <Select value={blockType} onValueChange={(v) => setBlockType(editor, v)}>
+        <SelectTrigger className="h-7 w-32 text-xs" aria-label="Block type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {BLOCK_TYPES.map((b) => (
+            <SelectItem key={b.value} value={b.value}>
+              {b.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
       {/* Font family */}
       <Select
         value={fontFamily}
@@ -112,6 +162,21 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Toggle size="sm" pressed={isSuperscript} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleSuperscript().run()} aria-label="Superscript">
         <TextSuperscriptIcon />
       </Toggle>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Alignment */}
+      {ALIGNMENTS.map(({ value, icon, label }) => (
+        <Toggle
+          key={value}
+          size="sm"
+          pressed={alignment === value}
+          onPressedChange={() => editor.chain().focus().setTextAlign(value).run()}
+          aria-label={label}
+        >
+          {icon}
+        </Toggle>
+      ))}
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

@@ -1,8 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { $getSelection, $isRangeSelection, $isTextNode, FORMAT_TEXT_COMMAND } from 'lexical'
+import {
+  $getSelection,
+  $isRangeSelection,
+  $isElementNode,
+  $isTextNode,
+  FORMAT_TEXT_COMMAND,
+  FORMAT_ELEMENT_COMMAND,
+  $createParagraphNode,
+  type ElementFormatType,
+} from 'lexical'
+import { $setBlocksType } from '@lexical/selection'
 import { $patchStyleText, $getSelectionStyleValueForProperty } from '@lexical/selection'
 import { mergeRegister } from '@lexical/utils'
+import { $isHeadingNode, $isQuoteNode, $createHeadingNode, $createQuoteNode, type HeadingTagType } from '@lexical/rich-text'
+import { $findMatchingParent } from '@lexical/utils'
+import { $isRootOrShadowRoot } from 'lexical'
 import { Toggle } from '~/components/ui/toggle'
 import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
@@ -20,7 +33,7 @@ import {
   EraserIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
-import { FONT_FAMILIES } from '~/editors/shared/formatting-options'
+import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
 
 export function Toolbar() {
   const [editor] = useLexicalComposerContext()
@@ -34,6 +47,8 @@ export function Toolbar() {
   const [fontColor, setFontColor] = useState('')
   const [highlightColor, setHighlightColor] = useState('')
   const [fontFamily, setFontFamily] = useState('')
+  const [blockType, setBlockType] = useState('paragraph')
+  const [alignment, setAlignment] = useState<Alignment>('left')
 
   const updateToolbar = useCallback(() => {
     const selection = $getSelection()
@@ -47,8 +62,29 @@ export function Toolbar() {
       setIsSuperscript(selection.hasFormat('superscript'))
       setFontColor($getSelectionStyleValueForProperty(selection, 'color', ''))
       setHighlightColor($getSelectionStyleValueForProperty(selection, 'background-color', ''))
-      const rawFontFamily = $getSelectionStyleValueForProperty(selection, 'font-family', '')
-      setFontFamily(rawFontFamily)
+      setFontFamily($getSelectionStyleValueForProperty(selection, 'font-family', ''))
+
+      const anchorNode = selection.anchor.getNode()
+      const element =
+        anchorNode.getKey() === 'root'
+          ? anchorNode
+          : $findMatchingParent(anchorNode, (e) => {
+              const parent = e.getParent()
+              return parent !== null && $isRootOrShadowRoot(parent)
+            })
+
+      if (element !== null) {
+        if ($isHeadingNode(element)) {
+          setBlockType(element.getTag())
+        } else if ($isQuoteNode(element)) {
+          setBlockType('blockquote')
+        } else {
+          setBlockType('paragraph')
+        }
+        if ($isElementNode(element)) {
+          setAlignment((element.getFormatType() as Alignment) || 'left')
+        }
+      }
     }
   }, [])
 
@@ -74,6 +110,23 @@ export function Toolbar() {
     [editor],
   )
 
+  const changeBlockType = useCallback(
+    (value: string) => {
+      editor.update(() => {
+        const selection = $getSelection()
+        if (!$isRangeSelection(selection)) return
+        if (value === 'paragraph') {
+          $setBlocksType(selection, () => $createParagraphNode())
+        } else if (value === 'blockquote') {
+          $setBlocksType(selection, () => $createQuoteNode())
+        } else if (value === 'h1' || value === 'h2' || value === 'h3') {
+          $setBlocksType(selection, () => $createHeadingNode(value as HeadingTagType))
+        }
+      })
+    },
+    [editor],
+  )
+
   const clearFormatting = useCallback(() => {
     editor.update(() => {
       const selection = $getSelection()
@@ -87,6 +140,22 @@ export function Toolbar() {
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
+      {/* Block type */}
+      <Select value={blockType} onValueChange={changeBlockType}>
+        <SelectTrigger className="h-7 w-32 text-xs" aria-label="Block type">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {BLOCK_TYPES.map((b) => (
+            <SelectItem key={b.value} value={b.value}>
+              {b.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
       {/* Font family */}
       <Select
         value={fontFamily}
@@ -153,6 +222,21 @@ export function Toolbar() {
       <Toggle size="sm" pressed={isSuperscript} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'superscript')} aria-label="Superscript">
         <TextSuperscriptIcon />
       </Toggle>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Alignment */}
+      {ALIGNMENTS.map(({ value, icon, label }) => (
+        <Toggle
+          key={value}
+          size="sm"
+          pressed={alignment === value}
+          onPressedChange={() => editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, value as ElementFormatType)}
+          aria-label={label}
+        >
+          {icon}
+        </Toggle>
+      ))}
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 
