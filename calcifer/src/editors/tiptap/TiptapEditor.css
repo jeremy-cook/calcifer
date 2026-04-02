@@ -1,0 +1,21 @@
+.tiptap mark {
+  background-color: inherit;
+  color: inherit;
+}
+
+.tiptap code {
+  font-family: var(--font-mono);
+  background-color: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.875em;
+}
+
+.tiptap p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: var(--muted-foreground);
+  pointer-events: none;
+  height: 0;
+}
