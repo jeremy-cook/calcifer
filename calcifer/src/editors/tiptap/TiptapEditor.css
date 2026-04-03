@@ -1,3 +1,41 @@
+/* Code block */
+.tiptap .tiptap-code-block {
+  font-family: var(--font-mono);
+}
+
+.tiptap .tiptap-code-block pre {
+  background-color: var(--shiki-light-bg, color-mix(in oklch, var(--muted) 60%, transparent));
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .tiptap .tiptap-code-block pre {
+    background-color: var(--shiki-dark-bg, color-mix(in oklch, var(--muted) 60%, transparent));
+  }
+}
+
+.tiptap .tiptap-code-block code {
+  background: none;
+  color: var(--foreground);
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.tiptap .shiki span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  .tiptap .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
 .tiptap mark {
   background-color: inherit;
   color: inherit;

@@ -1,4 +1,4 @@
-import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
+import { TiptapEditorLoader } from '~/editors/tiptap/TiptapEditor'
 import { LexicalEditor } from '~/editors/lexical/LexicalEditor'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '~/components/ui/tabs'
 
@@ -16,7 +16,7 @@ export function Home() {
         forceMount
         className="mt-0 min-h-0 flex-1 data-[state=inactive]:hidden"
       >
-        <TiptapEditor />
+        <TiptapEditorLoader />
       </TabsContent>
       <TabsContent
         value="lexical"

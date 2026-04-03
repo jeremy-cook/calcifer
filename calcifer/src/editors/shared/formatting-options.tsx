@@ -20,6 +20,22 @@ export const BLOCK_TYPES = [
   { label: 'Heading 2', value: 'h2' },
   { label: 'Heading 3', value: 'h3' },
   { label: 'Quote', value: 'blockquote' },
+  { label: 'Code Block', value: 'code' },
+]
+
+export const CODE_LANGUAGES = [
+  { label: 'Plain Text', value: 'plaintext' },
+  { label: 'JavaScript', value: 'javascript' },
+  { label: 'TypeScript', value: 'typescript' },
+  { label: 'HTML', value: 'html' },
+  { label: 'CSS', value: 'css' },
+  { label: 'JSON', value: 'json' },
+  { label: 'Python', value: 'python' },
+  { label: 'Rust', value: 'rust' },
+  { label: 'Go', value: 'go' },
+  { label: 'SQL', value: 'sql' },
+  { label: 'Bash', value: 'bash' },
+  { label: 'Markdown', value: 'markdown' },
 ]
 
 export const FONT_FAMILIES = [

@@ -1,3 +1,20 @@
+/* Code block */
+.lexical-content-editable .lexical-codeblock {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  line-height: 1.6;
+  white-space: pre;
+  tab-size: 2;
+  padding: 1rem 1.5rem;
+  margin-block: 0.75em;
+  background-color: color-mix(in oklch, var(--muted) 60%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+
 .lexical-content-editable p {
   margin: 0;
 }

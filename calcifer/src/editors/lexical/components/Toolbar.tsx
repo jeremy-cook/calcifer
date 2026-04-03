@@ -17,6 +17,7 @@ import { $isHeadingNode, $isQuoteNode, $createHeadingNode, $createQuoteNode, typ
 import { $findMatchingParent } from '@lexical/utils'
 import { $isRootOrShadowRoot } from 'lexical'
 import { $isListNode, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, INSERT_CHECK_LIST_COMMAND, REMOVE_LIST_COMMAND } from '@lexical/list'
+import { $createCodeNode, $isCodeNode } from '@lexical/code'
 import { Toggle } from '~/components/ui/toggle'
 import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
@@ -84,6 +85,8 @@ export function Toolbar() {
           setBlockType(element.getTag())
         } else if ($isQuoteNode(element)) {
           setBlockType('blockquote')
+        } else if ($isCodeNode(element)) {
+          setBlockType('code')
         } else {
           setBlockType('paragraph')
         }
@@ -118,6 +121,16 @@ export function Toolbar() {
 
   const changeBlockType = useCallback(
     (value: string) => {
+      if (value === 'bullet') {
+        if (blockType === 'bullet') editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)
+        else editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined)
+        return
+      }
+      if (value === 'number') {
+        if (blockType === 'number') editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined)
+        else editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined)
+        return
+      }
       editor.update(() => {
         const selection = $getSelection()
         if (!$isRangeSelection(selection)) return
@@ -127,10 +140,12 @@ export function Toolbar() {
           $setBlocksType(selection, () => $createQuoteNode())
         } else if (value === 'h1' || value === 'h2' || value === 'h3') {
           $setBlocksType(selection, () => $createHeadingNode(value as HeadingTagType))
+        } else if (value === 'code') {
+          $setBlocksType(selection, () => $createCodeNode())
         }
       })
     },
-    [editor],
+    [editor, blockType],
   )
 
   const clearFormatting = useCallback(() => {
@@ -168,6 +183,9 @@ export function Toolbar() {
     }
   }, [editor, blockType])
 
+  const isCodeBlock = blockType === 'code'
+  const disableInline = isCode || isCodeBlock
+
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
       {/* Block type */}
@@ -190,7 +208,7 @@ export function Toolbar() {
       <Select
         value={fontFamily}
         onValueChange={(v) => applyStyle({ 'font-family': v === '__default__' ? '' : v })}
-        disabled={isCode}
+        disabled={disableInline}
       >
         <SelectTrigger className="h-7 w-28 text-xs" aria-label="Font family">
           <SelectValue placeholder="Font" />
@@ -207,16 +225,16 @@ export function Toolbar() {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Inline formatting */}
-      <Toggle size="sm" pressed={isBold} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} aria-label="Bold">
+      <Toggle size="sm" pressed={isBold} disabled={disableInline} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'bold')} aria-label="Bold">
         <TextBIcon weight="bold" />
       </Toggle>
-      <Toggle size="sm" pressed={isItalic} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} aria-label="Italic">
+      <Toggle size="sm" pressed={isItalic} disabled={disableInline} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'italic')} aria-label="Italic">
         <TextItalicIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isUnderline} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} aria-label="Underline">
+      <Toggle size="sm" pressed={isUnderline} disabled={disableInline} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'underline')} aria-label="Underline">
         <TextUnderlineIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isStrikethrough} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')} aria-label="Strikethrough">
+      <Toggle size="sm" pressed={isStrikethrough} disabled={disableInline} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'strikethrough')} aria-label="Strikethrough">
         <TextStrikethroughIcon />
       </Toggle>
       <Toggle size="sm" pressed={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'code')} aria-label="Inline code">
@@ -232,7 +250,7 @@ export function Toolbar() {
         onClear={() => applyStyle({ color: '' })}
         icon={<TextAaIcon />}
         label="Font color"
-        disabled={isCode}
+        disabled={disableInline}
       />
       <ColorPickerPopover
         color={highlightColor}
@@ -240,16 +258,16 @@ export function Toolbar() {
         onClear={() => applyStyle({ 'background-color': '' })}
         icon={<HighlighterIcon />}
         label="Highlight color"
-        disabled={isCode}
+        disabled={disableInline}
       />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Subscript / Superscript */}
-      <Toggle size="sm" pressed={isSubscript} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'subscript')} aria-label="Subscript">
+      <Toggle size="sm" pressed={isSubscript} disabled={disableInline} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'subscript')} aria-label="Subscript">
         <TextSubscriptIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isSuperscript} disabled={isCode} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'superscript')} aria-label="Superscript">
+      <Toggle size="sm" pressed={isSuperscript} disabled={disableInline} onPressedChange={() => editor.dispatchCommand(FORMAT_TEXT_COMMAND, 'superscript')} aria-label="Superscript">
         <TextSuperscriptIcon />
       </Toggle>
 

@@ -26,6 +26,7 @@ interface ToolbarProps {
 }
 
 function getBlockType(editor: Editor): string {
+  if (editor.isActive('codeBlock')) return 'code'
   if (editor.isActive('heading', { level: 1 })) return 'h1'
   if (editor.isActive('heading', { level: 2 })) return 'h2'
   if (editor.isActive('heading', { level: 3 })) return 'h3'
@@ -50,6 +51,9 @@ function setBlockType(editor: Editor, value: string) {
     case 'blockquote':
       editor.chain().focus().toggleBlockquote().run()
       break
+    case 'code':
+      editor.chain().focus().toggleCodeBlock().run()
+      break
   }
 }
 
@@ -65,6 +69,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         isUnderline: ctx.editor.isActive('underline'),
         isStrike: ctx.editor.isActive('strike'),
         isCode: ctx.editor.isActive('code'),
+        isCodeBlock: blockType === 'code',
         isSubscript: ctx.editor.isActive('subscript'),
         isSuperscript: ctx.editor.isActive('superscript'),
         isBulletList: ctx.editor.isActive('bulletList'),
@@ -79,7 +84,8 @@ export function Toolbar({ editor }: ToolbarProps) {
     },
   })
 
-  const { isBold, isItalic, isUnderline, isStrike, isCode, isSubscript, isSuperscript, isBulletList, isOrderedList, isTaskList, fontColor, highlight, fontFamily, blockType, alignment } = state
+  const { isBold, isItalic, isUnderline, isStrike, isCode, isCodeBlock, isSubscript, isSuperscript, isBulletList, isOrderedList, isTaskList, fontColor, highlight, fontFamily, blockType, alignment } = state
+  const disableInline = isCode || isCodeBlock
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-0.5 border-b border-border px-2 py-1">
@@ -106,7 +112,7 @@ export function Toolbar({ editor }: ToolbarProps) {
           if (v === '__default__') editor.chain().focus().unsetFontFamily().run()
           else editor.chain().focus().setFontFamily(v).run()
         }}
-        disabled={isCode}
+        disabled={disableInline}
       >
         <SelectTrigger className="h-7 w-28 text-xs" aria-label="Font family">
           <SelectValue placeholder="Font" />
@@ -123,16 +129,16 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Inline formatting */}
-      <Toggle size="sm" pressed={isBold} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleBold().run()} aria-label="Bold">
+      <Toggle size="sm" pressed={isBold} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleBold().run()} aria-label="Bold">
         <TextBIcon weight="bold" />
       </Toggle>
-      <Toggle size="sm" pressed={isItalic} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic">
+      <Toggle size="sm" pressed={isItalic} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic">
         <TextItalicIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isUnderline} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline">
+      <Toggle size="sm" pressed={isUnderline} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline">
         <TextUnderlineIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isStrike} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleStrike().run()} aria-label="Strikethrough">
+      <Toggle size="sm" pressed={isStrike} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleStrike().run()} aria-label="Strikethrough">
         <TextStrikethroughIcon />
       </Toggle>
       <Toggle size="sm" pressed={isCode} onPressedChange={() => editor.chain().focus().toggleCode().run()} aria-label="Inline code">
@@ -148,7 +154,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClear={() => editor.chain().focus().unsetColor().run()}
         icon={<TextAaIcon />}
         label="Font color"
-        disabled={isCode}
+        disabled={disableInline}
       />
       <ColorPickerPopover
         color={highlight}
@@ -156,16 +162,16 @@ export function Toolbar({ editor }: ToolbarProps) {
         onClear={() => editor.chain().focus().unsetHighlight().run()}
         icon={<HighlighterIcon />}
         label="Highlight color"
-        disabled={isCode}
+        disabled={disableInline}
       />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Subscript / Superscript */}
-      <Toggle size="sm" pressed={isSubscript} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleSubscript().run()} aria-label="Subscript">
+      <Toggle size="sm" pressed={isSubscript} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleSubscript().run()} aria-label="Subscript">
         <TextSubscriptIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isSuperscript} disabled={isCode} onPressedChange={() => editor.chain().focus().toggleSuperscript().run()} aria-label="Superscript">
+      <Toggle size="sm" pressed={isSuperscript} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleSuperscript().run()} aria-label="Superscript">
         <TextSuperscriptIcon />
       </Toggle>
 
