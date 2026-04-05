@@ -1,3 +1,14 @@
+/* Links */
+.lexical-content-editable .lexical-link {
+  color: var(--primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.lexical-content-editable .lexical-link:hover {
+  opacity: 0.8;
+}
+
 /* Code block */
 .lexical-content-editable .lexical-codeblock {
   display: block;
@@ -122,4 +133,33 @@
 .lexical-content-editable .lexical-listitem-checked > span {
   text-decoration: line-through;
   color: var(--muted-foreground);
+}
+
+/* Tables */
+.lexical-content-editable .lexical-table {
+  border-collapse: collapse;
+  border-spacing: 0;
+  table-layout: fixed;
+  width: 100%;
+  margin-block: 0.75em;
+  overflow: hidden;
+}
+
+.lexical-content-editable .lexical-table-cell {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+  min-width: 80px;
+}
+
+.lexical-content-editable .lexical-table-cell-header {
+  font-weight: 600;
+  background-color: color-mix(in oklch, var(--muted) 60%, transparent);
+  text-align: left;
+}
+
+/* Images */
+.lexical-content-editable .image-node-wrapper {
+  display: block;
+  position: relative;
 }

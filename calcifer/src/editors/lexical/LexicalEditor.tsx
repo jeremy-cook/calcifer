@@ -9,6 +9,8 @@ import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPl
 import { ListPlugin } from '@lexical/react/LexicalListPlugin'
 import { CheckListPlugin } from '@lexical/react/LexicalCheckListPlugin'
 import { TabIndentationPlugin } from '@lexical/react/LexicalTabIndentationPlugin'
+import { LinkPlugin } from '@lexical/react/LexicalLinkPlugin'
+import { AutoLinkPlugin } from '@lexical/react/LexicalAutoLinkPlugin'
 import {
   BOLD_STAR,
   BOLD_UNDERSCORE,
@@ -25,14 +27,45 @@ import {
 import { HeadingNode, QuoteNode } from '@lexical/rich-text'
 import { ListNode, ListItemNode } from '@lexical/list'
 import { CodeNode, CodeHighlightNode } from '@lexical/code'
+import { LinkNode, AutoLinkNode, type LinkMatcher } from '@lexical/link'
+import { TableNode, TableCellNode, TableRowNode } from '@lexical/table'
+import { TablePlugin } from '@lexical/react/LexicalTablePlugin'
 import { registerCodeHighlighting } from '@lexical/code-shiki'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import { Toolbar } from './components/Toolbar'
 import { CodeExclusivityPlugin } from './plugins/CodeExclusivityPlugin'
 import { CodeActionMenuPlugin } from './plugins/CodeActionMenuPlugin'
+import { FloatingLinkEditorPlugin } from './plugins/FloatingLinkEditorPlugin'
+import { TableActionMenuPlugin } from './plugins/TableActionMenuPlugin'
+import { ImagesPlugin } from './plugins/ImagesPlugin'
+import { ImageNode } from './nodes/ImageNode'
+
+const URL_MATCHERS: Array<LinkMatcher> = [
+  (text: string) => {
+    const match = /((https?:\/\/(www\.)?)|(www\.))[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/.exec(text)
+    if (match === null) return null
+    const fullMatch = match[0]
+    return {
+      index: match.index,
+      length: fullMatch.length,
+      text: fullMatch,
+      url: fullMatch.startsWith('http') ? fullMatch : `https://${fullMatch}`,
+    }
+  },
+  (text: string) => {
+    const match = /(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))/.exec(text)
+    if (match === null) return null
+    return { index: match.index, length: match[0].length, text: match[0], url: `mailto:${match[0]}` }
+  },
+]
 
 const theme = {
   code: 'lexical-codeblock',
+  link: 'lexical-link',
+  table: 'lexical-table',
+  tableRow: 'lexical-table-row',
+  tableCell: 'lexical-table-cell',
+  tableCellHeader: 'lexical-table-cell-header',
   text: {
     bold: 'font-bold',
     italic: 'italic',
@@ -67,7 +100,7 @@ const initialConfig = {
   namespace: 'CalciferLexical',
   theme: theme,
   onError: onError,
-  nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode],
+  nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode, LinkNode, AutoLinkNode, TableNode, TableCellNode, TableRowNode, ImageNode],
 }
 
 function CodeHighlightPlugin() {
@@ -83,6 +116,7 @@ export function LexicalEditor() {
     <LexicalComposer initialConfig={initialConfig}>
       <div className="flex h-full w-full flex-col border border-border">
         <Toolbar />
+        <TableActionMenuPlugin />
         <div ref={scrollContainerRef} className="relative min-h-0 flex-1 overflow-y-auto">
           <RichTextPlugin
             contentEditable={
@@ -103,6 +137,11 @@ export function LexicalEditor() {
           <MarkdownShortcutPlugin transformers={[HEADING, QUOTE, UNORDERED_LIST, ORDERED_LIST, CHECK_LIST, BOLD_STAR, BOLD_UNDERSCORE, ITALIC_STAR, ITALIC_UNDERSCORE, STRIKETHROUGH, INLINE_CODE]} />
           <CodeExclusivityPlugin />
           <CodeActionMenuPlugin scrollContainerRef={scrollContainerRef} />
+          <LinkPlugin validateUrl={(url) => /^https?:\/\//.test(url) || url.startsWith('/')} />
+          <AutoLinkPlugin matchers={URL_MATCHERS} />
+          <FloatingLinkEditorPlugin />
+          <TablePlugin hasCellMerge={true} hasCellBackgroundColor={true} hasTabHandler={true} />
+          <ImagesPlugin />
         </div>
       </div>
     </LexicalComposer>

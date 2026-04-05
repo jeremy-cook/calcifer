@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
 import {
   $getSelection,
@@ -8,6 +8,8 @@ import {
   FORMAT_TEXT_COMMAND,
   FORMAT_ELEMENT_COMMAND,
   $createParagraphNode,
+  KEY_MODIFIER_COMMAND,
+  COMMAND_PRIORITY_NORMAL,
   type ElementFormatType,
 } from 'lexical'
 import { $setBlocksType } from '@lexical/selection'
@@ -18,6 +20,7 @@ import { $findMatchingParent } from '@lexical/utils'
 import { $isRootOrShadowRoot } from 'lexical'
 import { $isListNode, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, INSERT_CHECK_LIST_COMMAND, REMOVE_LIST_COMMAND } from '@lexical/list'
 import { $createCodeNode, $isCodeNode } from '@lexical/code'
+import { $isLinkNode, $isAutoLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
 import { Toggle } from '~/components/ui/toggle'
 import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
@@ -36,9 +39,13 @@ import {
   ListBulletsIcon,
   ListNumbersIcon,
   ListChecksIcon,
+  LinkIcon,
+  TableIcon,
 } from '@phosphor-icons/react'
+import { INSERT_TABLE_COMMAND } from '@lexical/table'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
 import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
+import { ImageInsertPopover } from './ImageInsertPopover'
 
 export function Toolbar() {
   const [editor] = useLexicalComposerContext()
@@ -54,6 +61,8 @@ export function Toolbar() {
   const [fontFamily, setFontFamily] = useState('')
   const [blockType, setBlockType] = useState('paragraph')
   const [alignment, setAlignment] = useState<Alignment>('left')
+  const [isLink, setIsLink] = useState(false)
+  const isLinkRef = useRef(false)
 
   const updateToolbar = useCallback(() => {
     const selection = $getSelection()
@@ -70,6 +79,11 @@ export function Toolbar() {
       setFontFamily($getSelectionStyleValueForProperty(selection, 'font-family', ''))
 
       const anchorNode = selection.anchor.getNode()
+      const linkNode = $findMatchingParent(anchorNode, (n) => $isLinkNode(n) || $isAutoLinkNode(n))
+      const nextIsLink = linkNode !== null
+      isLinkRef.current = nextIsLink
+      setIsLink(nextIsLink)
+
       const element =
         anchorNode.getKey() === 'root'
           ? anchorNode
@@ -106,6 +120,26 @@ export function Toolbar() {
       }),
     )
   }, [editor, updateToolbar])
+
+  useEffect(() => {
+    return editor.registerCommand(
+      KEY_MODIFIER_COMMAND,
+      (event) => {
+        if (event.key === 'k' && (event.ctrlKey || event.metaKey)) {
+          event.preventDefault()
+          if (isLinkRef.current) {
+            editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
+          } else {
+            const url = window.prompt('URL:')
+            if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, { url, target: '_blank', rel: 'noopener noreferrer' })
+          }
+          return true
+        }
+        return false
+      },
+      COMMAND_PRIORITY_NORMAL,
+    )
+  }, [editor])
 
   const applyStyle = useCallback(
     (styles: Record<string, string>) => {
@@ -298,6 +332,43 @@ export function Toolbar() {
       <Toggle size="sm" pressed={blockType === 'check'} onPressedChange={toggleCheckList} aria-label="Checklist">
         <ListChecksIcon />
       </Toggle>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Link */}
+      <Toggle
+        size="sm"
+        pressed={isLink}
+        onPressedChange={() => {
+          if (isLink) {
+            editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
+          } else {
+            const url = window.prompt('URL:')
+            if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, { url, target: '_blank', rel: 'noopener noreferrer' })
+          }
+        }}
+        aria-label="Link"
+      >
+        <LinkIcon />
+      </Toggle>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Table */}
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 min-w-7 px-1.5"
+        onClick={() => editor.dispatchCommand(INSERT_TABLE_COMMAND, { rows: '3', columns: '3', includeHeaders: true })}
+        aria-label="Insert table"
+      >
+        <TableIcon />
+      </Button>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Image */}
+      <ImageInsertPopover />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

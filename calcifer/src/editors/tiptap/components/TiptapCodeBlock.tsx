@@ -31,16 +31,16 @@ export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProp
   }
 
   return (
-    <NodeViewWrapper className="tiptap-code-block my-3 overflow-hidden rounded-md border border-border">
+    <NodeViewWrapper className="tiptap-code-block my-3 overflow-hidden rounded-lg border border-border">
       <div
-        className="flex items-center justify-between border-b border-border bg-muted/50 px-3 py-1.5"
+        className="flex items-center justify-between border-b border-border/60 bg-black/10 px-3 py-1"
         contentEditable={false}
       >
         <Select
           value={language}
           onValueChange={handleLanguageChange}
         >
-          <SelectTrigger className="h-6 w-32 border-0 bg-transparent px-1 text-xs shadow-none focus:ring-0">
+          <SelectTrigger className="h-6 w-32 border-0 bg-transparent px-1 text-xs text-muted-foreground shadow-none focus:ring-0 hover:text-foreground transition-colors">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -54,18 +54,18 @@ export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProp
         <Button
           variant="ghost"
           size="sm"
-          className="h-6 px-2 text-xs"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground transition-colors"
           onClick={handleCopy}
           aria-label="Copy code"
         >
           {copied ? (
-            <CheckIcon className="text-green-500" />
+            <CheckIcon className="size-3.5 text-green-500" />
           ) : (
-            <CopySimpleIcon />
+            <CopySimpleIcon className="size-3.5" />
           )}
         </Button>
       </div>
-      <pre className="m-0 overflow-x-auto p-4 text-sm">
+      <pre className="m-0 overflow-x-auto px-4 py-3 text-sm">
         <NodeViewContent<'code'> as="code" />
       </pre>
     </NodeViewWrapper>

@@ -17,9 +17,12 @@ import {
   ListBulletsIcon,
   ListNumbersIcon,
   ListChecksIcon,
+  LinkIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
 import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
+import { TableInsertPopover } from './TableInsertPopover'
+import { ImageInsertPopover } from './ImageInsertPopover'
 
 interface ToolbarProps {
   editor: Editor
@@ -75,6 +78,7 @@ export function Toolbar({ editor }: ToolbarProps) {
         isBulletList: ctx.editor.isActive('bulletList'),
         isOrderedList: ctx.editor.isActive('orderedList'),
         isTaskList: ctx.editor.isActive('taskList'),
+        isLink: ctx.editor.isActive('link'),
         fontColor: (ctx.editor.getAttributes('textStyle').color as string) ?? '',
         highlight: (ctx.editor.getAttributes('highlight').color as string) ?? '',
         fontFamily: (ctx.editor.getAttributes('textStyle').fontFamily as string) ?? '',
@@ -84,7 +88,7 @@ export function Toolbar({ editor }: ToolbarProps) {
     },
   })
 
-  const { isBold, isItalic, isUnderline, isStrike, isCode, isCodeBlock, isSubscript, isSuperscript, isBulletList, isOrderedList, isTaskList, fontColor, highlight, fontFamily, blockType, alignment } = state
+  const { isBold, isItalic, isUnderline, isStrike, isCode, isCodeBlock, isSubscript, isSuperscript, isBulletList, isOrderedList, isTaskList, isLink, fontColor, highlight, fontFamily, blockType, alignment } = state
   const disableInline = isCode || isCodeBlock
 
   return (
@@ -202,6 +206,35 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Toggle size="sm" pressed={isTaskList} onPressedChange={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist">
         <ListChecksIcon />
       </Toggle>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Link */}
+      <Toggle
+        size="sm"
+        pressed={isLink}
+        onPressedChange={() => {
+          if (isLink) {
+            editor.chain().focus().unsetLink().run()
+          } else {
+            const url = window.prompt('URL:')
+            if (url) editor.chain().focus().setLink({ href: url }).run()
+          }
+        }}
+        aria-label="Link"
+      >
+        <LinkIcon />
+      </Toggle>
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Table */}
+      <TableInsertPopover editor={editor} />
+
+      <Separator orientation="vertical" className="mx-1 h-5" />
+
+      {/* Image */}
+      <ImageInsertPopover editor={editor} />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

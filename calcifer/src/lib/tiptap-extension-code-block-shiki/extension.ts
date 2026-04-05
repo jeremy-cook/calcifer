@@ -1,10 +1,10 @@
 import type { CodeBlockOptions } from '@tiptap/extension-code-block'
 import { CodeBlock } from '@tiptap/extension-code-block'
-import type { Highlighter, BundledTheme, BundledLanguage } from 'shiki'
-import { ShikiPlugin, SHIKI_FORCE_DECORATION } from './plugin'
+import type { BundledTheme, BundledLanguage } from 'shiki'
+import { ShikiPlugin, SHIKI_FORCE_DECORATION, getDefaultHighlighter, initHighlighter, type GetHighlighter } from './plugin'
 
 export interface CodeBlockShikiOptions extends CodeBlockOptions {
-  highlighter: Highlighter
+  getHighlighter: GetHighlighter | null
   themes: {
     light: BundledTheme
     dark: BundledTheme
@@ -28,7 +28,7 @@ export const CodeBlockShiki = CodeBlock.extend<CodeBlockShikiOptions>({
   addOptions() {
     return {
       ...this.parent?.(),
-      highlighter: null as unknown as Highlighter,
+      getHighlighter: null,
       themes: {},
       defaultLanguage: null as unknown as BundledLanguage,
       languages: [] as BundledLanguage[],
@@ -40,18 +40,9 @@ export const CodeBlockShiki = CodeBlock.extend<CodeBlockShikiOptions>({
   },
 
   onCreate() {
-    const { highlighter, languages, themes } = this.options
-    const toLoadLangs = languages.filter((lang) => !highlighter.getLoadedLanguages().includes(lang))
-    const themeList = Object.values(themes) as BundledTheme[]
-    const toLoadThemes = themeList.filter((theme) => !highlighter.getLoadedThemes().includes(theme))
-
-    if (toLoadLangs.length === 0 && toLoadThemes.length === 0) return
-
-    const promises: Promise<void>[] = []
-    if (toLoadLangs.length > 0) promises.push(highlighter.loadLanguage(...toLoadLangs))
-    if (toLoadThemes.length > 0) promises.push(highlighter.loadTheme(...toLoadThemes))
-
-    Promise.all(promises).then(() => {
+    if (this.options.getHighlighter || getDefaultHighlighter()) return
+    const { languages, themes } = this.options
+    initHighlighter(Object.values(themes) as BundledTheme[], languages).then(() => {
       this.editor.view.dispatch(this.editor.view.state.tr.setMeta(SHIKI_FORCE_DECORATION, true))
     })
   },
@@ -62,9 +53,9 @@ export const CodeBlockShiki = CodeBlock.extend<CodeBlockShikiOptions>({
       loadCodeLanguage:
         (lang) =>
         ({ editor }) => {
-          const { highlighter } = this.options
-          if (highlighter.getLoadedLanguages().includes(lang)) return true
-          highlighter.loadLanguage(lang).then(() => {
+          const h = getDefaultHighlighter()
+          if (!h || h.getLoadedLanguages().includes(lang)) return true
+          h.loadLanguage(lang).then(() => {
             editor.view.dispatch(editor.view.state.tr.setMeta(SHIKI_FORCE_DECORATION, true))
           })
           return true
@@ -72,9 +63,9 @@ export const CodeBlockShiki = CodeBlock.extend<CodeBlockShikiOptions>({
       loadCodeTheme:
         (theme) =>
         ({ editor }) => {
-          const { highlighter } = this.options
-          if (highlighter.getLoadedThemes().includes(theme)) return true
-          highlighter.loadTheme(theme).then(() => {
+          const h = getDefaultHighlighter()
+          if (!h || h.getLoadedThemes().includes(theme)) return true
+          h.loadTheme(theme).then(() => {
             editor.view.dispatch(editor.view.state.tr.setMeta(SHIKI_FORCE_DECORATION, true))
           })
           return true
@@ -87,7 +78,7 @@ export const CodeBlockShiki = CodeBlock.extend<CodeBlockShikiOptions>({
       ...(this.parent?.() ?? []),
       ShikiPlugin({
         name: this.name,
-        highlighter: this.options.highlighter,
+        getHighlighter: this.options.getHighlighter,
         themes: this.options.themes,
         defaultLanguage: this.options.defaultLanguage,
       }),
