@@ -5,6 +5,7 @@ import {
   $isRangeSelection,
   $isElementNode,
   $isTextNode,
+  $createTextNode,
   FORMAT_TEXT_COMMAND,
   FORMAT_ELEMENT_COMMAND,
   $createParagraphNode,
@@ -20,11 +21,12 @@ import { $findMatchingParent } from '@lexical/utils'
 import { $isRootOrShadowRoot } from 'lexical'
 import { $isListNode, INSERT_ORDERED_LIST_COMMAND, INSERT_UNORDERED_LIST_COMMAND, INSERT_CHECK_LIST_COMMAND, REMOVE_LIST_COMMAND } from '@lexical/list'
 import { $createCodeNode, $isCodeNode } from '@lexical/code'
-import { $isLinkNode, $isAutoLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
+import { $isLinkNode, $isAutoLinkNode, $createLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
 import { Toggle } from '~/components/ui/toggle'
 import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { Button } from '~/components/ui/button'
+import { Popover, PopoverAnchor, PopoverContent } from '~/components/ui/popover'
 import {
   TextBIcon,
   TextItalicIcon,
@@ -41,6 +43,7 @@ import {
   ListChecksIcon,
   LinkIcon,
   TableIcon,
+  CheckIcon,
 } from '@phosphor-icons/react'
 import { INSERT_TABLE_COMMAND } from '@lexical/table'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
@@ -63,6 +66,34 @@ export function Toolbar() {
   const [alignment, setAlignment] = useState<Alignment>('left')
   const [isLink, setIsLink] = useState(false)
   const isLinkRef = useRef(false)
+  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false)
+  const [linkFormLabel, setLinkFormLabel] = useState('')
+  const [linkFormUrl, setLinkFormUrl] = useState('')
+
+  const openLinkPopover = useCallback(() => {
+    const selectedText = editor.getEditorState().read(() => {
+      const selection = $getSelection()
+      return $isRangeSelection(selection) ? selection.getTextContent() : ''
+    })
+    setLinkFormLabel(selectedText)
+    setLinkFormUrl('')
+    setIsLinkPopoverOpen(true)
+  }, [editor])
+
+  const handleInsertLink = useCallback(() => {
+    const url = linkFormUrl.trim()
+    if (!url) return
+    const label = linkFormLabel.trim() || url
+    editor.update(() => {
+      const selection = $getSelection()
+      if ($isRangeSelection(selection)) {
+        const linkNode = $createLinkNode(url, { target: '_blank', rel: 'noopener noreferrer' })
+        linkNode.append($createTextNode(label))
+        selection.insertNodes([linkNode])
+      }
+    })
+    setIsLinkPopoverOpen(false)
+  }, [editor, linkFormLabel, linkFormUrl])
 
   const updateToolbar = useCallback(() => {
     const selection = $getSelection()
@@ -130,8 +161,7 @@ export function Toolbar() {
           if (isLinkRef.current) {
             editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
           } else {
-            const url = window.prompt('URL:')
-            if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, { url, target: '_blank', rel: 'noopener noreferrer' })
+            openLinkPopover()
           }
           return true
         }
@@ -139,7 +169,7 @@ export function Toolbar() {
       },
       COMMAND_PRIORITY_NORMAL,
     )
-  }, [editor])
+  }, [editor, openLinkPopover])
 
   const applyStyle = useCallback(
     (styles: Record<string, string>) => {
@@ -336,21 +366,59 @@ export function Toolbar() {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Link */}
-      <Toggle
-        size="sm"
-        pressed={isLink}
-        onPressedChange={() => {
-          if (isLink) {
-            editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
-          } else {
-            const url = window.prompt('URL:')
-            if (url) editor.dispatchCommand(TOGGLE_LINK_COMMAND, { url, target: '_blank', rel: 'noopener noreferrer' })
-          }
-        }}
-        aria-label="Link"
-      >
-        <LinkIcon />
-      </Toggle>
+      <Popover open={isLinkPopoverOpen} onOpenChange={(open) => { if (!open) setIsLinkPopoverOpen(false) }}>
+        <PopoverAnchor asChild>
+          <Toggle
+            size="sm"
+            pressed={isLink}
+            onClick={() => {
+              if (isLink) {
+                editor.dispatchCommand(TOGGLE_LINK_COMMAND, null)
+              } else {
+                openLinkPopover()
+              }
+            }}
+            aria-label="Link"
+          >
+            <LinkIcon />
+          </Toggle>
+        </PopoverAnchor>
+        <PopoverContent align="start" className="w-auto p-2">
+          <div className="flex flex-col gap-1.5">
+            <input
+              value={linkFormLabel}
+              onChange={(e) => setLinkFormLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleInsertLink()
+                if (e.key === 'Escape') setIsLinkPopoverOpen(false)
+              }}
+              className="w-64 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
+              placeholder="Text"
+            />
+            <div className="flex items-center gap-1">
+              <input
+                value={linkFormUrl}
+                onChange={(e) => {
+                  const url = e.target.value
+                  if (linkFormLabel === '' || linkFormLabel === linkFormUrl) setLinkFormLabel(url)
+                  setLinkFormUrl(url)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleInsertLink()
+                  if (e.key === 'Escape') setIsLinkPopoverOpen(false)
+                }}
+                className="w-56 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
+                placeholder="https://"
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+              />
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleInsertLink} aria-label="Apply link">
+                <CheckIcon size={14} />
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

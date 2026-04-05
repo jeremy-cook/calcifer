@@ -16,7 +16,6 @@ import { Image } from '@tiptap/extension-image'
 import { bundledLanguages } from 'shiki'
 import type { BundledLanguage } from 'shiki'
 
-import { getHighlighter } from '~/lib/shiki'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
@@ -68,7 +67,6 @@ export function TiptapEditor() {
       TaskList,
       TaskItem.configure({ nested: true }),
       CodeBlockShiki.configure({
-        getHighlighter,
         themes: {
           light: 'everforest-dark',
           dark: 'everforest-dark',

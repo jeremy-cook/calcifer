@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext'
-import { $getSelection, $isRangeSelection } from 'lexical'
+import { $getSelection, $isRangeSelection, $createTextNode } from 'lexical'
 import { $isLinkNode, $isAutoLinkNode, TOGGLE_LINK_COMMAND } from '@lexical/link'
 import { $findMatchingParent, mergeRegister } from '@lexical/utils'
 import { LinkEditorPopoverContent } from '~/editors/shared/LinkEditorPopoverContent'
@@ -10,6 +10,7 @@ export function FloatingLinkEditorPlugin() {
   const [editor] = useLexicalComposerContext()
   const [linkUrl, setLinkUrl] = useState('')
   const [editedUrl, setEditedUrl] = useState('')
+  const [editedLabel, setEditedLabel] = useState('')
   const [isEditing, setIsEditing] = useState(false)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -49,13 +50,36 @@ export function FloatingLinkEditorPlugin() {
   }, [isEditing])
 
   const handleEdit = () => {
+    const linkText = editor.getEditorState().read(() => {
+      const selection = $getSelection()
+      if (!$isRangeSelection(selection)) return ''
+      const node = selection.anchor.getNode()
+      const linkNode = $findMatchingParent(node, $isLinkNode)
+      return $isLinkNode(linkNode) ? linkNode.getTextContent() : ''
+    })
     setEditedUrl(linkUrl)
+    setEditedLabel(linkText)
     setIsEditing(true)
   }
 
   const handleSave = () => {
     if (editedUrl) {
-      editor.dispatchCommand(TOGGLE_LINK_COMMAND, { url: editedUrl, target: '_blank', rel: 'noopener noreferrer' })
+      const label = editedLabel.trim() || editedUrl
+      editor.update(() => {
+        const selection = $getSelection()
+        if (!$isRangeSelection(selection)) return
+        const node = selection.anchor.getNode()
+        const linkNode = $findMatchingParent(node, $isLinkNode)
+        if ($isLinkNode(linkNode)) {
+          linkNode.setURL(editedUrl)
+          if (label !== linkNode.getTextContent()) {
+            linkNode.clear()
+            linkNode.append($createTextNode(label))
+          }
+        } else {
+          editor.dispatchCommand(TOGGLE_LINK_COMMAND, { url: editedUrl, target: '_blank', rel: 'noopener noreferrer' })
+        }
+      })
     }
     setIsEditing(false)
   }
@@ -77,9 +101,11 @@ export function FloatingLinkEditorPlugin() {
       <LinkEditorPopoverContent
         linkUrl={linkUrl}
         editedUrl={editedUrl}
+        editedLabel={editedLabel}
         isEditing={isEditing}
         inputRef={inputRef}
         onEditedUrlChange={setEditedUrl}
+        onEditedLabelChange={setEditedLabel}
         onSave={handleSave}
         onEdit={handleEdit}
         onOpen={handleOpen}

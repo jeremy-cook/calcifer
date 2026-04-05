@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
 import { Toggle } from '~/components/ui/toggle'
 import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { Button } from '~/components/ui/button'
+import { Popover, PopoverAnchor, PopoverContent } from '~/components/ui/popover'
 import {
   TextBIcon,
   TextItalicIcon,
@@ -18,6 +20,7 @@ import {
   ListNumbersIcon,
   ListChecksIcon,
   LinkIcon,
+  CheckIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
 import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
@@ -61,6 +64,27 @@ function setBlockType(editor: Editor, value: string) {
 }
 
 export function Toolbar({ editor }: ToolbarProps) {
+  const [isLinkPopoverOpen, setIsLinkPopoverOpen] = useState(false)
+  const [linkFormLabel, setLinkFormLabel] = useState('')
+  const [linkFormUrl, setLinkFormUrl] = useState('')
+
+  const handleInsertLink = () => {
+    const url = linkFormUrl.trim()
+    if (!url) return
+    const label = linkFormLabel.trim() || url
+    editor
+      .chain()
+      .focus()
+      .command(({ tr, state }) => {
+        const { from, to } = state.selection
+        const linkMark = state.schema.marks.link.create({ href: url, target: '_blank', rel: 'noopener noreferrer' })
+        tr.replaceWith(from, to, state.schema.text(label, [linkMark]))
+        return true
+      })
+      .run()
+    setIsLinkPopoverOpen(false)
+  }
+
   const state = useEditorState({
     editor,
     selector: (ctx) => {
@@ -210,21 +234,62 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Link */}
-      <Toggle
-        size="sm"
-        pressed={isLink}
-        onPressedChange={() => {
-          if (isLink) {
-            editor.chain().focus().unsetLink().run()
-          } else {
-            const url = window.prompt('URL:')
-            if (url) editor.chain().focus().setLink({ href: url }).run()
-          }
-        }}
-        aria-label="Link"
-      >
-        <LinkIcon />
-      </Toggle>
+      <Popover open={isLinkPopoverOpen} onOpenChange={(open) => { if (!open) setIsLinkPopoverOpen(false) }}>
+        <PopoverAnchor asChild>
+          <Toggle
+            size="sm"
+            pressed={isLink}
+            onClick={() => {
+              if (isLink) {
+                editor.chain().focus().unsetLink().run()
+              } else {
+                const { from, to } = editor.state.selection
+                setLinkFormLabel(editor.state.doc.textBetween(from, to))
+                setLinkFormUrl('')
+                setIsLinkPopoverOpen(true)
+              }
+            }}
+            aria-label="Link"
+          >
+            <LinkIcon />
+          </Toggle>
+        </PopoverAnchor>
+        <PopoverContent align="start" className="w-auto p-2">
+          <div className="flex flex-col gap-1.5">
+            <input
+              value={linkFormLabel}
+              onChange={(e) => setLinkFormLabel(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleInsertLink()
+                if (e.key === 'Escape') setIsLinkPopoverOpen(false)
+              }}
+              className="w-64 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
+              placeholder="Text"
+            />
+            <div className="flex items-center gap-1">
+              <input
+                value={linkFormUrl}
+                onChange={(e) => {
+                  const url = e.target.value
+                  if (linkFormLabel === '' || linkFormLabel === linkFormUrl) setLinkFormLabel(url)
+                  setLinkFormUrl(url)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleInsertLink()
+                  if (e.key === 'Escape') setIsLinkPopoverOpen(false)
+                }}
+                className="w-56 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
+                placeholder="https://"
+                // eslint-disable-next-line jsx-a11y/no-autofocus
+                autoFocus
+              />
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleInsertLink} aria-label="Apply link">
+                <CheckIcon size={14} />
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

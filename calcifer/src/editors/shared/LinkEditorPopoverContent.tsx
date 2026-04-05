@@ -5,9 +5,11 @@ import { ArrowSquareOutIcon, PencilSimpleIcon, LinkBreakIcon, CheckIcon } from '
 interface Props {
   linkUrl: string
   editedUrl: string
+  editedLabel: string
   isEditing: boolean
   inputRef: RefObject<HTMLInputElement | null>
   onEditedUrlChange: (url: string) => void
+  onEditedLabelChange: (label: string) => void
   onSave: () => void
   onEdit: () => void
   onOpen: () => void
@@ -18,9 +20,11 @@ interface Props {
 export function LinkEditorPopoverContent({
   linkUrl,
   editedUrl,
+  editedLabel,
   isEditing,
   inputRef,
   onEditedUrlChange,
+  onEditedLabelChange,
   onSave,
   onEdit,
   onOpen,
@@ -29,22 +33,38 @@ export function LinkEditorPopoverContent({
 }: Props) {
   if (isEditing) {
     return (
-      <>
+      <div className="flex flex-col gap-1.5">
         <input
-          ref={inputRef}
-          value={editedUrl}
-          onChange={(e) => onEditedUrlChange(e.target.value)}
+          value={editedLabel}
+          onChange={(e) => onEditedLabelChange(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSave()
             if (e.key === 'Escape') onEscape()
           }}
           className="w-64 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
-          placeholder="https://"
+          placeholder="Text"
         />
-        <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onSave} aria-label="Save">
-          <CheckIcon size={14} />
-        </Button>
-      </>
+        <div className="flex items-center gap-1">
+          <input
+            ref={inputRef}
+            value={editedUrl}
+            onChange={(e) => {
+              const url = e.target.value
+              if (editedLabel === '' || editedLabel === editedUrl) onEditedLabelChange(url)
+              onEditedUrlChange(url)
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onSave()
+              if (e.key === 'Escape') onEscape()
+            }}
+            className="w-56 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
+            placeholder="https://"
+          />
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onSave} aria-label="Save">
+            <CheckIcon size={14} />
+          </Button>
+        </div>
+      </div>
     )
   }
 
