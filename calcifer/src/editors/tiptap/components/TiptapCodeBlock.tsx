@@ -66,7 +66,7 @@ export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProp
         </Button>
       </div>
       <pre className="m-0 overflow-x-auto px-4 py-3 text-sm">
-        <NodeViewContent<'code'> as="code" />
+        <NodeViewContent<'code'> as="code" spellCheck={false} />
       </pre>
     </NodeViewWrapper>
   )
