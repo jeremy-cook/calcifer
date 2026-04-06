@@ -1,16 +1,6 @@
 import { useState } from 'react'
-import {
-  NodeViewWrapper,
-  NodeViewContent,
-  type NodeViewProps,
-} from '@tiptap/react'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '~/components/ui/select'
+import { NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { Button } from '~/components/ui/button'
 import { CopySimpleIcon, CheckIcon } from '@phosphor-icons/react'
 import { CODE_LANGUAGES } from '../formatting-options'
@@ -36,11 +26,8 @@ export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProp
         className="flex items-center justify-between border-b border-border/60 bg-black/10 px-3 py-1"
         contentEditable={false}
       >
-        <Select
-          value={language}
-          onValueChange={handleLanguageChange}
-        >
-          <SelectTrigger className="h-6 w-32 border-0 bg-transparent px-1 text-xs text-muted-foreground shadow-none focus:ring-0 hover:text-foreground transition-colors">
+        <Select value={language} onValueChange={handleLanguageChange}>
+          <SelectTrigger className="h-6 w-30 border bg-transparent px-3 text-xs text-muted-foreground shadow-none focus:ring-0 hover:text-foreground transition-colors">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -58,11 +45,7 @@ export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProp
           onClick={handleCopy}
           aria-label="Copy code"
         >
-          {copied ? (
-            <CheckIcon className="size-3.5 text-green-500" />
-          ) : (
-            <CopySimpleIcon className="size-3.5" />
-          )}
+          {copied ? <CheckIcon className="size-3.5 text-green-500" /> : <CopySimpleIcon className="size-3.5" />}
         </Button>
       </div>
       <pre className="m-0 overflow-x-auto px-4 py-3 text-sm">

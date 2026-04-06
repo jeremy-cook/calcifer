@@ -10,6 +10,7 @@ import { Superscript } from '@tiptap/extension-superscript'
 import { TextAlign } from '@tiptap/extension-text-align'
 import { TaskList } from '@tiptap/extension-task-list'
 import { TaskItem } from '@tiptap/extension-task-item'
+import { Typography } from '@tiptap/extension-typography'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { Link } from '@tiptap/extension-link'
 import { bundledLanguages } from 'shiki'
@@ -26,18 +27,19 @@ import { readFileAsDataURL } from '~/lib/utils'
 import { CODE_LANGUAGES } from './components/formatting-options'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { TiptapCodeBlock } from './components/code-block/TiptapCodeBlock'
-import { LinkPopover } from './components/link/LinkPopover'
+import { LinkActionMenu } from './components/link/LinkActionMenu'
 import { TableActionMenu } from './components/table/TableActionMenu'
-import './TiptapEditor.css'
-
+import { ImageActionMenu } from './components/image/ImageActionMenu'
 
 export function TiptapEditor() {
   const editor = useEditor({
+    shouldRerenderOnTransaction: false,
     extensions: [
       StarterKit.configure({
         codeBlock: false,
         link: false,
       }),
+      Typography,
       TextStyle,
       Color,
       Highlight.configure({ multicolor: true }),
@@ -104,7 +106,8 @@ export function TiptapEditor() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         <EditorContent editor={editor} className="h-full" />
       </div>
-      <LinkPopover editor={editor} />
+      <LinkActionMenu editor={editor} />
+      <ImageActionMenu editor={editor} />
     </div>
   )
 }

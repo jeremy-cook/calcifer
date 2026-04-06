@@ -2,9 +2,9 @@ import { useState, useRef } from 'react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/react'
 import { getMarkRange } from '@tiptap/core'
-import { LinkEditorPopoverContent } from './LinkEditorPopoverContent'
+import { LinkEditorPopover } from './LinkEditorPopoverContent'
 
-interface LinkPopoverProps {
+interface LinkActionMenuProps {
   editor: Editor
 }
 
@@ -15,7 +15,7 @@ function getLinkText(editor: Editor): string {
   return state.doc.textBetween(range.from, range.to)
 }
 
-export function LinkPopover({ editor }: LinkPopoverProps) {
+export function LinkActionMenu({ editor }: LinkActionMenuProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [editedUrl, setEditedUrl] = useState('')
   const [editedLabel, setEditedLabel] = useState('')
@@ -70,7 +70,7 @@ export function LinkPopover({ editor }: LinkPopoverProps) {
       options={{ placement: 'bottom', onHide: () => setIsEditing(false) }}
       className="flex items-center gap-1 rounded-md border border-border bg-popover px-2 py-1.5 shadow-md text-sm"
     >
-      <LinkEditorPopoverContent
+      <LinkEditorPopover
         linkUrl={linkUrl ?? ''}
         editedUrl={editedUrl}
         editedLabel={editedLabel}

@@ -17,7 +17,7 @@ interface Props {
   onEscape: () => void
 }
 
-export function LinkEditorPopoverContent({
+export function LinkEditorPopover({
   linkUrl,
   editedUrl,
   editedLabel,

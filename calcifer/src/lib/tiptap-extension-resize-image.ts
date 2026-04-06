@@ -1,5 +1,16 @@
 import Image from '@tiptap/extension-image'
+import { NodeSelection } from '@tiptap/pm/state'
 import type { Node as ProsemirrorNode } from '@tiptap/pm/model'
+
+export type ImageAlignment = 'left' | 'center' | 'right'
+
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    resizableImage: {
+      setImageAlignment: (alignment: ImageAlignment) => ReturnType
+    }
+  }
+}
 
 const MIN_WIDTH = 50
 
@@ -11,6 +22,22 @@ const HANDLE_POSITIONS = [
 ] as const
 
 export const ResizableImage = Image.extend({
+  addCommands() {
+    return {
+      ...this.parent?.(),
+      setImageAlignment:
+        (alignment: ImageAlignment) =>
+        ({ tr, state, dispatch }) => {
+          const { selection } = state
+          if (!(selection instanceof NodeSelection) || selection.node.type !== this.type) return false
+          if (dispatch) {
+            tr.setNodeMarkup(selection.from, undefined, { ...selection.node.attrs, alignment })
+          }
+          return true
+        },
+    }
+  },
+
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -24,6 +51,11 @@ export const ResizableImage = Image.extend({
         parseHTML: (el) => el.style.width,
         renderHTML: (attrs) => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
       },
+      alignment: {
+        default: 'left' as ImageAlignment,
+        parseHTML: (el) => (el.getAttribute('data-alignment') ?? 'left') as ImageAlignment,
+        renderHTML: (attrs) => ({ 'data-alignment': attrs.alignment ?? 'left' }),
+      },
     }
   },
 
@@ -34,6 +66,7 @@ export const ResizableImage = Image.extend({
 
       const wrapper = document.createElement('div')
       wrapper.style.cssText = 'display: block; margin-block: 0.75em;'
+      wrapper.style.textAlign = (node.attrs.alignment as string) ?? 'left'
 
       // figure shrinks to image width so caption aligns under the image
       const figure = document.createElement('figure')
@@ -238,6 +271,7 @@ export const ResizableImage = Image.extend({
           img.alt = (updatedNode.attrs.alt as string) ?? ''
           if (updatedNode.attrs.title) img.title = updatedNode.attrs.title as string
           if (updatedNode.attrs.width) figure.style.width = updatedNode.attrs.width as string
+          wrapper.style.textAlign = (updatedNode.attrs.alignment as string) ?? 'left'
           const caption = (updatedNode.attrs.caption as string) ?? ''
           if (!caption) showCaption = false
           captionDisplay.textContent = caption
