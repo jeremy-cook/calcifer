@@ -12,7 +12,6 @@ import { TaskList } from '@tiptap/extension-task-list'
 import { TaskItem } from '@tiptap/extension-task-item'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { Link } from '@tiptap/extension-link'
-import { Image } from '@tiptap/extension-image'
 import { bundledLanguages } from 'shiki'
 import type { BundledLanguage } from 'shiki'
 
@@ -22,6 +21,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 
 import { CodeBlockShiki } from '~/lib/tiptap-extension-code-block-shiki'
+import { ResizableImage } from '~/lib/tiptap-extension-resize-image'
 import { readFileAsDataURL } from '~/lib/utils'
 import { CODE_LANGUAGES } from '~/editors/shared/formatting-options'
 import { Toolbar } from './components/Toolbar'
@@ -30,23 +30,6 @@ import { LinkPopover } from './components/LinkPopover'
 import { TableActionMenu } from './components/TableActionMenu'
 import './TiptapEditor.css'
 
-const ImageExtension = Image.configure({ inline: false, allowBase64: true }).extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      caption: {
-        default: '',
-        parseHTML: (el) => el.getAttribute('data-caption'),
-        renderHTML: (attrs) => ({ 'data-caption': attrs.caption }),
-      },
-      width: {
-        default: null,
-        parseHTML: (el) => el.style.width,
-        renderHTML: (attrs) => (attrs.width ? { style: `width: ${attrs.width}` } : {}),
-      },
-    }
-  },
-})
 
 export function TiptapEditor() {
   const editor = useEditor({
@@ -87,7 +70,7 @@ export function TiptapEditor() {
       TableRow,
       TableHeader,
       TableCell,
-      ImageExtension,
+      ResizableImage.configure({ inline: false, allowBase64: true }),
     ],
     content: '',
     editorProps: {

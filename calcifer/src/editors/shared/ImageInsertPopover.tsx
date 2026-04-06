@@ -5,28 +5,37 @@ import { ImageIcon } from '@phosphor-icons/react'
 import { readFileAsDataURL } from '~/lib/utils'
 
 interface Props {
-  onInsert: (src: string) => void
+  onInsert: (src: string, altText: string) => void
 }
 
 export function ImageInsertPopover({ onInsert }: Props) {
   const [url, setUrl] = useState('')
+  const [file, setFile] = useState<{ src: string; name: string } | null>(null)
+  const [altText, setAltText] = useState('')
   const [open, setOpen] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const insertUrl = () => {
-    if (url.trim()) {
-      onInsert(url.trim())
-      setUrl('')
-      setOpen(false)
-    }
+  const src = file?.src ?? url.trim()
+
+  const reset = () => {
+    setUrl('')
+    setFile(null)
+    setAltText('')
+  }
+
+  const handleInsert = () => {
+    if (!src) return
+    onInsert(src, altText.trim())
+    reset()
+    setOpen(false)
   }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const src = await readFileAsDataURL(file)
-    onInsert(src)
-    setOpen(false)
+    const f = e.target.files?.[0]
+    if (!f) return
+    setFile({ src: await readFileAsDataURL(f), name: f.name })
+    setUrl('')
+    e.target.value = ''
   }
 
   return (
@@ -39,23 +48,41 @@ export function ImageInsertPopover({ onInsert }: Props) {
       <PopoverContent className="w-72 p-3" align="start">
         <div className="space-y-2">
           <p className="text-xs font-medium">Insert image</p>
-          <div className="flex gap-2">
+
+          {file ? (
+            <div className="flex items-center gap-2 rounded border border-border bg-muted px-2 py-1.5">
+              <span className="flex-1 truncate text-xs">{file.name}</span>
+              <button onClick={() => setFile(null)} className="text-muted-foreground hover:text-foreground leading-none" aria-label="Remove file">×</button>
+            </div>
+          ) : (
             <input
               type="url"
               placeholder="https://..."
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') insertUrl() }}
-              className="flex-1 rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+              onKeyDown={(e) => e.key === 'Enter' && handleInsert()}
+              className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
             />
-            <Button size="sm" className="h-7 text-xs" onClick={insertUrl}>Insert</Button>
-          </div>
-          <div>
-            <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => fileRef.current?.click()}>
-              Upload file
-            </Button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-          </div>
+          )}
+
+          <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => fileRef.current?.click()}>
+            Upload file
+          </Button>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+
+          <input
+            type="text"
+            placeholder="Describe the image…"
+            value={altText}
+            onChange={(e) => setAltText(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleInsert()}
+            className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+            aria-label="Alt text"
+          />
+
+          <Button size="sm" className="h-7 w-full text-xs" onClick={handleInsert} disabled={!src}>
+            Insert
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

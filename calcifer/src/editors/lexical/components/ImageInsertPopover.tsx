@@ -6,7 +6,7 @@ export function ImageInsertPopover() {
   const [editor] = useLexicalComposerContext()
   return (
     <SharedImageInsertPopover
-      onInsert={(src) => editor.dispatchCommand(INSERT_IMAGE_COMMAND, { src })}
+      onInsert={(src, altText) => editor.dispatchCommand(INSERT_IMAGE_COMMAND, { src, altText })}
     />
   )
 }

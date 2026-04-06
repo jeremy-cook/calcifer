@@ -210,21 +210,4 @@
   max-width: 100%;
   height: auto;
   display: block;
-  margin-block: 0.75em;
-  border-radius: var(--radius-md);
-}
-
-.tiptap img.ProseMirror-selectednode {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
-.tiptap [data-caption]::after {
-  content: attr(data-caption);
-  display: block;
-  text-align: center;
-  font-size: 0.8em;
-  color: var(--muted-foreground);
-  margin-top: 0.25rem;
-  font-style: italic;
 }

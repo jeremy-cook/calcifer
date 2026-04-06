@@ -6,9 +6,9 @@ interface Props {
 }
 
 export function ImageInsertPopover({ editor }: Props) {
-  return (
-    <SharedImageInsertPopover
-      onInsert={(src) => editor.chain().focus().setImage({ src }).run()}
-    />
-  )
+  function onInsert(src: string, altText: string) {
+    editor.chain().focus().setImage({ src, alt: altText }).run()
+  }
+
+  return <SharedImageInsertPopover onInsert={onInsert} />
 }
