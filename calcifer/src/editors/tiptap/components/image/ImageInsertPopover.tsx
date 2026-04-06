@@ -1,14 +1,15 @@
 import { useState, useRef } from 'react'
+import { type Editor } from '@tiptap/react'
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
 import { Button } from '~/components/ui/button'
 import { ImageIcon } from '@phosphor-icons/react'
 import { readFileAsDataURL } from '~/lib/utils'
 
 interface Props {
-  onInsert: (src: string, altText: string) => void
+  editor: Editor
 }
 
-export function ImageInsertPopover({ onInsert }: Props) {
+export function ImageInsertPopover({ editor }: Props) {
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<{ src: string; name: string } | null>(null)
   const [altText, setAltText] = useState('')
@@ -25,7 +26,7 @@ export function ImageInsertPopover({ onInsert }: Props) {
 
   const handleInsert = () => {
     if (!src) return
-    onInsert(src, altText.trim())
+    editor.chain().focus().setImage({ src, alt: altText.trim() }).run()
     reset()
     setOpen(false)
   }

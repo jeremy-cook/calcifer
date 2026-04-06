@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/react'
 import { getMarkRange } from '@tiptap/core'
-import { LinkEditorPopoverContent } from '~/editors/shared/LinkEditorPopoverContent'
+import { LinkEditorPopoverContent } from './LinkEditorPopoverContent'
 
 interface LinkPopoverProps {
   editor: Editor

@@ -22,10 +22,10 @@ import {
   LinkIcon,
   CheckIcon,
 } from '@phosphor-icons/react'
-import { ColorPickerPopover } from '~/editors/shared/ColorPickerPopover'
-import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '~/editors/shared/formatting-options'
-import { TableInsertPopover } from './TableInsertPopover'
-import { ImageInsertPopover } from './ImageInsertPopover'
+import { ColorPickerPopover } from './ColorPickerPopover'
+import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formatting-options'
+import { TableInsertPopover } from '../table/TableInsertPopover'
+import { ImageInsertPopover } from '../image/ImageInsertPopover'
 
 interface ToolbarProps {
   editor: Editor

@@ -13,7 +13,7 @@ import {
 } from '~/components/ui/select'
 import { Button } from '~/components/ui/button'
 import { CopySimpleIcon, CheckIcon } from '@phosphor-icons/react'
-import { CODE_LANGUAGES } from '~/editors/shared/formatting-options'
+import { CODE_LANGUAGES } from '../formatting-options'
 
 export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProps) {
   const [copied, setCopied] = useState(false)
