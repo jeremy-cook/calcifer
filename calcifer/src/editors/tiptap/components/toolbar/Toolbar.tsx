@@ -23,7 +23,7 @@ import {
   CheckIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from './ColorPickerPopover'
-import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formatting-options'
+import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formattingOptions'
 import { TableInsertPopover } from '../table/TableInsertPopover'
 import { ImageInsertPopover } from '../image/ImageInsertPopover'
 
@@ -112,7 +112,25 @@ export function Toolbar({ editor }: ToolbarProps) {
     },
   })
 
-  const { isBold, isItalic, isUnderline, isStrike, isCode, isCodeBlock, isSubscript, isSuperscript, isBulletList, isOrderedList, isTaskList, isLink, fontColor, highlight, fontFamily, blockType, alignment } = state
+  const {
+    isBold,
+    isItalic,
+    isUnderline,
+    isStrike,
+    isCode,
+    isCodeBlock,
+    isSubscript,
+    isSuperscript,
+    isBulletList,
+    isOrderedList,
+    isTaskList,
+    isLink,
+    fontColor,
+    highlight,
+    fontFamily,
+    blockType,
+    alignment,
+  } = state
   const disableInline = isCode || isCodeBlock
 
   return (
@@ -147,7 +165,11 @@ export function Toolbar({ editor }: ToolbarProps) {
         </SelectTrigger>
         <SelectContent>
           {FONT_FAMILIES.map((f) => (
-            <SelectItem key={f.value || '__default__'} value={f.value || '__default__'} style={{ fontFamily: f.value || undefined }}>
+            <SelectItem
+              key={f.value || '__default__'}
+              value={f.value || '__default__'}
+              style={{ fontFamily: f.value || undefined }}
+            >
               {f.label}
             </SelectItem>
           ))}
@@ -157,19 +179,48 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Inline formatting */}
-      <Toggle size="sm" pressed={isBold} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleBold().run()} aria-label="Bold">
+      <Toggle
+        size="sm"
+        pressed={isBold}
+        disabled={disableInline}
+        onPressedChange={() => editor.chain().focus().toggleBold().run()}
+        aria-label="Bold"
+      >
         <TextBIcon weight="bold" />
       </Toggle>
-      <Toggle size="sm" pressed={isItalic} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleItalic().run()} aria-label="Italic">
+      <Toggle
+        size="sm"
+        pressed={isItalic}
+        disabled={disableInline}
+        onPressedChange={() => editor.chain().focus().toggleItalic().run()}
+        aria-label="Italic"
+      >
         <TextItalicIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isUnderline} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleUnderline().run()} aria-label="Underline">
+      <Toggle
+        size="sm"
+        pressed={isUnderline}
+        disabled={disableInline}
+        onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
+        aria-label="Underline"
+      >
         <TextUnderlineIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isStrike} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleStrike().run()} aria-label="Strikethrough">
+      <Toggle
+        size="sm"
+        pressed={isStrike}
+        disabled={disableInline}
+        onPressedChange={() => editor.chain().focus().toggleStrike().run()}
+        aria-label="Strikethrough"
+      >
         <TextStrikethroughIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isCode} onPressedChange={() => editor.chain().focus().toggleCode().run()} aria-label="Inline code">
+      <Toggle
+        size="sm"
+        pressed={isCode}
+        onPressedChange={() => editor.chain().focus().toggleCode().run()}
+        aria-label="Inline code"
+      >
         <CodeIcon />
       </Toggle>
 
@@ -196,10 +247,22 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Subscript / Superscript */}
-      <Toggle size="sm" pressed={isSubscript} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleSubscript().run()} aria-label="Subscript">
+      <Toggle
+        size="sm"
+        pressed={isSubscript}
+        disabled={disableInline}
+        onPressedChange={() => editor.chain().focus().toggleSubscript().run()}
+        aria-label="Subscript"
+      >
         <TextSubscriptIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isSuperscript} disabled={disableInline} onPressedChange={() => editor.chain().focus().toggleSuperscript().run()} aria-label="Superscript">
+      <Toggle
+        size="sm"
+        pressed={isSuperscript}
+        disabled={disableInline}
+        onPressedChange={() => editor.chain().focus().toggleSuperscript().run()}
+        aria-label="Superscript"
+      >
         <TextSuperscriptIcon />
       </Toggle>
 
@@ -221,20 +284,40 @@ export function Toolbar({ editor }: ToolbarProps) {
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Lists */}
-      <Toggle size="sm" pressed={isBulletList} onPressedChange={() => editor.chain().focus().toggleBulletList().run()} aria-label="Bullet list">
+      <Toggle
+        size="sm"
+        pressed={isBulletList}
+        onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
+        aria-label="Bullet list"
+      >
         <ListBulletsIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isOrderedList} onPressedChange={() => editor.chain().focus().toggleOrderedList().run()} aria-label="Numbered list">
+      <Toggle
+        size="sm"
+        pressed={isOrderedList}
+        onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
+        aria-label="Numbered list"
+      >
         <ListNumbersIcon />
       </Toggle>
-      <Toggle size="sm" pressed={isTaskList} onPressedChange={() => editor.chain().focus().toggleTaskList().run()} aria-label="Checklist">
+      <Toggle
+        size="sm"
+        pressed={isTaskList}
+        onPressedChange={() => editor.chain().focus().toggleTaskList().run()}
+        aria-label="Checklist"
+      >
         <ListChecksIcon />
       </Toggle>
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 
       {/* Link */}
-      <Popover open={isLinkPopoverOpen} onOpenChange={(open) => { if (!open) setIsLinkPopoverOpen(false) }}>
+      <Popover
+        open={isLinkPopoverOpen}
+        onOpenChange={(open) => {
+          if (!open) setIsLinkPopoverOpen(false)
+        }}
+      >
         <PopoverAnchor asChild>
           <Toggle
             size="sm"
@@ -283,7 +366,13 @@ export function Toolbar({ editor }: ToolbarProps) {
                 // eslint-disable-next-line jsx-a11y/no-autofocus
                 autoFocus
               />
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleInsertLink} aria-label="Apply link">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={handleInsertLink}
+                aria-label="Apply link"
+              >
                 <CheckIcon size={14} />
               </Button>
             </div>

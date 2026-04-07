@@ -23,8 +23,9 @@ import { TableCell } from '@tiptap/extension-table-cell'
 
 import { CodeBlockShiki } from '~/lib/tiptap-extension-code-block-shiki'
 import { ResizableImage } from '~/lib/tiptap-extension-resize-image'
-import { readFileAsDataURL } from '~/lib/utils'
-import { CODE_LANGUAGES } from './components/formatting-options'
+import { CODE_LANGUAGES } from './components/formattingOptions'
+import { SlashCommand } from '~/lib/tiptap-extension-slash-command'
+import { slashSuggestion } from './components/slash-menu/slashSuggestion'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { TiptapCodeBlock } from './components/code-block/TiptapCodeBlock'
 import { LinkActionMenu } from './components/link/LinkActionMenu'
@@ -73,26 +74,12 @@ export function TiptapEditor() {
       TableHeader,
       TableCell,
       ResizableImage.configure({ inline: false, allowBase64: true }),
+      SlashCommand.configure({ suggestion: slashSuggestion }),
     ],
     content: '',
     editorProps: {
       attributes: {
         class: 'outline-none min-h-full px-16 py-10 text-base leading-normal',
-      },
-      handlePaste(view, event) {
-        const items = Array.from(event.clipboardData?.items ?? [])
-        const imageItem = items.find((item) => item.type.startsWith('image/'))
-        if (imageItem) {
-          event.preventDefault()
-          const file = imageItem.getAsFile()
-          if (file) {
-            readFileAsDataURL(file).then((src) => {
-              view.dispatch(view.state.tr.replaceSelectionWith(view.state.schema.nodes.image.create({ src })))
-            })
-          }
-          return true
-        }
-        return false
       },
     },
   })

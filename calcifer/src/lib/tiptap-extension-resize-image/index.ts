@@ -1,6 +1,8 @@
 import Image from '@tiptap/extension-image'
 import { NodeSelection } from '@tiptap/pm/state'
+import { Plugin } from '@tiptap/pm/state'
 import type { Node as ProsemirrorNode } from '@tiptap/pm/model'
+import { readFileAsDataURL } from './utils'
 
 export type ImageAlignment = 'left' | 'center' | 'right'
 
@@ -22,6 +24,30 @@ const HANDLE_POSITIONS = [
 ] as const
 
 export const ResizableImage = Image.extend({
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          handlePaste: (_view, event) => {
+            const items = Array.from(event.clipboardData?.items ?? [])
+            const imageItem = items.find((item) => item.type.startsWith('image/'))
+            if (imageItem) {
+              event.preventDefault()
+              const file = imageItem.getAsFile()
+              if (file) {
+                readFileAsDataURL(file).then((src) => {
+                  this.editor.commands.setImage({ src })
+                })
+              }
+              return true
+            }
+            return false
+          },
+        },
+      }),
+    ]
+  },
+
   addCommands() {
     return {
       ...this.parent?.(),

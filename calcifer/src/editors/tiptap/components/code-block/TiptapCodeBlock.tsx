@@ -3,7 +3,7 @@ import { NodeViewWrapper, NodeViewContent, type NodeViewProps } from '@tiptap/re
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { Button } from '~/components/ui/button'
 import { CopySimpleIcon, CheckIcon } from '@phosphor-icons/react'
-import { CODE_LANGUAGES } from '../formatting-options'
+import { CODE_LANGUAGES } from '../formattingOptions'
 
 export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProps) {
   const [copied, setCopied] = useState(false)
