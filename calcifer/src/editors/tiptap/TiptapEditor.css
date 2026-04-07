@@ -236,6 +236,45 @@
   color: color-mix(in oklch, var(--chart-2) 80%, var(--foreground));
 }
 
+/* Date chip */
+.tiptap .date-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  padding: 0 0.3em;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: all;
+  background-color: color-mix(in oklch, var(--chart-4) 15%, transparent);
+  color: color-mix(in oklch, var(--chart-4) 80%, var(--foreground));
+}
+
+.tiptap .date-chip:hover {
+  background-color: color-mix(in oklch, var(--chart-4) 25%, transparent);
+}
+
+/* Date picker popup */
+.date-picker-popup {
+  display: flex;
+  flex-direction: column;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.date-picker-popup-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  padding: 0.5rem;
+  border-top: 1px solid var(--border);
+}
 
 /* Slash command menu */
 .slash-menu {

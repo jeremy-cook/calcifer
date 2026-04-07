@@ -23,6 +23,8 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 
 import { CodeBlockShiki } from '~/lib/tiptap-extension-code-block-shiki'
+import { DateChip } from '~/lib/tiptap-extension-date'
+import { DateChipView } from '~/editors/tiptap/components/date/DateChipView'
 import { ResizableImage } from '~/lib/tiptap-extension-resize-image'
 import { CODE_LANGUAGES } from './components/formattingOptions'
 import { SlashCommand } from '~/lib/tiptap-extension-slash-command'
@@ -77,6 +79,11 @@ export function TiptapEditor() {
       TableHeader,
       TableCell,
       ResizableImage.configure({ inline: false, allowBase64: true }),
+      DateChip.extend({
+        addNodeView() {
+          return ReactNodeViewRenderer(DateChipView)
+        },
+      }),
       SlashCommand.configure({ suggestion: slashSuggestion }),
       Mention.configure({
         HTMLAttributes: { class: 'mention mention--user' },

@@ -1,4 +1,5 @@
 import type { Editor, Range } from '@tiptap/core'
+import { showDatePicker } from '~/editors/tiptap/components/date/showDatePicker'
 
 export type SlashCommandItem = {
   title: string
@@ -9,6 +10,27 @@ export type SlashCommandItem = {
 }
 
 export const SLASH_ITEMS: SlashCommandItem[] = [
+  // Inline
+  {
+    title: 'Today',
+    subtitle: "Insert today's date",
+    group: 'Inline',
+    searchTerms: ['date', 'today', 'now'],
+    command: ({ editor, range }) => {
+      const today = new Date().toISOString().slice(0, 10)
+      editor.chain().focus().deleteRange(range).insertDateChip(today).run()
+    },
+  },
+  {
+    title: 'Date',
+    subtitle: 'Pick a date to insert',
+    group: 'Inline',
+    searchTerms: ['date', 'calendar', 'pick'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).run()
+      showDatePicker(editor)
+    },
+  },
   // Text
   {
     title: 'Paragraph',
