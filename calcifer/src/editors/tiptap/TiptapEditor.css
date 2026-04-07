@@ -212,6 +212,31 @@
   display: block;
 }
 
+/* Mention & hashtag chips */
+.tiptap .mention {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  padding: 0 0.3em;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.6;
+  white-space: nowrap;
+  cursor: default;
+  user-select: all;
+}
+
+.tiptap .mention--user {
+  background-color: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.tiptap .mention--tag {
+  background-color: color-mix(in oklch, var(--chart-2) 15%, transparent);
+  color: color-mix(in oklch, var(--chart-2) 80%, var(--foreground));
+}
+
+
 /* Slash command menu */
 .slash-menu {
   background: var(--popover);

@@ -1,5 +1,6 @@
 import { useEditor, EditorContent } from '@tiptap/react'
 import { StarterKit } from '@tiptap/starter-kit'
+import { Mention } from '@tiptap/extension-mention'
 import { Placeholder } from '@tiptap/extension-placeholder'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
@@ -26,6 +27,8 @@ import { ResizableImage } from '~/lib/tiptap-extension-resize-image'
 import { CODE_LANGUAGES } from './components/formattingOptions'
 import { SlashCommand } from '~/lib/tiptap-extension-slash-command'
 import { slashSuggestion } from './components/slash-menu/slashSuggestion'
+import { mentionSuggestion } from './components/mention/mentionSuggestion'
+import { hashtagSuggestion } from './components/mention/hashtagSuggestion'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { TiptapCodeBlock } from './components/code-block/TiptapCodeBlock'
 import { LinkActionMenu } from './components/link/LinkActionMenu'
@@ -75,6 +78,14 @@ export function TiptapEditor() {
       TableCell,
       ResizableImage.configure({ inline: false, allowBase64: true }),
       SlashCommand.configure({ suggestion: slashSuggestion }),
+      Mention.configure({
+        HTMLAttributes: { class: 'mention mention--user' },
+        suggestion: mentionSuggestion,
+      }),
+      Mention.extend({ name: 'hashtag' }).configure({
+        HTMLAttributes: { class: 'mention mention--tag' },
+        suggestion: hashtagSuggestion,
+      }),
     ],
     content: '',
     editorProps: {
