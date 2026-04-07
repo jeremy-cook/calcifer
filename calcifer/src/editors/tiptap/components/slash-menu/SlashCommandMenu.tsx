@@ -47,8 +47,11 @@ export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandM
                   className="slash-menu-item"
                   onSelect={() => command(item)}
                 >
-                  <span className="slash-menu-item-title">{item.title}</span>
-                  <span className="slash-menu-item-subtitle">{item.subtitle}</span>
+                  {item.icon && <item.icon size={16} className="slash-menu-item-icon" />}
+                  <span className="slash-menu-item-text">
+                    <span className="slash-menu-item-title">{item.title}</span>
+                    <span className="slash-menu-item-subtitle">{item.subtitle}</span>
+                  </span>
                 </Command.Item>
               ))}
             </Command.Group>

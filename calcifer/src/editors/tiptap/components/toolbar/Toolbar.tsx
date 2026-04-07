@@ -24,8 +24,7 @@ import {
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from './ColorPickerPopover'
 import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formattingOptions'
-import { TableInsertPopover } from '../table/TableInsertPopover'
-import { ImageInsertPopover } from '../image/ImageInsertPopover'
+import { InsertPopover } from './InsertPopover'
 
 interface ToolbarProps {
   editor: Editor
@@ -309,8 +308,6 @@ export function Toolbar({ editor }: ToolbarProps) {
         <ListChecksIcon />
       </Toggle>
 
-      <Separator orientation="vertical" className="mx-1 h-5" />
-
       {/* Link */}
       <Popover
         open={isLinkPopoverOpen}
@@ -382,13 +379,8 @@ export function Toolbar({ editor }: ToolbarProps) {
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 
-      {/* Table */}
-      <TableInsertPopover editor={editor} />
-
-      <Separator orientation="vertical" className="mx-1 h-5" />
-
-      {/* Image */}
-      <ImageInsertPopover editor={editor} />
+      {/* Insert */}
+      <InsertPopover editor={editor} />
 
       <Separator orientation="vertical" className="mx-1 h-5" />
 

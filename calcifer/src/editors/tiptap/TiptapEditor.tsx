@@ -17,6 +17,7 @@ import { Link } from '@tiptap/extension-link'
 import { bundledLanguages } from 'shiki'
 import type { BundledLanguage } from 'shiki'
 
+import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
@@ -74,6 +75,14 @@ export function TiptapEditor() {
         autolink: true,
         HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
       }),
+      Details.configure({
+        renderToggleButton({ element, isOpen }) {
+          element.setAttribute('contenteditable', 'false')
+          element.innerHTML = isOpen ? '▾' : '▸'
+        },
+      }),
+      DetailsSummary,
+      DetailsContent,
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
