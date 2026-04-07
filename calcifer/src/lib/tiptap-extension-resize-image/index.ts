@@ -2,7 +2,6 @@ import Image from '@tiptap/extension-image'
 import { NodeSelection } from '@tiptap/pm/state'
 import { Plugin } from '@tiptap/pm/state'
 import type { Node as ProsemirrorNode } from '@tiptap/pm/model'
-import { readFileAsDataURL } from './utils'
 
 export type ImageAlignment = 'left' | 'center' | 'right'
 
@@ -329,3 +328,11 @@ export const ResizableImage = Image.extend({
     }
   },
 })
+
+export function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.readAsDataURL(file)
+  })
+}

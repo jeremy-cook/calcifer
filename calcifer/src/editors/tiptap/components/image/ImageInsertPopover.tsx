@@ -3,7 +3,7 @@ import { type Editor } from '@tiptap/react'
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
 import { Button } from '~/components/ui/button'
 import { ImageIcon } from '@phosphor-icons/react'
-import { readFileAsDataURL } from '~/lib/utils'
+import { readFileAsDataURL } from '~/lib/tiptap-extension-resize-image'
 
 interface Props {
   editor: Editor
