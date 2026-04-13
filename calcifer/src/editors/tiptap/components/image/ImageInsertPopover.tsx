@@ -5,11 +5,11 @@ import { Button } from '~/components/ui/button'
 import { ImageIcon } from '@phosphor-icons/react'
 import { readFileAsDataURL } from '~/lib/tiptap-extension-resize-image'
 
-interface Props {
+interface ImageInsertPopoverProps {
   editor: Editor
 }
 
-export function ImageInsertPopover({ editor }: Props) {
+export function ImageInsertPopover({ editor }: ImageInsertPopoverProps) {
   const [url, setUrl] = useState('')
   const [file, setFile] = useState<{ src: string; name: string } | null>(null)
   const [altText, setAltText] = useState('')
@@ -39,6 +39,24 @@ export function ImageInsertPopover({ editor }: Props) {
     e.target.value = ''
   }
 
+  const renderFilePreview = () => (
+    <div className="flex items-center gap-2 rounded border border-border bg-muted px-2 py-1.5">
+      <span className="flex-1 truncate text-xs">{file!.name}</span>
+      <button onClick={() => setFile(null)} className="leading-none text-muted-foreground hover:text-foreground" aria-label="Remove file">×</button>
+    </div>
+  )
+
+  const renderUrlInput = () => (
+    <input
+      type="url"
+      placeholder="https://..."
+      value={url}
+      onChange={(e) => setUrl(e.target.value)}
+      onKeyDown={(e) => e.key === 'Enter' && handleInsert()}
+      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
+    />
+  )
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -50,21 +68,7 @@ export function ImageInsertPopover({ editor }: Props) {
         <div className="space-y-2">
           <p className="text-xs font-medium">Insert image</p>
 
-          {file ? (
-            <div className="flex items-center gap-2 rounded border border-border bg-muted px-2 py-1.5">
-              <span className="flex-1 truncate text-xs">{file.name}</span>
-              <button onClick={() => setFile(null)} className="text-muted-foreground hover:text-foreground leading-none" aria-label="Remove file">×</button>
-            </div>
-          ) : (
-            <input
-              type="url"
-              placeholder="https://..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleInsert()}
-              className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
-            />
-          )}
+          {file ? renderFilePreview() : renderUrlInput()}
 
           <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => fileRef.current?.click()}>
             Upload file
