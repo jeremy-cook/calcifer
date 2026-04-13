@@ -18,7 +18,7 @@ export function ColorPickerPopover({ color, onChange, onClear, icon, label, disa
         <Button
           variant="ghost"
           size="sm"
-          className="relative h-7 min-w-7 flex-col gap-0 px-1.5"
+          className="relative h-8 min-w-8 flex-col gap-0 px-1.5"
           aria-label={label}
           disabled={disabled}
         >
