@@ -1,4 +1,5 @@
 import { useEditor, EditorContent } from '@tiptap/react'
+import { DragHandle as DragHandleReact } from '@tiptap/extension-drag-handle-react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Mention } from '@tiptap/extension-mention'
 import { Placeholder } from '@tiptap/extension-placeholder'
@@ -34,6 +35,7 @@ import { mentionSuggestion } from './components/mention/mentionSuggestion'
 import { hashtagSuggestion } from './components/mention/hashtagSuggestion'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { TiptapCodeBlock } from './components/code-block/TiptapCodeBlock'
+import { DotsSixVerticalIcon } from '@phosphor-icons/react'
 import { LinkActionMenu } from './components/link/LinkActionMenu'
 import { TableActionMenu } from './components/table/TableActionMenu'
 import { ImageActionMenu } from './components/image/ImageActionMenu'
@@ -118,6 +120,9 @@ export function TiptapEditor() {
       <Toolbar editor={editor} />
       <TableActionMenu editor={editor} />
       <div className="min-h-0 flex-1 overflow-y-auto">
+        <DragHandleReact editor={editor}>
+          <DotsSixVerticalIcon weight="bold" />
+        </DragHandleReact>
         <EditorContent editor={editor} className="h-full" />
       </div>
       <LinkActionMenu editor={editor} />
