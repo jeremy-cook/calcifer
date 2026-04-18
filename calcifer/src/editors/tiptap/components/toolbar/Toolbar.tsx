@@ -610,16 +610,16 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
       {/* Collapsible groups */}
       {visibleGroups.map(({ id, toolbar }) => (
         <Fragment key={id}>
-          <Separator orientation="vertical" className="mx-1 h-5" />
+          <Separator orientation="vertical" className="mx-1 self-stretch" />
           {toolbar}
         </Fragment>
       ))}
 
       {/* Link — always visible */}
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-1 self-stretch" />
       <LinkPopover editor={editor} isLink={isLink} />
 
-      <Separator orientation="vertical" className="mx-1 h-5" />
+      <Separator orientation="vertical" className="mx-1 self-stretch" />
 
       {/* Insert — always visible, receives overflow items */}
       <InsertPopover editor={editor} sections={insertSections} />
