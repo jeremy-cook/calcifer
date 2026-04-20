@@ -7,6 +7,8 @@ import {
 } from '@tanstack/react-router'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
 import { AppShell } from '~/layouts/AppShell'
+import { CalendarPage } from '~/pages/CalendarPage'
+import { StructureListPage } from '~/pages/StructureListPage'
 
 function RootLayout() {
   return (
@@ -29,6 +31,11 @@ function EntityPage() {
   )
 }
 
+function StructureListRouteView() {
+  const { structureId } = structureListRoute.useParams()
+  return <StructureListPage structureId={structureId} />
+}
+
 const rootRoute = createRootRoute({ component: RootLayout })
 
 const indexRoute = createRoute({
@@ -43,7 +50,24 @@ const entityRoute = createRoute({
   component: EntityPage,
 })
 
-const routeTree = rootRoute.addChildren([indexRoute, entityRoute])
+const calendarRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/calendar',
+  component: CalendarPage,
+})
+
+const structureListRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/s/$structureId',
+  component: StructureListRouteView,
+})
+
+const routeTree = rootRoute.addChildren([
+  indexRoute,
+  entityRoute,
+  calendarRoute,
+  structureListRoute,
+])
 
 export const router = createRouter({ routeTree })
 
