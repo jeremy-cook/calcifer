@@ -14,7 +14,7 @@ This plan is the **application-level** counterpart: the shell around the editor 
 - **FE first, backend later.** Phases 1–7 are frontend against a localStorage-backed store; Phase 8 swaps to Connect-RPC + Go + SQLite.
 - **Single-user.** No auth, no multi-tenant concerns.
 - **Dropped:** runtime structure editor (user owns the source), server-authoritative sync, full-text / lexical search. Keeping vector search because it's the RAG substrate — not a user-facing search feature.
-- **AI scope:** RAG chat, inline editor AI, auto-extraction on save, agent tool-use.
+- **AI scope:** RAG chat
 
 ---
 
@@ -35,15 +35,26 @@ message PropertyValue {
     string text = 1;
     double number = 2;
     google.protobuf.Timestamp date_value = 3;
-    string select = 4;
+    string select = 4;          // option key; allowed set defined on the Structure in source code
     EntityRef relation = 5;
-    bytes richtext = 6;   // TipTap JSON
+    RichTextRef richtext = 6;   // pointer — actual doc fetched via GetRichText
   }
 }
 
 message Property {
   string id = 1;           // matches PropertyDef.id on the Structure
   PropertyValue value = 2;
+}
+
+message RichTextRef {
+  string entity_id = 1;
+  string property_id = 2;
+}
+
+message RichText {
+  RichTextRef ref = 1;
+  string doc = 2;          // TipTap JSON, inspected as text
+  google.protobuf.Timestamp updated_at = 3;
 }
 
 message LinkRef {
@@ -93,6 +104,8 @@ Tracked in `editor-comparison-plan.md`. Continues in parallel.
 
 ### Phase 1 — App Layout Shell
 
+**Detailed plan:** [`plans/phase-1-app-shell.md`](plans/phase-1-app-shell.md)
+
 **Goal:** Chrome with collapsible sidebar.
 
 - [ ] `src/layouts/AppShell.tsx` — resizable sidebar (240–360px) + main content
@@ -125,10 +138,10 @@ Tracked in `editor-comparison-plan.md`. Continues in parallel.
 - [ ] `buf.gen.yaml` → generates TS into `gen/ts/` (also Go into `gen/go/`, unused until Phase 8)
 - [ ] Vite path alias `@calcifer/proto` → `gen/ts/`
 - [ ] `src/model/structures.ts` — source-of-truth Structure constants
-- [ ] `src/model/store.ts` — Zustand store keyed by entity id, values are proto `Entity`
-- [ ] `localStorage` persistence adapter (pluggable — swapped in Phase 8)
+- [ ] `src/model/store.ts` — Zustand store: entities keyed by id; richtext docs keyed by `{entity_id, property_id}` in a parallel slice
+- [ ] `localStorage` persistence adapter (pluggable — swapped in Phase 8); entities and richtext docs under separate keys
 - [ ] Entity page `/e/:id`: title input + property renderer dispatching on `PropertyValue.case`
-  - for `Note`: `richtext` property → mount `TiptapEditor`, serialize doc to `Uint8Array`
+  - for `Note`: `richtext` property holds a `RichTextRef`; mount `TiptapEditor`, read/write the doc via the richtext slice (`getRichText(ref)` / `putRichText(ref, json)`)
 - [ ] "+ New Note" creates entity, navigates, focuses title
 - [ ] Sidebar reads from store
 - [ ] Delete with confirmation
@@ -207,11 +220,16 @@ service EntityService {
   rpc Update(UpdateRequest) returns (Entity);
   rpc Delete(DeleteRequest) returns (google.protobuf.Empty);
   rpc Watch(WatchRequest) returns (stream EntityEvent);
+
+  // Richtext — separate from Entity so list responses stay lean
+  // and autosave doesn't ship the whole entity on every keystroke.
+  rpc GetRichText(RichTextRef) returns (RichText);
+  rpc PutRichText(RichText) returns (RichText);
 }
 ```
 
 - [ ] Go module + `air` for reload
-- [ ] SQLite schema: `entities(id, structure_id, title, created_at, updated_at)` + `properties(entity_id, property_id, value_blob)` + `links(entity_id, link_id, target_id, target_structure_id, source_property_id, created_at)`; `value_blob` is the proto-encoded `PropertyValue`
+- [ ] SQLite schema: `entities(id, structure_id, title, created_at, updated_at)` + `properties(entity_id, property_id, value_blob)` + `richtext(entity_id, property_id, doc, updated_at)` + `links(entity_id, link_id, target_id, target_structure_id, source_property_id, created_at)`. `value_blob` is the proto-encoded `PropertyValue`; when a property's type is richtext, `value_blob` holds the `RichTextRef` pointer and the actual doc lives in the `richtext` table (keyed on `(entity_id, property_id)`)
 - [ ] sqlc queries
 - [ ] Connect service implementations
 - [ ] Replace Zustand's `localStorage` adapter with TanStack Query hooks over the Connect client
@@ -315,7 +333,7 @@ service EntityService {
 End-to-end through the browser per phase:
 
 - **Phase 1:** `pnpm dev`, `Cmd+\` collapses sidebar, state survives reload.
-- **Phase 3:** create a Note, type, reload → content restored. Inspect localStorage: payload is base64-encoded proto.
+- **Phase 3:** create a Note, type, reload → content restored. Inspect localStorage: two keys — one for entity metadata (with a RichTextRef pointer under the `content` property), one for the richtext doc JSON.
 - **Phase 4:** `@` picks an existing entity; chip renders; `links[]` on source entity contains a `LinkRef`. Clicking navigates.
 - **Phase 8:** drop localStorage, create entity via UI → row appears in `sqlite3 calcifer.db`. `Watch` stream: edit in tab A, tab B updates live.
 - **Phase 10:** create two thematically related notes; ask "what did I write about X?" — streamed answer cites both.
