@@ -3,9 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 const STORAGE_KEY = 'calcifer.sidebar.collapsed'
 
 export function useSidebarState() {
-  const [collapsed, setCollapsed] = useState<boolean>(
-    () => localStorage.getItem(STORAGE_KEY) === 'true',
-  )
+  const [collapsed, setCollapsed] = useState<boolean>(() => localStorage.getItem(STORAGE_KEY) === 'true')
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, String(collapsed))

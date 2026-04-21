@@ -44,6 +44,4 @@ export type StructureId = keyof typeof STRUCTURES
 
 export const STRUCTURE_LIST: readonly StructureMeta[] = Object.values(STRUCTURES)
 
-export const CREATABLE_STRUCTURES: readonly StructureMeta[] = STRUCTURE_LIST.filter(
-  (s) => s.creatable !== false,
-)
+export const CREATABLE_STRUCTURES: readonly StructureMeta[] = STRUCTURE_LIST.filter((s) => s.creatable !== false)

@@ -42,8 +42,7 @@ export function showDatePicker(editor: Editor, options: ShowDatePickerOptions = 
   document.body.appendChild(component.element)
 
   const reference = referenceEl ?? {
-    getBoundingClientRect: () =>
-      posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to),
+    getBoundingClientRect: () => posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to),
   }
 
   computePosition(reference as Element, component.element as HTMLElement, {

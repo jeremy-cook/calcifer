@@ -1,9 +1,4 @@
-import {
-  TextAlignLeftIcon,
-  TextAlignCenterIcon,
-  TextAlignRightIcon,
-  TextAlignJustifyIcon,
-} from '@phosphor-icons/react'
+import { TextAlignLeftIcon, TextAlignCenterIcon, TextAlignRightIcon, TextAlignJustifyIcon } from '@phosphor-icons/react'
 
 export type Alignment = 'left' | 'center' | 'right' | 'justify'
 

@@ -13,53 +13,51 @@ export interface SlashCommandMenuHandle {
 
 const NAVIGATION_KEYS = ['ArrowUp', 'ArrowDown', 'Enter']
 
-export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandMenuProps>(
-  ({ items, command }, ref) => {
-    useImperativeHandle(ref, () => ({
-      onKeyDown({ event }) {
-        if (!NAVIGATION_KEYS.includes(event.key)) return false
-        // Forward the keydown into cmdk so it handles selection
-        const el = document.getElementById('slash-cmd')
-        el?.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, bubbles: true, cancelable: true }))
-        return true
-      },
-    }))
+export const SlashCommandMenu = forwardRef<SlashCommandMenuHandle, SlashCommandMenuProps>(({ items, command }, ref) => {
+  useImperativeHandle(ref, () => ({
+    onKeyDown({ event }) {
+      if (!NAVIGATION_KEYS.includes(event.key)) return false
+      // Forward the keydown into cmdk so it handles selection
+      const el = document.getElementById('slash-cmd')
+      el?.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, bubbles: true, cancelable: true }))
+      return true
+    },
+  }))
 
-    const groups = useMemo(
-      () =>
-        items.reduce<Record<string, SlashCommandItem[]>>(
-          (acc, item) => ({ ...acc, [item.group]: [...(acc[item.group] ?? []), item] }),
-          {},
-        ),
-      [items],
-    )
+  const groups = useMemo(
+    () =>
+      items.reduce<Record<string, SlashCommandItem[]>>(
+        (acc, item) => ({ ...acc, [item.group]: [...(acc[item.group] ?? []), item] }),
+        {},
+      ),
+    [items],
+  )
 
-    return (
-      <Command id="slash-cmd" className="slash-menu" onKeyDown={(e) => e.stopPropagation()}>
-        <Command.List>
-          <Command.Empty className="slash-menu-empty">No results</Command.Empty>
-          {Object.entries(groups).map(([group, groupItems]) => (
-            <Command.Group key={group} heading={group} className="slash-menu-group">
-              {groupItems.map((item) => (
-                <Command.Item
-                  key={item.title}
-                  value={item.title}
-                  className="slash-menu-item"
-                  onSelect={() => command(item)}
-                >
-                  {item.icon && <item.icon size={16} className="slash-menu-item-icon" />}
-                  <span className="slash-menu-item-text">
-                    <span className="slash-menu-item-title">{item.title}</span>
-                    <span className="slash-menu-item-subtitle">{item.subtitle}</span>
-                  </span>
-                </Command.Item>
-              ))}
-            </Command.Group>
-          ))}
-        </Command.List>
-      </Command>
-    )
-  },
-)
+  return (
+    <Command id="slash-cmd" className="slash-menu" onKeyDown={(e) => e.stopPropagation()}>
+      <Command.List>
+        <Command.Empty className="slash-menu-empty">No results</Command.Empty>
+        {Object.entries(groups).map(([group, groupItems]) => (
+          <Command.Group key={group} heading={group} className="slash-menu-group">
+            {groupItems.map((item) => (
+              <Command.Item
+                key={item.title}
+                value={item.title}
+                className="slash-menu-item"
+                onSelect={() => command(item)}
+              >
+                {item.icon && <item.icon size={16} className="slash-menu-item-icon" />}
+                <span className="slash-menu-item-text">
+                  <span className="slash-menu-item-title">{item.title}</span>
+                  <span className="slash-menu-item-subtitle">{item.subtitle}</span>
+                </span>
+              </Command.Item>
+            ))}
+          </Command.Group>
+        ))}
+      </Command.List>
+    </Command>
+  )
+})
 
 SlashCommandMenu.displayName = 'SlashCommandMenu'

@@ -40,7 +40,13 @@ interface GetDecorationsOptions extends ShikiPluginOptions {
 
 const isBundledLanguage = (l: string): l is BundledLanguage => l in bundledLanguages
 
-function getDecorations({ doc, name, getHighlighter: get, themes, defaultLanguage }: GetDecorationsOptions): DecorationSet {
+function getDecorations({
+  doc,
+  name,
+  getHighlighter: get,
+  themes,
+  defaultLanguage,
+}: GetDecorationsOptions): DecorationSet {
   const h = get ? get() : getDefaultHighlighter()
   if (!h) return DecorationSet.empty
 

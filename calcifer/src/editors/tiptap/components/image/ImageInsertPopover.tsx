@@ -42,7 +42,13 @@ export function ImageInsertPopover({ editor }: ImageInsertPopoverProps) {
   const renderFilePreview = () => (
     <div className="flex items-center gap-2 rounded border border-border bg-muted px-2 py-1.5">
       <span className="flex-1 truncate text-xs">{file!.name}</span>
-      <button onClick={() => setFile(null)} className="leading-none text-muted-foreground hover:text-foreground" aria-label="Remove file">×</button>
+      <button
+        onClick={() => setFile(null)}
+        className="leading-none text-muted-foreground hover:text-foreground"
+        aria-label="Remove file"
+      >
+        ×
+      </button>
     </div>
   )
 

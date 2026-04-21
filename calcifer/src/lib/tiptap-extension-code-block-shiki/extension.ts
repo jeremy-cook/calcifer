@@ -1,7 +1,13 @@
 import type { CodeBlockOptions } from '@tiptap/extension-code-block'
 import { CodeBlock } from '@tiptap/extension-code-block'
 import type { BundledTheme, BundledLanguage } from 'shiki'
-import { ShikiPlugin, SHIKI_FORCE_DECORATION, getDefaultHighlighter, initHighlighter, type GetHighlighter } from './plugin'
+import {
+  ShikiPlugin,
+  SHIKI_FORCE_DECORATION,
+  getDefaultHighlighter,
+  initHighlighter,
+  type GetHighlighter,
+} from './plugin'
 
 export interface CodeBlockShikiOptions extends CodeBlockOptions {
   getHighlighter: GetHighlighter | null

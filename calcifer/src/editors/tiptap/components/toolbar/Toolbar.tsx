@@ -119,7 +119,11 @@ function LinkPopover({ editor, isLink }: LinkPopoverProps) {
       .focus()
       .command(({ tr, state }) => {
         const { from, to } = state.selection
-        const linkMark = state.schema.marks.link.create({ href: trimmedUrl, target: '_blank', rel: 'noopener noreferrer' })
+        const linkMark = state.schema.marks.link.create({
+          href: trimmedUrl,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+        })
         tr.replaceWith(from, to, state.schema.text(trimmedLabel, [linkMark]))
         return true
       })
@@ -128,7 +132,12 @@ function LinkPopover({ editor, isLink }: LinkPopoverProps) {
   }
 
   return (
-    <Popover open={open} onOpenChange={(o) => { if (!o) setOpen(false) }}>
+    <Popover
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) setOpen(false)
+      }}
+    >
       <PopoverAnchor asChild>
         <Toggle size="default" pressed={isLink} onClick={handleToggle} aria-label="Link">
           <LinkIcon />
@@ -173,7 +182,6 @@ function LinkPopover({ editor, isLink }: LinkPopoverProps) {
 }
 
 export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
-
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(Infinity)
 

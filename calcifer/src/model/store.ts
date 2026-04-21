@@ -43,10 +43,7 @@ export const useEntityStore = create<EntityState>()(
   ),
 )
 
-export function listByStructure(
-  entities: Record<string, Entity>,
-  structureId: StructureId,
-): Entity[] {
+export function listByStructure(entities: Record<string, Entity>, structureId: StructureId): Entity[] {
   const matches = Object.values(entities).filter((e) => e.structureId === structureId)
   if (structureId === 'DailyNote') {
     return matches.sort((a, b) => b.title.localeCompare(a.title))
@@ -54,9 +51,6 @@ export function listByStructure(
   return matches.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
-export function entityById(
-  entities: Record<string, Entity>,
-  id: string,
-): Entity | undefined {
+export function entityById(entities: Record<string, Entity>, id: string): Entity | undefined {
   return entities[id]
 }

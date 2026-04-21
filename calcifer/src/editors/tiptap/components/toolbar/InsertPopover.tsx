@@ -96,7 +96,7 @@ function InsertSections({ sections }: InsertSectionsProps) {
     <>
       <div className="-mx-1.5 my-1 h-px bg-border" />
       {sections.map((section) =>
-        section.items.map((item) => (item.colorPicker ? renderColorPickerItem(item) : renderButtonItem(item)))
+        section.items.map((item) => (item.colorPicker ? renderColorPickerItem(item) : renderButtonItem(item))),
       )}
     </>
   )

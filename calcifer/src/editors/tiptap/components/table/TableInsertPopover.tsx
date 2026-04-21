@@ -6,7 +6,9 @@ import { TableIcon } from '@phosphor-icons/react'
 
 const MAX = 8
 
-interface Props { editor: Editor }
+interface Props {
+  editor: Editor
+}
 
 export function TableInsertPopover({ editor }: Props) {
   const [hovered, setHovered] = useState({ rows: 0, cols: 0 })
