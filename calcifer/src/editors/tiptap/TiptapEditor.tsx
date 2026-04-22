@@ -1,4 +1,5 @@
 import { useEditor, EditorContent } from '@tiptap/react'
+import type { Content, JSONContent } from '@tiptap/core'
 import { DragHandle as DragHandleReact } from '@tiptap/extension-drag-handle-react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Mention } from '@tiptap/extension-mention'
@@ -40,9 +41,21 @@ import { LinkActionMenu } from './components/link/LinkActionMenu'
 import { TableActionMenu } from './components/table/TableActionMenu'
 import { ImageActionMenu } from './components/image/ImageActionMenu'
 
-export function TiptapEditor() {
+interface TiptapEditorProps {
+  doc?: string
+  onUpdate?: (docJSON: JSONContent) => void
+}
+
+function parseDoc(doc: string | undefined): Content {
+  if (!doc) return null
+  return doc.length > 0 ? (JSON.parse(doc) as JSONContent) : null
+}
+
+export function TiptapEditor({ doc, onUpdate }: TiptapEditorProps) {
   const editor = useEditor({
     shouldRerenderOnTransaction: false,
+    content: parseDoc(doc),
+    onUpdate: ({ editor: e }) => onUpdate?.(e.getJSON()),
     extensions: [
       StarterKit.configure({
         codeBlock: false,
@@ -105,7 +118,6 @@ export function TiptapEditor() {
         suggestion: hashtagSuggestion,
       }),
     ],
-    content: '',
     editorProps: {
       attributes: {
         class: 'outline-none min-h-full px-16 py-10 text-base leading-normal',

@@ -9,9 +9,12 @@
     "format": "prettier --write .",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix && prettier --write .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "proto:gen": "cd .. && buf generate",
+    "proto:lint": "cd .. && buf lint"
   },
   "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0",
     "@floating-ui/dom": "^1.7.6",
     "@fontsource-variable/montserrat": "^5.2.8",
     "@phosphor-icons/react": "^2.1.10",
@@ -80,8 +83,11 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
+    "@bufbuild/buf": "^1.68.2",
+    "@bufbuild/protoc-gen-es": "^2.11.0",
     "@eslint/js": "^9.39.4",
     "@tailwindcss/typography": "^0.5.19",
+    "@tanstack/router-plugin": "^1.167.22",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

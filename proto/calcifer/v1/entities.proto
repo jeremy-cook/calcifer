@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package calcifer.v1;
+
+import "google/protobuf/timestamp.proto";
+
+message EntityRef {
+  string id = 1;
+  string structure_id = 2;
+}
+
+message PropertyValue {
+  oneof value {
+    string text = 1;
+    double number = 2;
+    google.protobuf.Timestamp date_value = 3;
+    string select = 4;
+    EntityRef relation = 5;
+    RichTextRef richtext = 6;
+  }
+}
+
+message Property {
+  string id = 1;
+  PropertyValue value = 2;
+}
+
+message RichTextRef {
+  string entity_id = 1;
+  string property_id = 2;
+}
+
+message RichText {
+  RichTextRef ref = 1;
+  string doc = 2;
+  google.protobuf.Timestamp updated_at = 3;
+}
+
+message LinkRef {
+  string id = 1;
+  EntityRef target = 2;
+  string source_property_id = 3;
+  google.protobuf.Timestamp created_at = 4;
+}
+
+message Entity {
+  string id = 1;
+  string structure_id = 2;
+  string title = 3;
+  repeated Property properties = 4;
+  repeated LinkRef links = 5;
+  google.protobuf.Timestamp created_at = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
