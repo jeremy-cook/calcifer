@@ -13,24 +13,26 @@ import {
   PropertySchema,
   RichTextRefSchema,
   type Entity,
+  type LinkRef,
   type Property,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { useRichTextStore } from '~/model/richtext'
-import { STRUCTURES, type StructureId } from '~/model/structures'
+import { STRUCTURES, type StructureType } from '~/model/structures'
 
-type CreatableStructureId = Exclude<StructureId, 'DailyNote'>
+type CreatableStructureType = Exclude<StructureType, 'DailyNote'>
 
 interface EntityState {
   entities: Record<string, Entity>
-  createEntity: (structureId: CreatableStructureId, title?: string) => Entity
+  createEntity: (structureType: CreatableStructureType, title?: string) => Entity
   updateEntity: (id: string, patch: { title?: string }) => void
   deleteEntity: (id: string) => void
+  setLinks: (id: string, links: LinkRef[]) => void
 }
 
 type PersistedEntityState = Pick<EntityState, 'entities'>
 
-function defaultTitleFor(structureId: CreatableStructureId): string {
-  return `Untitled ${STRUCTURES[structureId].name}`
+function defaultTitleFor(structureType: CreatableStructureType): string {
+  return `Untitled ${STRUCTURES[structureType].name}`
 }
 
 const entityStorage: PersistStorage<PersistedEntityState> = {
@@ -74,10 +76,10 @@ export const useEntityStore = create<EntityState>()(
   persist(
     (set, get) => ({
       entities: {},
-      createEntity: (structureId, title) => {
+      createEntity: (structureType, title) => {
         const id = crypto.randomUUID()
         const now = timestampNow()
-        const structure = STRUCTURES[structureId]
+        const structure = STRUCTURES[structureType]
         const properties: Property[] = []
         for (const def of structure.properties) {
           if (def.type === 'richtext') {
@@ -94,8 +96,8 @@ export const useEntityStore = create<EntityState>()(
         }
         const entity = createMessage(EntitySchema, {
           id,
-          structureId,
-          title: title ?? defaultTitleFor(structureId),
+          structureType,
+          title: title ?? defaultTitleFor(structureType),
           properties,
           links: [],
           createdAt: now,
@@ -120,6 +122,16 @@ export const useEntityStore = create<EntityState>()(
         set({ entities: next })
         useRichTextStore.getState().deleteByEntity(id)
       },
+      setLinks: (id, links) => {
+        const current = get().entities[id]
+        if (!current) return
+        const next = createMessage(EntitySchema, {
+          ...current,
+          links,
+          updatedAt: timestampNow(),
+        })
+        set({ entities: { ...get().entities, [id]: next } })
+      },
     }),
     {
       name: 'calcifer.entities.v1',
@@ -139,10 +151,10 @@ export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export function listByStructure(
   entities: Record<string, Entity>,
-  structureId: StructureId,
+  structureType: StructureType,
 ): Entity[] {
-  const matches = Object.values(entities).filter((e) => e.structureId === structureId)
-  if (structureId === 'DailyNote') {
+  const matches = Object.values(entities).filter((e) => e.structureType === structureType)
+  if (structureType === 'DailyNote') {
     return matches.sort((a, b) => b.title.localeCompare(a.title))
   }
   return matches.sort((a, b) => updatedAtMillis(b) - updatedAtMillis(a))

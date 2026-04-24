@@ -6,7 +6,7 @@ import "google/protobuf/timestamp.proto";
 
 message EntityRef {
   string id = 1;
-  string structure_id = 2;
+  string structure_type = 2;
 }
 
 message PropertyValue {
@@ -45,7 +45,7 @@ message LinkRef {
 
 message Entity {
   string id = 1;
-  string structure_id = 2;
+  string structure_type = 2;
   string title = 3;
   repeated Property properties = 4;
   repeated LinkRef links = 5;

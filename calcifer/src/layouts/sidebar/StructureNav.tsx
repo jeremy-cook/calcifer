@@ -11,9 +11,9 @@ export function StructureNav() {
         const IconComponent = s.icon
         return (
           <Link
-            key={s.id}
-            to="/s/$structureId"
-            params={{ structureId: s.id }}
+            key={s.type}
+            to="/s/$structureType"
+            params={{ structureType: s.type }}
             className={ROW_CLASS}
             activeProps={{ className: 'bg-muted font-medium' }}
           >

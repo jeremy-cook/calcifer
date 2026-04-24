@@ -226,12 +226,12 @@
   user-select: all;
 }
 
-.tiptap .mention--user {
+.tiptap .mention {
   background-color: color-mix(in oklch, var(--primary) 12%, transparent);
   color: var(--primary);
 }
 
-.tiptap .mention--tag {
+.tiptap .mention[data-structure-type='Tag'] {
   background-color: color-mix(in oklch, var(--chart-2) 15%, transparent);
   color: color-mix(in oklch, var(--chart-2) 80%, var(--foreground));
 }

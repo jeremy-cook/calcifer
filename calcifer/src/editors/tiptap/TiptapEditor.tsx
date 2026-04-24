@@ -2,7 +2,6 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import type { Content, JSONContent } from '@tiptap/core'
 import { DragHandle as DragHandleReact } from '@tiptap/extension-drag-handle-react'
 import { StarterKit } from '@tiptap/starter-kit'
-import { Mention } from '@tiptap/extension-mention'
 import { Placeholder } from '@tiptap/extension-placeholder'
 import { TextStyle } from '@tiptap/extension-text-style'
 import { Color } from '@tiptap/extension-color'
@@ -32,8 +31,8 @@ import { ResizableImage } from '~/lib/tiptap-extension-resize-image'
 import { CODE_LANGUAGES } from './components/formattingOptions'
 import { SlashCommand } from '~/lib/tiptap-extension-slash-command'
 import { slashSuggestion } from './components/slash-menu/slashSuggestion'
-import { mentionSuggestion } from './components/mention/mentionSuggestion'
-import { hashtagSuggestion } from './components/mention/hashtagSuggestion'
+import { EntityMention, HashtagMention } from './extensions/entityMention'
+import { makeSuggestion } from './components/mention/makeSuggestion'
 import { Toolbar } from './components/toolbar/Toolbar'
 import { TiptapCodeBlock } from './components/code-block/TiptapCodeBlock'
 import { DotsSixVerticalIcon } from '@phosphor-icons/react'
@@ -109,13 +108,13 @@ export function TiptapEditor({ doc, onUpdate }: TiptapEditorProps) {
         },
       }),
       SlashCommand.configure({ suggestion: slashSuggestion }),
-      Mention.configure({
-        HTMLAttributes: { class: 'mention mention--user' },
-        suggestion: mentionSuggestion,
+      EntityMention.configure({
+        HTMLAttributes: { class: 'mention' },
+        suggestion: makeSuggestion({ char: '@' }),
       }),
-      Mention.extend({ name: 'hashtag' }).configure({
-        HTMLAttributes: { class: 'mention mention--tag' },
-        suggestion: hashtagSuggestion,
+      HashtagMention.configure({
+        HTMLAttributes: { class: 'mention' },
+        suggestion: makeSuggestion({ char: '#', structureFilter: 'Tag' }),
       }),
     ],
     editorProps: {

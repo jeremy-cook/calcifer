@@ -14,11 +14,13 @@ import {
 } from '~/components/ui/alert-dialog'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
+import type { JSONContent } from '@tiptap/core'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
 import type { Entity } from '~/model/store'
 import { useEntityStore } from '~/model/store'
 import { richTextKey, useRichTextStore } from '~/model/richtext'
-import { STRUCTURES, type StructureId } from '~/model/structures'
+import { syncLinksFromDoc } from '~/model/linkSync'
+import { STRUCTURES, type StructureType } from '~/model/structures'
 import type { Property, RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
@@ -56,7 +58,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
   const deleteEntity = useEntityStore((s) => s.deleteEntity)
   const navigate = useNavigate()
 
-  const structureName = STRUCTURES[entity.structureId as StructureId]?.name ?? entity.structureId
+  const structureName = STRUCTURES[entity.structureType as StructureType]?.name ?? entity.structureType
   const isDefaultTitle = entity.title === `Untitled ${structureName}`
 
   const handleDelete = () => {
@@ -129,9 +131,12 @@ function EntityRichTextField({ propertyId, propertyRef }: EntityRichTextFieldPro
   const putRichText = useRichTextStore((s) => s.putRichText)
 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handleUpdate = useCallback((next: string) => {
+  const handleUpdate = useCallback((json: JSONContent) => {
     if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => putRichText(propertyRef, next), RICHTEXT_DEBOUNCE_MS)
+    timerRef.current = setTimeout(() => {
+      putRichText(propertyRef, JSON.stringify(json))
+      syncLinksFromDoc(propertyRef.entityId, json)
+    }, RICHTEXT_DEBOUNCE_MS)
   }, [propertyRef, putRichText])
 
   return (

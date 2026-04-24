@@ -11,7 +11,8 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as SStructureIdRouteImport } from './routes/s.$structureId'
+import { Route as TagIdRouteImport } from './routes/tag.$id'
+import { Route as SStructureTypeRouteImport } from './routes/s.$structureType'
 import { Route as EIdRouteImport } from './routes/e.$id'
 
 const CalendarRoute = CalendarRouteImport.update({
@@ -24,9 +25,14 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SStructureIdRoute = SStructureIdRouteImport.update({
-  id: '/s/$structureId',
-  path: '/s/$structureId',
+const TagIdRoute = TagIdRouteImport.update({
+  id: '/tag/$id',
+  path: '/tag/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SStructureTypeRoute = SStructureTypeRouteImport.update({
+  id: '/s/$structureType',
+  path: '/s/$structureType',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EIdRoute = EIdRouteImport.update({
@@ -39,34 +45,44 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/e/$id': typeof EIdRoute
-  '/s/$structureId': typeof SStructureIdRoute
+  '/s/$structureType': typeof SStructureTypeRoute
+  '/tag/$id': typeof TagIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/e/$id': typeof EIdRoute
-  '/s/$structureId': typeof SStructureIdRoute
+  '/s/$structureType': typeof SStructureTypeRoute
+  '/tag/$id': typeof TagIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/e/$id': typeof EIdRoute
-  '/s/$structureId': typeof SStructureIdRoute
+  '/s/$structureType': typeof SStructureTypeRoute
+  '/tag/$id': typeof TagIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/calendar' | '/e/$id' | '/s/$structureId'
+  fullPaths: '/' | '/calendar' | '/e/$id' | '/s/$structureType' | '/tag/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/calendar' | '/e/$id' | '/s/$structureId'
-  id: '__root__' | '/' | '/calendar' | '/e/$id' | '/s/$structureId'
+  to: '/' | '/calendar' | '/e/$id' | '/s/$structureType' | '/tag/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/calendar'
+    | '/e/$id'
+    | '/s/$structureType'
+    | '/tag/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CalendarRoute: typeof CalendarRoute
   EIdRoute: typeof EIdRoute
-  SStructureIdRoute: typeof SStructureIdRoute
+  SStructureTypeRoute: typeof SStructureTypeRoute
+  TagIdRoute: typeof TagIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -85,11 +101,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/s/$structureId': {
-      id: '/s/$structureId'
-      path: '/s/$structureId'
-      fullPath: '/s/$structureId'
-      preLoaderRoute: typeof SStructureIdRouteImport
+    '/tag/$id': {
+      id: '/tag/$id'
+      path: '/tag/$id'
+      fullPath: '/tag/$id'
+      preLoaderRoute: typeof TagIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s/$structureType': {
+      id: '/s/$structureType'
+      path: '/s/$structureType'
+      fullPath: '/s/$structureType'
+      preLoaderRoute: typeof SStructureTypeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/e/$id': {
@@ -106,7 +129,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CalendarRoute: CalendarRoute,
   EIdRoute: EIdRoute,
-  SStructureIdRoute: SStructureIdRoute,
+  SStructureTypeRoute: SStructureTypeRoute,
+  TagIdRoute: TagIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

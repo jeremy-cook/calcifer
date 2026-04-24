@@ -7,40 +7,44 @@ export interface PropertyDef {
 }
 
 export interface StructureMeta {
-  id: string
+  type: string
   name: string
   plural: string
   icon: Icon
+  color: string
   properties: readonly PropertyDef[]
   creatable?: boolean
 }
 
 export const STRUCTURES = {
   Note: {
-    id: 'Note',
+    type: 'Note',
     name: 'Note',
     plural: 'Notes',
     icon: NoteIcon,
+    color: 'var(--chart-1)',
     properties: [{ id: 'content', type: 'richtext' }],
   },
-  RootTag: {
-    id: 'RootTag',
+  Tag: {
+    type: 'Tag',
     name: 'Tag',
     plural: 'Tags',
     icon: HashIcon,
+    color: 'var(--chart-2)',
     properties: [],
   },
   DailyNote: {
-    id: 'DailyNote',
+    type: 'DailyNote',
     name: 'Daily Note',
     plural: 'Daily Notes',
     icon: NotebookIcon,
+    color: 'var(--chart-3)',
     properties: [{ id: 'content', type: 'richtext' }],
     creatable: false,
   },
 } as const satisfies Record<string, StructureMeta>
 
-export type StructureId = keyof typeof STRUCTURES
+export type StructureType = keyof typeof STRUCTURES
 
 export const STRUCTURE_LIST: readonly StructureMeta[] = Object.values(STRUCTURES)
 

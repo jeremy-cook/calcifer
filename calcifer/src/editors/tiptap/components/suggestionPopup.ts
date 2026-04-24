@@ -2,66 +2,50 @@ import { computePosition, flip, shift } from '@floating-ui/dom'
 import { ReactRenderer } from '@tiptap/react'
 import { posToDOMRect, type Editor } from '@tiptap/core'
 import type { SuggestionOptions } from '@tiptap/suggestion'
-import { SuggestionMenu, type SuggestionMenuHandle } from './SuggestionMenu'
+import type { ComponentType } from 'react'
 
-export type MentionItem = {
-  id: string
-  label: string
+export interface SuggestionMenuHandle {
+  onKeyDown: (props: { event: KeyboardEvent }) => boolean
 }
-
-export const MENTION_ITEMS: MentionItem[] = [
-  { id: '1', label: 'Alice Johnson' },
-  { id: '2', label: 'Bob Smith' },
-  { id: '3', label: 'Carol Williams' },
-  { id: '4', label: 'David Brown' },
-  { id: '5', label: 'Eva Martinez' },
-  { id: '6', label: 'Frank Garcia' },
-  { id: '7', label: 'Grace Lee' },
-  { id: '8', label: 'Henry Wilson' },
-]
 
 function updatePosition(editor: Editor, element: HTMLElement) {
   const virtualElement = {
-    getBoundingClientRect: () => posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to),
+    getBoundingClientRect: () =>
+      posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to),
   }
-  computePosition(virtualElement, element, {
+  void computePosition(virtualElement, element, {
     placement: 'bottom-start',
     strategy: 'absolute',
     middleware: [shift(), flip()],
-  }).then(({ x, y, strategy }: { x: number; y: number; strategy: 'fixed' | 'absolute' }) => {
+  }).then(({ x, y, strategy }) => {
     element.style.position = strategy
     element.style.left = `${x}px`
     element.style.top = `${y}px`
   })
 }
 
-export const mentionSuggestion: Omit<SuggestionOptions<MentionItem>, 'editor'> = {
-  char: '@',
-
-  items: ({ query }) => {
-    const q = query.toLowerCase()
-    return MENTION_ITEMS.filter((item) => item.label.toLowerCase().includes(q)).slice(0, 8)
-  },
-
-  render: () => {
+export function createSuggestionPopup<TItem>(
+  MenuComponent: ComponentType<{ items: TItem[]; command: (item: TItem) => void }>,
+): SuggestionOptions<TItem>['render'] {
+  return () => {
     let component: ReactRenderer<SuggestionMenuHandle>
 
     return {
       onStart(props) {
-        component = new ReactRenderer(SuggestionMenu, {
+        component = new ReactRenderer(MenuComponent, {
           props,
           editor: props.editor,
         })
         if (!props.clientRect) return
         component.element.style.position = 'absolute'
         document.body.appendChild(component.element)
-        updatePosition(props.editor, component.element)
+        updatePosition(props.editor, component.element as HTMLElement)
       },
 
       onUpdate(props) {
         component.updateProps(props)
         if (!props.clientRect) return
-        updatePosition(props.editor, component.element)
+        updatePosition(props.editor, component.element as HTMLElement)
       },
 
       onKeyDown(props) {
@@ -78,5 +62,5 @@ export const mentionSuggestion: Omit<SuggestionOptions<MentionItem>, 'editor'> =
         component.element.remove()
       },
     }
-  },
+  }
 }
