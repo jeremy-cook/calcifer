@@ -15,10 +15,14 @@ This plan is the **application-level** counterpart: the shell around the editor 
 - **Single-user.** No auth, no multi-tenant concerns.
 - **Dropped:** runtime structure editor (user owns the source), server-authoritative sync, full-text / lexical search. Keeping vector search because it's the RAG substrate — not a user-facing search feature.
 - **AI scope:** RAG chat
+- **Structure metadata is server-authoritative from Phase 8** — exposed via RPC and treated as runtime configuration on the client (not a compile-time TS constant). Pre-Phase-8 the TS `structures.ts` is the source of truth out of necessity; at Phase 8 it shrinks to a cached fetch. Reasoning: rules like `editable`, `creatable`, property types must be enforced server-side anyway, and a single server-owned copy eliminates client/server drift.
+- **Structure metadata is the rendering contract.** The entity page renders properties dynamically from the metadata (input component picked by `type`, read-only vs editable, derived/computed values, select options, relation picker target). Adding a Structure or changing a property type doesn't require an FE deploy. Kept simple in the early phases — full dynamic rendering can land alongside Phase 8.
 
 ---
 
 ## Data Model (proto, authored in Phase 3)
+
+Authored in `proto/calcifer/v1/entities.proto`; TS generated via `buf` into `calcifer/gen/ts/` and aliased as `@calcifer/proto`.
 
 ```proto
 syntax = "proto3";
@@ -27,7 +31,7 @@ import "google/protobuf/timestamp.proto";
 
 message EntityRef {
   string id = 1;
-  string structure_id = 2;
+  string structure_type = 2;
 }
 
 message PropertyValue {
@@ -59,9 +63,9 @@ message RichText {
 
 message LinkRef {
   string id = 1;                // relationship uuid
-  EntityRef target = 2;         // { id, structure_id }
+  EntityRef target = 2;         // { id, structure_type }
   // Always "Dependency" (inline body mention) in v1. If property-level
-  // links become a thing, add a `source_property_id` field — the spec.md
+  // links become a thing, `source_property_id` is set — the spec.md
   // `'Database'` link type maps to "source_property_id is set".
   string source_property_id = 3; // empty = inline / Dependency link
   google.protobuf.Timestamp created_at = 4;
@@ -69,7 +73,7 @@ message LinkRef {
 
 message Entity {
   string id = 1;
-  string structure_id = 2;   // 'Note' | 'RootTag' | 'UtilDate' | ...
+  string structure_type = 2;  // 'Note' | 'Tag' | 'DailyNote' | ...
   string title = 3;
   repeated Property properties = 4;
   repeated LinkRef links = 5;   // outgoing only; backlinks are derived
@@ -78,18 +82,50 @@ message Entity {
 }
 ```
 
-Structures are **source-code constants** (TS + Go), not stored:
+Structures are **source-code constants** (pre-Phase-8) → **server-owned and exposed via RPC** (Phase 8+). Today's shape in `calcifer/src/model/structures.ts`:
 
 ```ts
-// calcifer/src/model/structures.ts
 export const STRUCTURES = {
-  Note:    { id: 'Note',    name: 'Note',    properties: [{ id: 'content', type: 'richtext' }] },
-  RootTag: { id: 'RootTag', name: 'Tag',     properties: [] },
-  UtilDate:{ id: 'UtilDate',name: 'Date',    properties: [] },
+  Note: {
+    type: 'Note', name: 'Note', plural: 'Notes', icon, color,
+    properties: [{ id: 'content', type: 'richtext' }],
+    // mentionable: true (default)
+  },
+  Tag: {
+    type: 'Tag', name: 'Tag', plural: 'Tags', icon, color,
+    properties: [],
+    mentionable: false,                    // reach via #, not @
+  },
+  DateRef: {
+    type: 'DateRef', name: 'Date', plural: 'Dates', icon, color,
+    properties: [],
+    creatable: false,                      // only created via the date input extension
+    mentionable: false,                    // reach via date input, not @
+    title: { editable: false },            // ISO date set on creation
+  },
+  DailyNote: {
+    type: 'DailyNote', name: 'Daily Note', plural: 'Daily Notes', icon, color,
+    properties: [
+      { id: 'content', type: 'richtext' },
+      { id: 'date',    type: 'relation', editable: false },   // bound to its DateRef
+    ],
+    creatable: false,                      // opened via sidebar Today / calendar
+    mentionable: false,                    // reach via date input / sidebar, not @
+    title: {
+      editable: false,
+      derive: (e) => formatLong(e.properties.date),  // e.g. "Wednesday, April 25, 2026"
+    },
+  },
 } as const
 ```
 
-Adding a new Structure = editing this file + adding property handling in the rendering code. No DB migration.
+Per-property and per-Structure rules carried in this metadata:
+- **`mentionable`** (default `true`) — whether `@` autocomplete includes this Structure. Set `false` when the Structure has its own dedicated UI (`#` for Tags, date input for date entities).
+- **`creatable`** (default `true`) — whether the "+ New" menu offers it.
+- **`editable`** on a property / `title.editable` on a Structure — controls whether the entity page renders an input or read-only display.
+- **`title.derive`** — for system-controlled titles (e.g. DailyNote derives its title from its `date` property).
+
+Adding a new Structure = editing this file (later: editing the server-side equivalent) + adding any custom rendering. No DB migration.
 
 ---
 
@@ -98,70 +134,96 @@ Adding a new Structure = editing this file + adding property handling in the ren
 `[X]` done, `[ ]` todo. Phases are independently shippable.
 
 ### Phase 0 — Editor Core
-Tracked in `editor-comparison-plan.md`. Continues in parallel.
+
+Tracked in [`editor-comparison-plan.md`](editor-comparison-plan.md); engineering reference for the mention/slash/drag-handle internals lives in [`plans/editor-internals.md`](plans/editor-internals.md). Continues in parallel.
+
+**Editor capabilities (leadership view):**
+
+The editor is TipTap with rich text, a slash menu for block insertion (headings, lists, code blocks, dividers — *purely block-level; no entity creation*), a drag handle for block reordering aligned to the editor's left gutter, and a date input extension for inserting dates that resolve to `DateRef` entities.
+
+Three trigger characters drive entity workflows inside the editor: **`@`** opens the entity-mention picker (filtered to Structures with `mentionable: true` — today just `Note`), with a "Create new Note…" tail item when no match exists. **`#`** opens the tag picker with the same create-on-miss tail item for new Tags. **`/`** is reserved for the slash menu (block insertion only) — entity creation deliberately does not flow through `/`. Inserted mentions register as outgoing `LinkRef`s on the source entity (Phase 4) and are clickable to navigate.
 
 ---
 
-### Phase 1 — App Layout Shell
+### Phase 1 — App Layout Shell ✅
 
 **Detailed plan:** [`plans/phase-1-app-shell.md`](plans/phase-1-app-shell.md)
 
-**Goal:** Chrome with collapsible sidebar.
+**Goal:** Chrome with collapsible, resizable sidebar so the app reads as an app, not a single-page editor demo.
 
-- [ ] `src/layouts/AppShell.tsx` — resizable sidebar (240–360px) + main content
-- [ ] `Cmd+\` toggles sidebar; state persists to `localStorage`
-- [ ] Top bar: sidebar toggle + breadcrumb placeholder
-- [ ] TanStack Router: `/` (home) and `/e/:id` (entity page)
-- [ ] Main area mounts the existing `TiptapEditor`
-
-**Deps:** `@tanstack/react-router`, shadcn `resizable`.
+- [X] Resizable sidebar (240–360px) + main content
+- [X] `Cmd+\` toggles sidebar; collapsed state and width persist across reloads
+- [X] Top bar with sidebar toggle
+- [X] Routing primitives in place: home, entity page, per-structure list, tag page, calendar
+- [X] Main area hosts the editor via the entity page
 
 ---
 
-### Phase 2 — Sidebar Content
+### Phase 2 — Sidebar Content 🟡
 
-**Goal:** Static navigation primitives (no search).
+**Goal:** Turn the sidebar from navigation chrome into a usable browser and launcher — the primary surface for finding and acting on entities without opening a separate page.
 
-- [ ] **Pinned** section
-- [ ] **Structures** — collapsible groups, each listing its entities, with "+ New"
-- [ ] **Daily Notes** entry → today's UtilDate entity
-- [ ] **Recent** — last-opened entities
-- [ ] Item context menu: open, rename, delete, pin
+**Shipped**
+- [X] **Structure nav** — top-level links for each registered Structure (Notes, Tags, Daily Notes), each opening that structure's list page
+- [X] **+ New** — creates an entity in any creatable Structure and jumps to it
+- [X] **Calendar entry point** — links to the (Phase 6) calendar route
 
----
+**Why this is yellow — what's missing:**
 
-### Phase 3 — Proto Schema + Entity Store (FE, localStorage)
+1. **In-place structure browsing.** Today, expanding a Structure means navigating away to a list page. The sidebar should expand each Structure inline to reveal its entities, so the user can scan and jump without losing their current entity. This is the difference between "links to lists" and "the lists themselves." Without it, the sidebar isn't useful for everyday navigation — users have to bounce through a list page on every jump.
 
-**Goal:** Author the proto schema, generate TS types, build the store against those types.
+2. **Pinned.** A user-curated section at the top of the sidebar for the handful of entities they live in (active project, current daily note, key reference notes). Without this, frequently-accessed entities require either a search or scrolling — there's no "top of mind" surface.
 
-- [ ] Add `buf` toolchain; `proto/calcifer/v1/entities.proto` with the schema above
-- [ ] `buf.gen.yaml` → generates TS into `gen/ts/` (also Go into `gen/go/`, unused until Phase 8)
-- [ ] Vite path alias `@calcifer/proto` → `gen/ts/`
-- [ ] `src/model/structures.ts` — source-of-truth Structure constants
-- [ ] `src/model/store.ts` — Zustand store: entities keyed by id; richtext docs keyed by `{entity_id, property_id}` in a parallel slice
-- [ ] `localStorage` persistence adapter (pluggable — swapped in Phase 8); entities and richtext docs under separate keys
-- [ ] Entity page `/e/:id`: title input + property renderer dispatching on `PropertyValue.case`
-  - for `Note`: `richtext` property holds a `RichTextRef`; mount `TiptapEditor`, read/write the doc via the richtext slice (`getRichText(ref)` / `putRichText(ref, json)`)
-- [ ] "+ New Note" creates entity, navigates, focuses title
-- [ ] Sidebar reads from store
-- [ ] Delete with confirmation
+3. **Recents.** An auto-maintained list of recently-opened entities. Complements Pinned (deliberate) with a passive "where was I just now" view. Critical for the multi-tab / multi-context workflows the app is meant to support.
 
-**Why proto now and not at Phase 8:** the `PropertyValue` oneof is the most awkward type in the app. Authoring it in proto first means the TS store has a real discriminated union from day one, and the Phase 8 server work is just storage plumbing — no type rewrite.
+4. **Item context menu.** Right-click on any sidebar entity to open / rename / delete / pin. Without this the sidebar is read-only — every entity action requires opening the entity page first, which is a meaningful friction tax on rename and delete in particular.
+
+**Definition of done:** a user can open the app and complete an entire session — find, create, rename, pin, delete entities — without ever leaving the sidebar except to edit content.
 
 ---
 
-### Phase 4 — Mentions Wired to the Entity Store
+### Phase 3 — Proto Schema + Entity Store (FE, localStorage) ✅
 
-**Goal:** `spec.md`'s mention extensions become real KB operations.
+**Goal:** Author the data model in proto, generate TS types, and build a localStorage-backed store against those types so Phase 8 is a storage swap rather than a type rewrite.
 
-- [ ] Extended mention node attrs: `{ id, label, structureId, char }` (spec.md §4.1)
-- [ ] `@` → fuzzy search all entities, with "Create new Note…" tail item
-- [ ] `#` → search/create `RootTag` entities
-- [ ] `/Structure/` → create path for any registered Structure
-- [ ] Inserting a mention appends a `LinkRef` to the current entity's `links[]`
-- [ ] Clicking a mention navigates to the target entity
+- [X] `buf` toolchain configured; `entities.proto` authored per the schema above
+- [X] TS types generated and aliased as `@calcifer/proto`; Go generation deferred to Phase 8
+- [X] Source-of-truth Structure constants
+- [X] Zustand entity store; richtext docs in a parallel slice (so list/metadata reads don't pull in document bodies)
+- [X] localStorage persistence using proto JSON serialization
+- [X] Entity page renders title + dispatches on each property's oneof case; debounced richtext writes
+- [X] Create / rename / delete with confirmation (delete also tears down associated richtext docs)
+- [X] Sidebar reads from store
 
-**Reuse:** `src/lib/tiptap-extension-slash-command/` and existing `@tiptap/extension-mention`.
+**Naming note:** the proto field is `structure_type` (TS: `structureType`) — earlier drafts of this plan said `structure_id`. Likewise the date Structure is `DailyNote`, not `UtilDate`.
+
+**Why proto now and not at Phase 8:** the `PropertyValue` oneof is the most awkward type in the app. Authoring it in proto first gives the TS store a real discriminated union from day one, and the Phase 8 server work becomes pure storage plumbing.
+
+---
+
+### Phase 4 — Mentions Wired to the Entity Store 🟡
+
+**Detailed plan:** [`plans/phase-4-mentions.md`](plans/phase-4-mentions.md)
+
+**Goal:** Turn the mention extensions from cosmetic chips into real knowledge-base operations — every mention is a typed, navigable link backed by entity-store state.
+
+**Shipped**
+- [X] Mention nodes carry `{ id, label, structureType, char }` so the chip knows what it points to
+- [X] `@` searches `mentionable: true` entities (today: `Note`); `@<structureType>/` narrows by Structure as an escape hatch
+- [X] `#` searches `Tag` entities
+- [X] Inserting a mention reconciles the current entity's outgoing links (add/remove kept in sync with what's actually in the doc)
+- [X] Clicking a mention navigates to the target entity
+
+**Why this is yellow — what's missing:**
+
+1. **Create-on-miss tail item in `@`.** Today the menu only offers existing entities. The popup needs a final "Create new Note…" item that creates the entity inline and inserts the mention without leaving the user's sentence.
+2. **Create-on-miss tail item in `#`.** Same shape for Tags — typing `#newtag` and hitting Enter creates the Tag and inserts the mention.
+
+Until these land, mentions can *reference* the knowledge base but can't *grow* it from inside the editor — the user has to break flow, create the entity from the sidebar, then come back.
+
+**Explicitly out of scope:**
+- `/Structure/Entity/` syntax for entity creation. `/` is reserved for the block-insertion slash menu only — keeping triggers single-purpose.
+- Paste/import of Capacities-format mention text. If migration becomes a real need, revisit later.
 
 ---
 
@@ -173,11 +235,19 @@ Tracked in `editor-comparison-plan.md`. Continues in parallel.
 
 ---
 
-### Phase 6 — Daily Notes
+### Phase 6 — Dates: `DateRef` + `DailyNote` 🟡
 
-- [ ] `UtilDate` structure: entities keyed by ISO date
-- [ ] Sidebar "Today" routes to today's entity (auto-create on first access)
-- [ ] Prev/next day navigation + calendar popover (reuse `src/lib/tiptap-extension-date/`)
+**Goal:** Make dates first-class. Two cooperating Structures: `DateRef` (the date as a referenceable thing) and `DailyNote` (the journal entry for a day).
+
+**Why split:** a date mention in any note (`"meeting on @2024-01-15"`) shouldn't auto-create an empty journal entry — it should create a lightweight `DateRef` whose only purpose is to be linked to and to aggregate backlinks. Opening the journal for a day is a separate, deliberate action that creates a `DailyNote` linked to its `DateRef`. Backlinks on the `DateRef` then naturally aggregate "everything that referenced this date" *and* "the journal for this date" in one place.
+
+- [X] `DailyNote` structure registered
+- [ ] `DateRef` structure registered (no body; ISO-date title; `creatable: false`; `mentionable: false`)
+- [ ] Date input extension (already in `src/lib/tiptap-extension-date/`) wired to create/resolve `DateRef` entities; inserting a date mention adds a `LinkRef` like any other mention
+- [ ] Natural-language date parsing on insert (`"today"`, `"next monday"` → ISO)
+- [ ] `DailyNote` carries a `date: DateRef` property (non-editable, set on creation); title derives from that date
+- [ ] Sidebar "Today" creates/opens today's `DailyNote` (and its `DateRef` if needed)
+- [ ] Calendar popover for prev/next day navigation (`/calendar` route currently a placeholder)
 
 ---
 
@@ -296,12 +366,12 @@ service EntityService {
 
 | Feature | Phase | Status |
 |---|---|---|
-| App layout + collapsible sidebar | 1 | ⬜ |
-| Sidebar sections | 2 | ⬜ |
-| Proto schema + Entity store | 3 | ⬜ |
-| Mentions wired to store | 4 | ⬜ |
+| App layout + collapsible sidebar | 1 | ✅ |
+| Sidebar sections | 2 | 🟡 |
+| Proto schema + Entity store | 3 | ✅ |
+| Mentions wired to store | 4 | 🟡 |
 | Backlinks | 5 | ⬜ |
-| Daily Notes | 6 | ⬜ |
+| Daily Notes | 6 | 🟡 |
 | Command palette | 7 | ⬜ |
 | Go server (Connect-RPC + SQLite) | 8 | ⬜ |
 | Embeddings (RAG substrate) | 9 | ⬜ |
@@ -312,19 +382,15 @@ service EntityService {
 
 ---
 
-## Critical Files (Phase 1 only; later phases list their own)
+## Implementation map
 
-- `calcifer/src/App.tsx` — router root
-- `calcifer/src/layouts/AppShell.tsx`
-- `calcifer/src/layouts/Sidebar.tsx`
-- `calcifer/src/hooks/useSidebarState.ts`
+Per-phase engineering design, file-level changes, and component shapes live in [`plans/`](plans/). This document stays at the capability/requirements level — see the linked plan in each phase for engineering detail.
 
-## Existing code to reuse
-
-- `calcifer/src/editors/tiptap/TiptapEditor.tsx` — mounted by the entity page for richtext properties
-- `calcifer/src/lib/tiptap-extension-slash-command/` — extend for `/Structure/` create trigger in Phase 4
-- `calcifer/src/lib/tiptap-extension-date/` — powers `UtilDate` rendering in Phase 6
-- `calcifer/src/components/ui/*` — shadcn primitives (resizable, popover, tabs already present)
+Existing code that downstream phases will lean on:
+- The TipTap editor (mounted by the entity page for any richtext property)
+- The slash-command extension (extended in Phase 4 for `/Structure/` creation)
+- The date extension (powers Daily Note rendering in Phase 6)
+- shadcn UI primitives (resizable, popover, tabs, dialog already present)
 
 ---
 

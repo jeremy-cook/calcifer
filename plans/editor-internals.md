@@ -1,4 +1,20 @@
-# Spec: Rich Text Editor — Mentions, Slash Menu & Drag Handle
+# Editor Internals — Reference
+
+> **This is engineering reference, not the source of truth.**
+> - Application-level decisions (Structures, mention semantics, `mentionable` rules, `DateRef` vs `DailyNote` split, etc.) live in [`../app-plan.md`](../app-plan.md).
+> - Editor feature parity tracking lives in [`../editor-comparison-plan.md`](../editor-comparison-plan.md).
+> - Phase-4 mention engineering work lives in [`./phase-4-mentions.md`](./phase-4-mentions.md).
+>
+> This document is the deep-dive research into Capacities, BlockNote, and TipTap that informed the editor architecture (regex shapes, popup CSS, drag-handle alignment math, etc.). Several of its original proposals have been **superseded** by app-plan decisions:
+> - `RootTag` → `Tag` (no `Root*` prefix; Calcifer has no user-defined Structures)
+> - `UtilDate` → `DateRef` (kept distinct from `DailyNote` — see app-plan Data Model)
+> - `structureId` field name → `structure_type` in proto (`structureType` in TS)
+> - `@` does *both* reuse and create-on-miss (via tail item). `/Structure/Entity/` create syntax is **dropped** — `/` is the slash menu only.
+> - `#` likewise gets create-on-miss for new Tags.
+> - `mentionable` is a per-Structure flag (default `true`) — the equivalent of Capacities' single `allowDailyNoteLinking` flag, generalized.
+> - Paste/import parity for Capacities-format text is **dropped** for now.
+>
+> Treat this file as background + CSS/regex reference. For current behavior, follow the links above.
 
 Reference implementations analyzed:
 - **Capacities** (`~/Capacities/electron-dist/shared-logic/util/`) — production app with `@` mentions and tags
