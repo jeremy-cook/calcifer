@@ -141,7 +141,7 @@ Tracked in [`editor-comparison-plan.md`](editor-comparison-plan.md); engineering
 
 The editor is TipTap with rich text, a slash menu for block insertion (headings, lists, code blocks, dividers — *purely block-level; no entity creation*), a drag handle for block reordering aligned to the editor's left gutter, and a date input extension for inserting dates that resolve to `DateRef` entities.
 
-Three trigger characters drive entity workflows inside the editor: **`@`** opens the entity-mention picker (filtered to Structures with `mentionable: true` — today just `Note`), with a "Create new Note…" tail item when no match exists. **`#`** opens the tag picker with the same create-on-miss tail item for new Tags. **`/`** is reserved for the slash menu (block insertion only) — entity creation deliberately does not flow through `/`. Inserted mentions register as outgoing `LinkRef`s on the source entity (Phase 4) and are clickable to navigate.
+Three trigger characters drive entity workflows inside the editor. **`@`** opens the entity-mention picker (filtered to Structures with `mentionable: true` — today just `Note`); bare `@foo` shows existing matches only. To create a new entity inline, the user narrows explicitly with `@<Structure>/foo` (e.g. `@Note/Alice`, `@Person/Bob`) — when no exact match exists, a "Create new <Structure> 'foo'" tail item appears. **`#`** opens the tag picker; because `#` always implies the `Tag` Structure, its tail item creates new Tags directly. **`/`** is reserved for the slash menu (block insertion only) — entity creation never flows through `/`. The design rule: creation requires unambiguous Structure context (the `/` after `@<Structure>`, or the implicit `Tag` of `#`) so it's always intentional. Inserted mentions register as outgoing `LinkRef`s on the source entity (Phase 4) and are clickable to navigate.
 
 ---
 
@@ -168,18 +168,6 @@ Three trigger characters drive entity workflows inside the editor: **`@`** opens
 - [X] **+ New** — creates an entity in any creatable Structure and jumps to it
 - [X] **Calendar entry point** — links to the (Phase 6) calendar route
 
-**Why this is yellow — what's missing:**
-
-1. **In-place structure browsing.** Today, expanding a Structure means navigating away to a list page. The sidebar should expand each Structure inline to reveal its entities, so the user can scan and jump without losing their current entity. This is the difference between "links to lists" and "the lists themselves." Without it, the sidebar isn't useful for everyday navigation — users have to bounce through a list page on every jump.
-
-2. **Pinned.** A user-curated section at the top of the sidebar for the handful of entities they live in (active project, current daily note, key reference notes). Without this, frequently-accessed entities require either a search or scrolling — there's no "top of mind" surface.
-
-3. **Recents.** An auto-maintained list of recently-opened entities. Complements Pinned (deliberate) with a passive "where was I just now" view. Critical for the multi-tab / multi-context workflows the app is meant to support.
-
-4. **Item context menu.** Right-click on any sidebar entity to open / rename / delete / pin. Without this the sidebar is read-only — every entity action requires opening the entity page first, which is a meaningful friction tax on rename and delete in particular.
-
-**Definition of done:** a user can open the app and complete an entire session — find, create, rename, pin, delete entities — without ever leaving the sidebar except to edit content.
-
 ---
 
 ### Phase 3 — Proto Schema + Entity Store (FE, localStorage) ✅
@@ -201,7 +189,7 @@ Three trigger characters drive entity workflows inside the editor: **`@`** opens
 
 ---
 
-### Phase 4 — Mentions Wired to the Entity Store 🟡
+### Phase 4 — Mentions Wired to the Entity Store ✅
 
 **Detailed plan:** [`plans/phase-4-mentions.md`](plans/phase-4-mentions.md)
 
@@ -209,20 +197,15 @@ Three trigger characters drive entity workflows inside the editor: **`@`** opens
 
 **Shipped**
 - [X] Mention nodes carry `{ id, label, structureType, char }` so the chip knows what it points to
-- [X] `@` searches `mentionable: true` entities (today: `Note`); `@<structureType>/` narrows by Structure as an escape hatch
+- [X] `@` searches `mentionable: true` entities (today: `Note`); `@<Structure>/` narrows to a specific Structure
 - [X] `#` searches `Tag` entities
+- [X] Create-on-miss tail item appears whenever the Structure is unambiguous: in `@<Structure>/term` (creates an entity of that Structure) and in `#newtag` (creates a Tag). Bare `@term` is reuse-only — creation requires the explicit `/` so it's intentional.
 - [X] Inserting a mention reconciles the current entity's outgoing links (add/remove kept in sync with what's actually in the doc)
 - [X] Clicking a mention navigates to the target entity
 
-**Why this is yellow — what's missing:**
-
-1. **Create-on-miss tail item in `@`.** Today the menu only offers existing entities. The popup needs a final "Create new Note…" item that creates the entity inline and inserts the mention without leaving the user's sentence.
-2. **Create-on-miss tail item in `#`.** Same shape for Tags — typing `#newtag` and hitting Enter creates the Tag and inserts the mention.
-
-Until these land, mentions can *reference* the knowledge base but can't *grow* it from inside the editor — the user has to break flow, create the entity from the sidebar, then come back.
-
 **Explicitly out of scope:**
-- `/Structure/Entity/` syntax for entity creation. `/` is reserved for the block-insertion slash menu only — keeping triggers single-purpose.
+- Bare `@term` create-on-miss. Creation requires explicit Structure context (`@<Structure>/term`) so users can't accidentally spawn entities from typos.
+- `/Structure/Entity/` slash-command create syntax. `/` is reserved for the block-insertion slash menu only — keeping triggers single-purpose.
 - Paste/import of Capacities-format mention text. If migration becomes a real need, revisit later.
 
 ---
@@ -369,7 +352,7 @@ service EntityService {
 | App layout + collapsible sidebar | 1 | ✅ |
 | Sidebar sections | 2 | 🟡 |
 | Proto schema + Entity store | 3 | ✅ |
-| Mentions wired to store | 4 | 🟡 |
+| Mentions wired to store | 4 | ✅ |
 | Backlinks | 5 | ⬜ |
 | Daily Notes | 6 | 🟡 |
 | Command palette | 7 | ⬜ |

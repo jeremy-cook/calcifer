@@ -1,9 +1,16 @@
 import type { Icon } from '@phosphor-icons/react'
 import { HashIcon, NoteIcon, NotebookIcon } from '@phosphor-icons/react'
+import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export interface PropertyDef {
   id: string
   type: 'richtext' | 'text' | 'number' | 'date' | 'select' | 'relation'
+  editable?: boolean
+}
+
+export interface TitleMeta {
+  editable: boolean
+  derive?: (entity: Entity) => string
 }
 
 export interface StructureMeta {
@@ -14,6 +21,8 @@ export interface StructureMeta {
   color: string
   properties: readonly PropertyDef[]
   creatable?: boolean
+  mentionable?: boolean
+  title?: TitleMeta
 }
 
 export const STRUCTURES = {
@@ -32,6 +41,7 @@ export const STRUCTURES = {
     icon: HashIcon,
     color: 'var(--chart-2)',
     properties: [],
+    mentionable: false,
   },
   DailyNote: {
     type: 'DailyNote',
@@ -41,6 +51,7 @@ export const STRUCTURES = {
     color: 'var(--chart-3)',
     properties: [{ id: 'content', type: 'richtext' }],
     creatable: false,
+    mentionable: false,
   },
 } as const satisfies Record<string, StructureMeta>
 
@@ -49,3 +60,15 @@ export type StructureType = keyof typeof STRUCTURES
 export const STRUCTURE_LIST: readonly StructureMeta[] = Object.values(STRUCTURES)
 
 export const CREATABLE_STRUCTURES: readonly StructureMeta[] = STRUCTURE_LIST.filter((s) => s.creatable !== false)
+
+export const MENTIONABLE_STRUCTURES: readonly StructureMeta[] = STRUCTURE_LIST.filter((s) => s.mentionable !== false)
+
+export function isMentionable(structureType: string): boolean {
+  const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
+  return meta?.mentionable !== false
+}
+
+export function isTitleEditable(structureType: string): boolean {
+  const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
+  return meta?.title?.editable !== false
+}
