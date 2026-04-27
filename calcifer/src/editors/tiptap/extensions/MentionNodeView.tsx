@@ -13,13 +13,7 @@ export function MentionNodeView({ node, extension }: NodeViewProps) {
 
   const handleClick = () => {
     if (!id) return
-    switch (structureType) {
-      case 'Tag':
-        void router.navigate({ to: '/tag/$id', params: { id } })
-        break
-      default:
-        void router.navigate({ to: '/e/$id', params: { id } })
-    }
+    void router.navigate({ to: '/e/$id', params: { id } })
   }
 
   return (

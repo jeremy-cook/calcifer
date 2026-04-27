@@ -212,9 +212,16 @@ Three trigger characters drive entity workflows inside the editor. **`@`** opens
 
 ### Phase 5 — Backlinks
 
-- [ ] Derived selector `useBacklinks(entityId)` scans all entities' `links[]`
-- [ ] Panel at bottom of entity page: grouped by source Structure, with 1-line context snippet
-- [ ] Clicking jumps + highlights the mention
+**Detailed plan:** [`plans/phase-5-backlinks.md`](plans/phase-5-backlinks.md)
+
+**Goal:** Show, on every entity page, the list of other entities that link to it. Pure derivation from existing `Entity.links[]` — no new persisted state.
+
+- [ ] Derived `useBacklinks(entityId)` selector over the entity store
+- [ ] Collapsible panel below the entity body: header always shown with total count (e.g. `Backlinks (5)`, or `Backlinks (0)` when none). Collapsed by default; rows mount on expand
+- [ ] `Cmd+Shift+B` keyboard shortcut toggles the panel without reaching for the mouse
+- [ ] When expanded: one row per source entity (deduped); row shows Structure icon + title only — no snippet. View toggle in the header switches between **grouped** (sectioned by source Structure) and **flat** (single list, all by recency) — both sort by most-recent `LinkRef.created_at`
+- [ ] Click → navigate to source `/e/$id` (no scroll-to-mention; mention chips are visually distinct enough)
+- [ ] Drop `/tag/$id` route — `/e/$id` serves all entities including Tags now that the backlinks panel makes the page useful; update `MentionNodeView` to route Tags through `/e/$id`
 
 ---
 

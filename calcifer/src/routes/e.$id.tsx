@@ -16,6 +16,7 @@ import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import type { JSONContent } from '@tiptap/core'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
+import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
 import type { Entity } from '~/model/store'
 import { useEntityStore } from '~/model/store'
 import { richTextKey, useRichTextStore } from '~/model/richtext'
@@ -34,6 +35,9 @@ export const Route = createFileRoute('/e/$id')({
         <EntityHeader entity={entity} />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <EntityProperties entity={entity} />
+          <div className="border-t border-border px-12 py-6">
+            <BacklinksPanel entityId={entity.id} />
+          </div>
         </div>
       </div>
     )
