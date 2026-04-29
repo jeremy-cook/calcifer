@@ -49,7 +49,11 @@ export const STRUCTURES = {
     plural: 'Daily Notes',
     icon: NotebookIcon,
     color: 'var(--chart-3)',
-    properties: [{ id: 'content', type: 'richtext' }],
+    properties: [
+      { id: 'date', type: 'date', editable: false },
+      { id: 'content', type: 'richtext' },
+    ],
+    title: { editable: false },
     creatable: false,
     mentionable: false,
   },

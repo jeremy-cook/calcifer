@@ -12,7 +12,7 @@ export function DayView({ iso }: DayViewProps) {
     <div className="flex flex-col gap-6 overflow-y-auto px-12 py-8">
       <DayHeading iso={iso} />
       <Divider />
-      <DailyNoteSection />
+      <DailyNoteSection iso={iso} />
       <Divider />
       <DateReferencesSection />
       <Divider />

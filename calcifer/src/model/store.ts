@@ -18,12 +18,14 @@ import {
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { useRichTextStore } from '~/model/richtext'
 import { STRUCTURES, type StructureType } from '~/model/structures'
+import { formatLongDate } from '~/model/dates'
 
 type CreatableStructureType = Exclude<StructureType, 'DailyNote'>
 
 interface EntityState {
   entities: Record<string, Entity>
   createEntity: (structureType: CreatableStructureType, title?: string) => Entity
+  createDailyNote: (iso: string) => Entity
   updateEntity: (id: string, patch: { title?: string }) => void
   deleteEntity: (id: string) => void
   setLinks: (id: string, links: LinkRef[]) => void
@@ -106,6 +108,40 @@ export const useEntityStore = create<EntityState>()(
         set({ entities: { ...get().entities, [id]: entity } })
         return entity
       },
+      createDailyNote: (iso) => {
+        const id = crypto.randomUUID()
+        const now = timestampNow()
+        const richTextRef = createMessage(RichTextRefSchema, {
+          entityId: id,
+          propertyId: 'content',
+        })
+        useRichTextStore.getState().putRichText(richTextRef, '')
+        const properties: Property[] = [
+          createMessage(PropertySchema, {
+            id: 'date',
+            value: createMessage(PropertyValueSchema, {
+              value: { case: 'date', value: iso },
+            }),
+          }),
+          createMessage(PropertySchema, {
+            id: 'content',
+            value: createMessage(PropertyValueSchema, {
+              value: { case: 'richtext', value: richTextRef },
+            }),
+          }),
+        ]
+        const entity = createMessage(EntitySchema, {
+          id,
+          structureType: 'DailyNote',
+          title: formatLongDate(iso),
+          properties,
+          links: [],
+          createdAt: now,
+          updatedAt: now,
+        })
+        set({ entities: { ...get().entities, [id]: entity } })
+        return entity
+      },
       updateEntity: (id, patch) => {
         const current = get().entities[id]
         if (!current) return
@@ -162,6 +198,19 @@ export function listByStructure(
 
 export function entityById(entities: Record<string, Entity>, id: string): Entity | undefined {
   return entities[id]
+}
+
+export function dailyNoteByDate(
+  entities: Record<string, Entity>,
+  iso: string,
+): Entity | undefined {
+  for (const entity of Object.values(entities)) {
+    if (entity.structureType !== 'DailyNote') continue
+    const dateProp = entity.properties.find((p) => p.id === 'date')
+    const value = dateProp?.value?.value
+    if (value?.case === 'date' && value.value === iso) return entity
+  }
+  return undefined
 }
 
 export function entityUpdatedAtDate(entity: Entity): Date {

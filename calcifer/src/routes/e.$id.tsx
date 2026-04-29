@@ -1,4 +1,3 @@
-import { useRef, useCallback } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { TrashIcon } from '@phosphor-icons/react'
 import {
@@ -14,15 +13,12 @@ import {
 } from '~/components/ui/alert-dialog'
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
-import type { JSONContent } from '@tiptap/core'
-import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
+import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
 import type { Entity } from '~/model/store'
 import { useEntityStore } from '~/model/store'
-import { richTextKey, useRichTextStore } from '~/model/richtext'
-import { syncLinksFromDoc } from '~/model/linkSync'
-import { STRUCTURES, type StructureType } from '~/model/structures'
-import type { Property, RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { STRUCTURES, type StructureType, isTitleEditable } from '~/model/structures'
+import type { Property } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
@@ -64,14 +60,15 @@ function EntityHeader({ entity }: EntityHeaderProps) {
 
   const structureName = STRUCTURES[entity.structureType as StructureType]?.name ?? entity.structureType
   const isDefaultTitle = entity.title === `Untitled ${structureName}`
+  const titleEditable = isTitleEditable(entity.structureType)
 
   const handleDelete = () => {
     deleteEntity(entity.id)
     void navigate({ to: '/' })
   }
 
-  return (
-    <div className="flex items-center gap-2 border-b border-border px-12 py-6">
+  const renderTitle = () =>
+    titleEditable ? (
       <Input
         value={entity.title}
         autoFocus={isDefaultTitle}
@@ -79,6 +76,13 @@ function EntityHeader({ entity }: EntityHeaderProps) {
         className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
         aria-label="Entity title"
       />
+    ) : (
+      <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.title}</h1>
+    )
+
+  return (
+    <div className="flex items-center gap-2 border-b border-border px-12 py-6">
+      {renderTitle()}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Delete entity">
@@ -123,31 +127,3 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
   return <>{entity.properties.map(renderProperty)}</>
 }
 
-interface EntityRichTextFieldProps {
-  propertyId: string
-  propertyRef: RichTextRef
-}
-
-const RICHTEXT_DEBOUNCE_MS = 300
-
-function EntityRichTextField({ propertyId, propertyRef }: EntityRichTextFieldProps) {
-  const doc = useRichTextStore((s) => s.docs[richTextKey(propertyRef)]?.doc ?? '')
-  const putRichText = useRichTextStore((s) => s.putRichText)
-
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const handleUpdate = useCallback((json: JSONContent) => {
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      putRichText(propertyRef, JSON.stringify(json))
-      syncLinksFromDoc(propertyRef.entityId, json)
-    }, RICHTEXT_DEBOUNCE_MS)
-  }, [propertyRef, putRichText])
-
-  return (
-    <TiptapEditor
-      key={`${propertyRef.entityId}:${propertyId}`}
-      doc={doc}
-      onUpdate={handleUpdate}
-    />
-  )
-}

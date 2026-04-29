@@ -33,8 +33,11 @@ export function MiniCalendar({ iso, onSelect }: MiniCalendarProps) {
         fixedWeeks
         className="w-full [--cell-size:--spacing(10)]"
         classNames={{
-          dropdowns: 'flex items-center justify-center gap-2 text-sm font-medium',
+          dropdowns: 'flex items-center justify-center gap-4 text-sm font-medium',
           weekday: 'flex-1 rounded-(--cell-radius) text-[0.8rem] font-normal text-chart-1 select-none',
+          week: 'mt-1 flex w-full',
+          day: 'group/day relative h-full w-full rounded-(--cell-radius) p-0 text-center select-none',
+          day_button: 'aspect-auto h-(--cell-size)',
         }}
       />
     </div>

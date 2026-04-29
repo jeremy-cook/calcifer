@@ -43,6 +43,8 @@ import { ImageActionMenu } from './components/image/ImageActionMenu'
 interface TiptapEditorProps {
   doc?: string
   onUpdate?: (docJSON: JSONContent) => void
+  autoFocus?: boolean
+  hideToolbar?: boolean
 }
 
 function parseDoc(doc: string | undefined): Content {
@@ -50,9 +52,10 @@ function parseDoc(doc: string | undefined): Content {
   return doc.length > 0 ? (JSON.parse(doc) as JSONContent) : null
 }
 
-export function TiptapEditor({ doc, onUpdate }: TiptapEditorProps) {
+export function TiptapEditor({ doc, onUpdate, autoFocus, hideToolbar }: TiptapEditorProps) {
   const editor = useEditor({
     shouldRerenderOnTransaction: false,
+    autofocus: autoFocus ? 'end' : false,
     content: parseDoc(doc),
     onUpdate: ({ editor: e }) => onUpdate?.(e.getJSON()),
     extensions: [
@@ -128,7 +131,7 @@ export function TiptapEditor({ doc, onUpdate }: TiptapEditorProps) {
 
   return (
     <div className="flex h-full w-full flex-col border border-border">
-      <Toolbar editor={editor} />
+      {!hideToolbar && <Toolbar editor={editor} />}
       <TableActionMenu editor={editor} />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DragHandleReact editor={editor}>
