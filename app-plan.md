@@ -215,26 +215,26 @@ Three trigger characters drive entity workflows inside the editor. **`@`** opens
 
 ---
 
-### Phase 6 — Dates: Calendar surface + `DailyNote` 🟡
+### Phase 6 — Dates: Calendar surface + `DailyNote` ✅
 
-**Detailed plans:** [`plans/phase-6-part-1-calendar-layout.md`](plans/phase-6-part-1-calendar-layout.md), [`plans/phase-6-part-2-datechip-navigation.md`](plans/phase-6-part-2-datechip-navigation.md), [`plans/phase-6-part-3-dailynote-wiring.md`](plans/phase-6-part-3-dailynote-wiring.md), [`plans/phase-6-part-4-date-references.md`](plans/phase-6-part-4-date-references.md)
+**Detailed plans:** [`plans/phase-6-part-1-calendar-layout.md`](plans/phase-6-part-1-calendar-layout.md), [`plans/phase-6-part-2-datechip-navigation.md`](plans/phase-6-part-2-datechip-navigation.md), [`plans/phase-6-part-3-dailynote-wiring.md`](plans/phase-6-part-3-dailynote-wiring.md), [`plans/phase-6-part-4-date-references.md`](plans/phase-6-part-4-date-references.md), [`plans/phase-6-part-5-calendar-markers.md`](plans/phase-6-part-5-calendar-markers.md)
 
 **Goal:** Make dates first-class. Calendar page is the per-day surface; `DailyNote` is the journal entry for a day.
 
 **Direction shift from the original Phase 6 sketch:** the original plan had two cooperating Structures — `DateRef` (the date-as-entity, a backlink magnet) and `DailyNote` (the day's journal, linked to its DateRef). What actually shipped is calendar-surface-first and DateRef-free: `DailyNote` carries its own `date: string ("yyyy-MM-dd")` property directly, and date references on other entities are recorded as a `referenced_dates: string[]` field on the source — no DateRef entity, no entity churn from chip insert/delete cycles. The date chip in rich text remains a cosmetic node that navigates to `/calendar?date=$iso`; the calendar page IS the page-for-a-date.
 
-**Shipped (Parts 1–4)**
+**Shipped (Parts 1–5)**
 - [X] **Calendar page layout** at `/calendar` — toolbar with `‹ / Today / ›`, mini-calendar, daily note section, date references panel. Selected day driven by `?date=$iso` search param; bare `/calendar` defaults to today (commit `5e601c6`).
 - [X] **DateChip click navigates** to `/calendar?date=$iso`; alt-click preserves the re-edit picker. `CalendarPage` is a pure `iso` consumer; the route owns the source of truth (commit `527231d`).
 - [X] **DailyNote wiring** — calendar's Daily note section lazy-creates a `DailyNote` for the displayed day on click, mounts the same richtext editor that powers `/e/$id`, and supports expand-to-page and confirmed delete from the section header. `DailyNote.title` is set to `formatLongDate(iso)` at creation and is read-only on `/e/$id` via `isTitleEditable` (commit `617a98f`).
 - [X] **Sidebar Calendar** entry point lands on today (no separate "Today" button — sidebar already covers it).
-- [X] **Real "Date references"** — every entity carries `Entity.referenced_dates: string[]`, reconciled by `linkSync` on every save alongside `links[]`. Calendar's right column lists `entitiesByDate(iso)` (excluding any DailyNote, since the journal is shown above).
-- [X] **DailyNote pruning** — empty DailyNotes auto-delete on navigation away from their calendar day, so click-to-create no longer leaves junk behind.
+- [X] **Real "Date references"** — every entity carries `Entity.referenced_dates: string[]`, reconciled by `linkSync` on every save alongside `links[]`. Calendar's right column lists `entitiesByDate(iso)` (excluding any DailyNote, since the journal is shown above) (commit `2630d21`).
+- [X] **DailyNote pruning** — empty DailyNotes auto-delete on navigation away from their calendar day, so click-to-create no longer leaves junk behind (commit `2630d21`).
+- [X] **Mini-calendar markers** — single dot below the day number for any day with a `DailyNote` or that appears in any entity's `referenced_dates`. Pure derivation via `daysWithContent(entities)` selector wired through DayPicker `modifiers` (commit `a0034ca`).
 
 **Deferred**
-- [ ] **Natural-language date parsing** on chip insert (`"today"`, `"next monday"` → ISO). Slash-keyword shortcuts (`/today`, `/tomorrow`, `/yesterday`) are a possible Part 5; free-form parsing is not on the near roadmap.
+- [ ] **Natural-language date parsing** on chip insert (`"today"`, `"next monday"` → ISO). Slash-keyword shortcuts (`/today`, `/tomorrow`, `/yesterday`) are a possible follow-up; free-form parsing is not on the near roadmap.
 - [ ] **Editing a DailyNote's date** (moving a journal entry to another day).
-- [ ] **Calendar markers** for days that have a journal or chip references.
 
 ---
 
@@ -358,7 +358,7 @@ service EntityService {
 | Proto schema + Entity store | 3 | ✅ |
 | Mentions wired to store | 4 | ✅ |
 | Backlinks | 5 | ✅ |
-| Calendar + Daily Notes | 6 | 🟡 |
+| Calendar + Daily Notes | 6 | ✅ |
 | Command palette | 7 | ⬜ |
 | Go server (Connect-RPC + SQLite) | 8 | ⬜ |
 | Embeddings (RAG substrate) | 9 | ⬜ |
