@@ -14,7 +14,7 @@ export function DayView({ iso }: DayViewProps) {
       <Divider />
       <DailyNoteSection iso={iso} />
       <Divider />
-      <DateReferencesSection />
+      <DateReferencesSection iso={iso} />
       <Divider />
       <CreatedAt />
     </div>

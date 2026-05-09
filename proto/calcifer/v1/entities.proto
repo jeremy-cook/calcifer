@@ -51,4 +51,5 @@ message Entity {
   repeated LinkRef links = 5;
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  repeated string referenced_dates = 8;
 }

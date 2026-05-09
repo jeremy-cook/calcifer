@@ -38,7 +38,7 @@ message PropertyValue {
   oneof value {
     string text = 1;
     double number = 2;
-    google.protobuf.Timestamp date_value = 3;
+    string date = 3;            // calendar day "yyyy-MM-dd"; not an instant
     string select = 4;          // option key; allowed set defined on the Structure in source code
     EntityRef relation = 5;
     RichTextRef richtext = 6;   // pointer — actual doc fetched via GetRichText
@@ -96,34 +96,24 @@ export const STRUCTURES = {
     properties: [],
     mentionable: false,                    // reach via #, not @
   },
-  DateRef: {
-    type: 'DateRef', name: 'Date', plural: 'Dates', icon, color,
-    properties: [],
-    creatable: false,                      // only created via the date input extension
-    mentionable: false,                    // reach via date input, not @
-    title: { editable: false },            // ISO date set on creation
-  },
   DailyNote: {
     type: 'DailyNote', name: 'Daily Note', plural: 'Daily Notes', icon, color,
     properties: [
+      { id: 'date',    type: 'date', editable: false },   // calendar-day "yyyy-MM-dd"
       { id: 'content', type: 'richtext' },
-      { id: 'date',    type: 'relation', editable: false },   // bound to its DateRef
     ],
-    creatable: false,                      // opened via sidebar Today / calendar
-    mentionable: false,                    // reach via date input / sidebar, not @
-    title: {
-      editable: false,
-      derive: (e) => formatLong(e.properties.date),  // e.g. "Wednesday, April 25, 2026"
-    },
+    creatable: false,                      // needs a date arg; created via the calendar surface
+    mentionable: false,                    // reach via calendar / sidebar, not @
+    title: { editable: false },            // set to formatLongDate(iso) at creation
   },
 } as const
 ```
 
 Per-property and per-Structure rules carried in this metadata:
-- **`mentionable`** (default `true`) — whether `@` autocomplete includes this Structure. Set `false` when the Structure has its own dedicated UI (`#` for Tags, date input for date entities).
-- **`creatable`** (default `true`) — whether the "+ New" menu offers it.
+- **`mentionable`** (default `true`) — whether `@` autocomplete includes this Structure. Set `false` when the Structure has its own dedicated UI (`#` for Tags, calendar for DailyNote).
+- **`creatable`** (default `true`) — whether the sidebar "+ New" menu offers it. `false` means "no zero-arg create" — the Structure has a dedicated create path that requires context (e.g. `createDailyNote(iso)`).
 - **`editable`** on a property / `title.editable` on a Structure — controls whether the entity page renders an input or read-only display.
-- **`title.derive`** — for system-controlled titles (e.g. DailyNote derives its title from its `date` property).
+- **`title.derive`** — slot for system-derived titles. Currently unused: DailyNote sets `title` once at creation rather than re-deriving on every read.
 
 Adding a new Structure = editing this file (later: editing the server-side equivalent) + adding any custom rendering. No DB migration.
 
@@ -139,7 +129,7 @@ Tracked in [`editor-comparison-plan.md`](editor-comparison-plan.md); engineering
 
 **Editor capabilities (leadership view):**
 
-The editor is TipTap with rich text, a slash menu for block insertion (headings, lists, code blocks, dividers — *purely block-level; no entity creation*), a drag handle for block reordering aligned to the editor's left gutter, and a date input extension for inserting dates that resolve to `DateRef` entities.
+The editor is TipTap with rich text, a slash menu for block insertion (headings, lists, code blocks, dividers — *purely block-level; no entity creation*), a drag handle for block reordering aligned to the editor's left gutter, and a date input extension for inserting date chips. Today date chips are cosmetic nodes that navigate to `/calendar?date=$iso` on click; once `DateRef` lands (Phase 6), they will resolve to entities and register as `LinkRef`s like other mentions.
 
 Three trigger characters drive entity workflows inside the editor. **`@`** opens the entity-mention picker (filtered to Structures with `mentionable: true` — today just `Note`); bare `@foo` shows existing matches only. To create a new entity inline, the user narrows explicitly with `@<Structure>/foo` (e.g. `@Note/Alice`, `@Person/Bob`) — when no exact match exists, a "Create new <Structure> 'foo'" tail item appears. **`#`** opens the tag picker; because `#` always implies the `Tag` Structure, its tail item creates new Tags directly. **`/`** is reserved for the slash menu (block insertion only) — entity creation never flows through `/`. The design rule: creation requires unambiguous Structure context (the `/` after `@<Structure>`, or the implicit `Tag` of `#`) so it's always intentional. Inserted mentions register as outgoing `LinkRef`s on the source entity (Phase 4) and are clickable to navigate.
 
@@ -210,34 +200,41 @@ Three trigger characters drive entity workflows inside the editor. **`@`** opens
 
 ---
 
-### Phase 5 — Backlinks
+### Phase 5 — Backlinks ✅
 
 **Detailed plan:** [`plans/phase-5-backlinks.md`](plans/phase-5-backlinks.md)
 
 **Goal:** Show, on every entity page, the list of other entities that link to it. Pure derivation from existing `Entity.links[]` — no new persisted state.
 
-- [ ] Derived `useBacklinks(entityId)` selector over the entity store
-- [ ] Collapsible panel below the entity body: header always shown with total count (e.g. `Backlinks (5)`, or `Backlinks (0)` when none). Collapsed by default; rows mount on expand
-- [ ] `Cmd+Shift+B` keyboard shortcut toggles the panel without reaching for the mouse
-- [ ] When expanded: one row per source entity (deduped); row shows Structure icon + title only — no snippet. View toggle in the header switches between **grouped** (sectioned by source Structure) and **flat** (single list, all by recency) — both sort by most-recent `LinkRef.created_at`
-- [ ] Click → navigate to source `/e/$id` (no scroll-to-mention; mention chips are visually distinct enough)
-- [ ] Drop `/tag/$id` route — `/e/$id` serves all entities including Tags now that the backlinks panel makes the page useful; update `MentionNodeView` to route Tags through `/e/$id`
+- [X] Derived `useBacklinks(entityId)` selector over the entity store
+- [X] Collapsible panel below the entity body: header always shown with total count (e.g. `Backlinks (5)`, or `Backlinks (0)` when none). Collapsed by default; rows mount on expand
+- [X] `Cmd+Shift+B` keyboard shortcut toggles the panel without reaching for the mouse
+- [X] When expanded: one row per source entity (deduped); row shows Structure icon + title only — no snippet. View toggle in the header switches between **grouped** (sectioned by source Structure) and **flat** (single list, all by recency) — both sort by most-recent `LinkRef.created_at`
+- [X] Click → navigate to source `/e/$id` (no scroll-to-mention; mention chips are visually distinct enough)
+- [X] Drop `/tag/$id` route — `/e/$id` serves all entities including Tags now that the backlinks panel makes the page useful; update `MentionNodeView` to route Tags through `/e/$id`
 
 ---
 
-### Phase 6 — Dates: `DateRef` + `DailyNote` 🟡
+### Phase 6 — Dates: Calendar surface + `DailyNote` 🟡
 
-**Goal:** Make dates first-class. Two cooperating Structures: `DateRef` (the date as a referenceable thing) and `DailyNote` (the journal entry for a day).
+**Detailed plans:** [`plans/phase-6-part-1-calendar-layout.md`](plans/phase-6-part-1-calendar-layout.md), [`plans/phase-6-part-2-datechip-navigation.md`](plans/phase-6-part-2-datechip-navigation.md), [`plans/phase-6-part-3-dailynote-wiring.md`](plans/phase-6-part-3-dailynote-wiring.md), [`plans/phase-6-part-4-date-references.md`](plans/phase-6-part-4-date-references.md)
 
-**Why split:** a date mention in any note (`"meeting on @2024-01-15"`) shouldn't auto-create an empty journal entry — it should create a lightweight `DateRef` whose only purpose is to be linked to and to aggregate backlinks. Opening the journal for a day is a separate, deliberate action that creates a `DailyNote` linked to its `DateRef`. Backlinks on the `DateRef` then naturally aggregate "everything that referenced this date" *and* "the journal for this date" in one place.
+**Goal:** Make dates first-class. Calendar page is the per-day surface; `DailyNote` is the journal entry for a day.
 
-- [X] `DailyNote` structure registered
-- [ ] `DateRef` structure registered (no body; ISO-date title; `creatable: false`; `mentionable: false`)
-- [ ] Date input extension (already in `src/lib/tiptap-extension-date/`) wired to create/resolve `DateRef` entities; inserting a date mention adds a `LinkRef` like any other mention
-- [ ] Natural-language date parsing on insert (`"today"`, `"next monday"` → ISO)
-- [ ] `DailyNote` carries a `date: DateRef` property (non-editable, set on creation); title derives from that date
-- [ ] Sidebar "Today" creates/opens today's `DailyNote` (and its `DateRef` if needed)
-- [ ] Calendar popover for prev/next day navigation (`/calendar` route currently a placeholder)
+**Direction shift from the original Phase 6 sketch:** the original plan had two cooperating Structures — `DateRef` (the date-as-entity, a backlink magnet) and `DailyNote` (the day's journal, linked to its DateRef). What actually shipped is calendar-surface-first and DateRef-free: `DailyNote` carries its own `date: string ("yyyy-MM-dd")` property directly, and date references on other entities are recorded as a `referenced_dates: string[]` field on the source — no DateRef entity, no entity churn from chip insert/delete cycles. The date chip in rich text remains a cosmetic node that navigates to `/calendar?date=$iso`; the calendar page IS the page-for-a-date.
+
+**Shipped (Parts 1–4)**
+- [X] **Calendar page layout** at `/calendar` — toolbar with `‹ / Today / ›`, mini-calendar, daily note section, date references panel. Selected day driven by `?date=$iso` search param; bare `/calendar` defaults to today (commit `5e601c6`).
+- [X] **DateChip click navigates** to `/calendar?date=$iso`; alt-click preserves the re-edit picker. `CalendarPage` is a pure `iso` consumer; the route owns the source of truth (commit `527231d`).
+- [X] **DailyNote wiring** — calendar's Daily note section lazy-creates a `DailyNote` for the displayed day on click, mounts the same richtext editor that powers `/e/$id`, and supports expand-to-page and confirmed delete from the section header. `DailyNote.title` is set to `formatLongDate(iso)` at creation and is read-only on `/e/$id` via `isTitleEditable` (commit `617a98f`).
+- [X] **Sidebar Calendar** entry point lands on today (no separate "Today" button — sidebar already covers it).
+- [X] **Real "Date references"** — every entity carries `Entity.referenced_dates: string[]`, reconciled by `linkSync` on every save alongside `links[]`. Calendar's right column lists `entitiesByDate(iso)` (excluding any DailyNote, since the journal is shown above).
+- [X] **DailyNote pruning** — empty DailyNotes auto-delete on navigation away from their calendar day, so click-to-create no longer leaves junk behind.
+
+**Deferred**
+- [ ] **Natural-language date parsing** on chip insert (`"today"`, `"next monday"` → ISO). Slash-keyword shortcuts (`/today`, `/tomorrow`, `/yesterday`) are a possible Part 5; free-form parsing is not on the near roadmap.
+- [ ] **Editing a DailyNote's date** (moving a journal entry to another day).
+- [ ] **Calendar markers** for days that have a journal or chip references.
 
 ---
 
@@ -360,8 +357,8 @@ service EntityService {
 | Sidebar sections | 2 | 🟡 |
 | Proto schema + Entity store | 3 | ✅ |
 | Mentions wired to store | 4 | ✅ |
-| Backlinks | 5 | ⬜ |
-| Daily Notes | 6 | 🟡 |
+| Backlinks | 5 | ✅ |
+| Calendar + Daily Notes | 6 | 🟡 |
 | Command palette | 7 | ⬜ |
 | Go server (Connect-RPC + SQLite) | 8 | ⬜ |
 | Embeddings (RAG substrate) | 9 | ⬜ |
@@ -379,7 +376,7 @@ Per-phase engineering design, file-level changes, and component shapes live in [
 Existing code that downstream phases will lean on:
 - The TipTap editor (mounted by the entity page for any richtext property)
 - The slash-command extension (extended in Phase 4 for `/Structure/` creation)
-- The date extension (powers Daily Note rendering in Phase 6)
+- The date extension (date chips navigate to the calendar today; will resolve to `DateRef` entities once that Structure lands)
 - shadcn UI primitives (resizable, popover, tabs, dialog already present)
 
 ---

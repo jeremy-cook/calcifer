@@ -63,6 +63,27 @@ const richTextStorage: PersistStorage<PersistedRichTextState> = {
   removeItem: (name) => localStorage.removeItem(name),
 }
 
+interface RichTextDocNode {
+  type?: string
+  content?: RichTextDocNode[]
+}
+
+export function isRichTextEmpty(doc: string | undefined): boolean {
+  if (!doc) return true
+  let parsed: RichTextDocNode
+  try {
+    parsed = JSON.parse(doc) as RichTextDocNode
+  } catch {
+    return false
+  }
+  const content = parsed.content
+  if (!content || content.length === 0) return true
+  if (content.length > 1) return false
+  const only = content[0]
+  if (only.type !== 'paragraph') return false
+  return !only.content || only.content.length === 0
+}
+
 export const useRichTextStore = create<RichTextState>()(
   persist(
     (set, get) => ({

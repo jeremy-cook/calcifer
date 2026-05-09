@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowsOutSimpleIcon, TrashIcon } from '@phosphor-icons/react'
 import {
@@ -16,6 +16,7 @@ import { Button } from '~/components/ui/button'
 import { PlusIcon } from '@phosphor-icons/react'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { dailyNoteByDate, useEntityStore, type Entity } from '~/model/store'
+import { isRichTextEmpty, useRichTextStore } from '~/model/richtext'
 import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 interface DailyNoteSectionProps {
@@ -32,6 +33,19 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
     createDailyNote(iso)
     setAutoFocusKey(iso)
   }
+
+  useEffect(() => {
+    return () => {
+      const state = useEntityStore.getState()
+      const existing = dailyNoteByDate(state.entities, iso)
+      if (!existing) return
+      const ref = contentRichTextRef(existing)
+      const doc = ref ? useRichTextStore.getState().getRichText(ref) : undefined
+      if (isRichTextEmpty(doc?.doc)) {
+        state.deleteEntity(existing.id)
+      }
+    }
+  }, [iso])
 
   return (
     <section className="flex flex-col gap-3">

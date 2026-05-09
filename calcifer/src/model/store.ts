@@ -29,6 +29,7 @@ interface EntityState {
   updateEntity: (id: string, patch: { title?: string }) => void
   deleteEntity: (id: string) => void
   setLinks: (id: string, links: LinkRef[]) => void
+  setReferencedDates: (id: string, isos: string[]) => void
 }
 
 type PersistedEntityState = Pick<EntityState, 'entities'>
@@ -168,6 +169,16 @@ export const useEntityStore = create<EntityState>()(
         })
         set({ entities: { ...get().entities, [id]: next } })
       },
+      setReferencedDates: (id, isos) => {
+        const current = get().entities[id]
+        if (!current) return
+        const next = createMessage(EntitySchema, {
+          ...current,
+          referencedDates: isos,
+          updatedAt: timestampNow(),
+        })
+        set({ entities: { ...get().entities, [id]: next } })
+      },
     }),
     {
       name: 'calcifer.entities.v1',
@@ -211,6 +222,13 @@ export function dailyNoteByDate(
     if (value?.case === 'date' && value.value === iso) return entity
   }
   return undefined
+}
+
+export function entitiesByDate(
+  entities: Record<string, Entity>,
+  iso: string,
+): Entity[] {
+  return Object.values(entities).filter((e) => e.referencedDates.includes(iso))
 }
 
 export function entityUpdatedAtDate(entity: Entity): Date {

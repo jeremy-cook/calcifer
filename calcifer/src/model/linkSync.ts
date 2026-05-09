@@ -13,24 +13,33 @@ interface ExtractedMention {
   structureType: string
 }
 
+interface DocReferences {
+  entities: ExtractedMention[]
+  dates: string[]
+}
+
 const MENTION_TYPES = new Set(['mention', 'hashtag'])
 
-export function extractMentions(doc: JSONContent): ExtractedMention[] {
-  const seen = new Map<string, ExtractedMention>()
+export function extractDocReferences(doc: JSONContent): DocReferences {
+  const seenEntities = new Map<string, ExtractedMention>()
+  const seenDates = new Set<string>()
   const walk = (node: JSONContent) => {
     if (node.type && MENTION_TYPES.has(node.type)) {
       const id = node.attrs?.id as string | undefined
       const structureType = node.attrs?.structureType as string | undefined
-      if (id && structureType && !seen.has(id)) {
-        seen.set(id, { id, structureType })
+      if (id && structureType && !seenEntities.has(id)) {
+        seenEntities.set(id, { id, structureType })
       }
+    } else if (node.type === 'dateChip') {
+      const iso = node.attrs?.date as string | undefined
+      if (iso) seenDates.add(iso)
     }
     if (node.content) {
       for (const child of node.content) walk(child)
     }
   }
   walk(doc)
-  return [...seen.values()]
+  return { entities: [...seenEntities.values()], dates: [...seenDates] }
 }
 
 export function syncLinksFromDoc(entityId: string, doc: JSONContent): void {
@@ -38,7 +47,8 @@ export function syncLinksFromDoc(entityId: string, doc: JSONContent): void {
   const entity = state.entities[entityId]
   if (!entity) return
 
-  const mentions = extractMentions(doc)
+  const { entities: mentions, dates } = extractDocReferences(doc)
+
   const mentionIds = new Set(mentions.map((m) => m.id))
   const existingByTargetId = new Map(
     entity.links.filter((l) => l.target).map((l) => [l.target!.id, l] as const),
@@ -59,9 +69,13 @@ export function syncLinksFromDoc(entityId: string, doc: JSONContent): void {
   })
 
   const prevIds = new Set(existingByTargetId.keys())
-  const sameSize = prevIds.size === mentionIds.size
-  const sameMembers = sameSize && [...mentionIds].every((id) => prevIds.has(id))
-  if (sameMembers) return
+  const linksChanged =
+    prevIds.size !== mentionIds.size || [...mentionIds].some((id) => !prevIds.has(id))
+  if (linksChanged) state.setLinks(entityId, nextLinks)
 
-  state.setLinks(entityId, nextLinks)
+  const prevDates = new Set(entity.referencedDates)
+  const nextDates = new Set(dates)
+  const datesChanged =
+    prevDates.size !== nextDates.size || [...nextDates].some((d) => !prevDates.has(d))
+  if (datesChanged) state.setReferencedDates(entityId, dates)
 }
