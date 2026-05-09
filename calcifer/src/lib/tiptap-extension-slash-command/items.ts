@@ -18,6 +18,7 @@ import {
   MinusIcon,
 } from '@phosphor-icons/react'
 import { showDatePicker } from '~/editors/tiptap/components/date/showDatePicker'
+import { shiftIso, todayIso } from '~/model/dates'
 
 export type SlashCommandItem = {
   title: string
@@ -37,8 +38,27 @@ export const SLASH_ITEMS: SlashCommandItem[] = [
     icon: CalendarBlankIcon,
     searchTerms: ['date', 'today', 'now'],
     command: ({ editor, range }) => {
-      const today = new Date().toISOString().slice(0, 10)
-      editor.chain().focus().deleteRange(range).insertDateChip(today).run()
+      editor.chain().focus().deleteRange(range).insertDateChip(todayIso()).run()
+    },
+  },
+  {
+    title: 'Tomorrow',
+    subtitle: "Insert tomorrow's date",
+    group: 'Inline',
+    icon: CalendarBlankIcon,
+    searchTerms: ['date', 'tomorrow', 'next'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertDateChip(shiftIso(todayIso(), 1)).run()
+    },
+  },
+  {
+    title: 'Yesterday',
+    subtitle: "Insert yesterday's date",
+    group: 'Inline',
+    icon: CalendarBlankIcon,
+    searchTerms: ['date', 'yesterday', 'previous', 'prev'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertDateChip(shiftIso(todayIso(), -1)).run()
     },
   },
   {
