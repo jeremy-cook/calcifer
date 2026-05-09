@@ -50,7 +50,7 @@ export const STRUCTURES = {
     icon: NotebookIcon,
     color: 'var(--chart-3)',
     properties: [
-      { id: 'date', type: 'date', editable: false },
+      { id: 'date', type: 'date' },
       { id: 'content', type: 'richtext' },
     ],
     title: { editable: false },

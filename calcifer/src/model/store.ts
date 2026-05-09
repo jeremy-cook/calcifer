@@ -30,6 +30,7 @@ interface EntityState {
   deleteEntity: (id: string) => void
   setLinks: (id: string, links: LinkRef[]) => void
   setReferencedDates: (id: string, isos: string[]) => void
+  moveDailyNote: (id: string, newIso: string) => boolean
 }
 
 type PersistedEntityState = Pick<EntityState, 'entities'>
@@ -178,6 +179,32 @@ export const useEntityStore = create<EntityState>()(
           updatedAt: timestampNow(),
         })
         set({ entities: { ...get().entities, [id]: next } })
+      },
+      moveDailyNote: (id, newIso) => {
+        const current = get().entities[id]
+        if (!current || current.structureType !== 'DailyNote') return false
+        const dateProp = current.properties.find((p) => p.id === 'date')
+        const v = dateProp?.value?.value
+        if (v?.case === 'date' && v.value === newIso) return true
+        const occupant = dailyNoteByDate(get().entities, newIso)
+        if (occupant && occupant.id !== id) return false
+        const properties = current.properties.map((p) => {
+          if (p.id !== 'date') return p
+          return createMessage(PropertySchema, {
+            id: 'date',
+            value: createMessage(PropertyValueSchema, {
+              value: { case: 'date', value: newIso },
+            }),
+          })
+        })
+        const next = createMessage(EntitySchema, {
+          ...current,
+          properties,
+          title: formatLongDate(newIso),
+          updatedAt: timestampNow(),
+        })
+        set({ entities: { ...get().entities, [id]: next } })
+        return true
       },
     }),
     {

@@ -14,6 +14,7 @@ import {
 import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
+import { EntityDateField } from '~/components/entity/EntityDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
 import type { Entity } from '~/model/store'
 import { useEntityStore } from '~/model/store'
@@ -111,6 +112,7 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
+  const moveDailyNote = useEntityStore((s) => s.moveDailyNote)
   if (entity.properties.length === 0) return null
 
   const renderProperty = (property: Property) => {
@@ -119,6 +121,16 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     switch (value.case) {
       case 'richtext':
         return <EntityRichTextField key={property.id} propertyId={property.id} propertyRef={value.value} />
+      case 'date':
+        if (entity.structureType !== 'DailyNote') return null
+        return (
+          <EntityDateField
+            key={property.id}
+            label="Date"
+            iso={value.value}
+            onChange={(iso) => moveDailyNote(entity.id, iso)}
+          />
+        )
       default:
         return null
     }
