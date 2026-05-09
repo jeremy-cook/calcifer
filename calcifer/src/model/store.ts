@@ -231,6 +231,19 @@ export function entitiesByDate(
   return Object.values(entities).filter((e) => e.referencedDates.includes(iso))
 }
 
+export function daysWithContent(entities: Record<string, Entity>): Set<string> {
+  const set = new Set<string>()
+  for (const e of Object.values(entities)) {
+    if (e.structureType === 'DailyNote') {
+      const dateProp = e.properties.find((p) => p.id === 'date')
+      const v = dateProp?.value?.value
+      if (v?.case === 'date') set.add(v.value)
+    }
+    for (const iso of e.referencedDates) set.add(iso)
+  }
+  return set
+}
+
 export function entityUpdatedAtDate(entity: Entity): Date {
   return new Date(updatedAtMillis(entity))
 }

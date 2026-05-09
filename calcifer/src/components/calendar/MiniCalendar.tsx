@@ -1,15 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Calendar } from '~/components/ui/calendar'
 import { dateFromIso, isoFromDate } from '~/model/dates'
+import { daysWithContent, useEntityStore } from '~/model/store'
 
 interface MiniCalendarProps {
   iso: string
   onSelect: (iso: string) => void
 }
 
+const HAS_CONTENT_CLASSES =
+  'after:pointer-events-none after:absolute after:bottom-1 after:left-1/2 after:z-20 after:size-1 after:-translate-x-1/2 after:rounded-full after:bg-foreground after:opacity-60 after:content-[""]'
+
 export function MiniCalendar({ iso, onSelect }: MiniCalendarProps) {
   const selected = dateFromIso(iso)
   const [month, setMonth] = useState(selected)
+  const entities = useEntityStore((s) => s.entities)
+  const marked = useMemo(() => daysWithContent(entities), [entities])
 
   useEffect(() => {
     setMonth(dateFromIso(iso))
@@ -31,6 +37,8 @@ export function MiniCalendar({ iso, onSelect }: MiniCalendarProps) {
         captionLayout="dropdown"
         showOutsideDays
         fixedWeeks
+        modifiers={{ hasContent: (date) => marked.has(isoFromDate(date)) }}
+        modifiersClassNames={{ hasContent: HAS_CONTENT_CLASSES }}
         className="w-full [--cell-size:--spacing(10)]"
         classNames={{
           dropdowns: 'flex items-center justify-center gap-4 text-sm font-medium',
