@@ -239,7 +239,9 @@ Three trigger characters drive entity workflows inside the editor. **`@`** opens
 
 ---
 
-### Phase 7 — Command Palette (Cmd+K)
+### Phase 7 — Command Palette (Cmd+K) 💤
+
+**Deferred.** Sidebar nav + `/e/$id` routing cover today's discovery needs. Revisit when the entity count grows past what the sidebar comfortably surfaces, or when Phase 13 agent tool-use needs a keyboard-driven action surface.
 
 - [ ] `Cmd+K` opens palette (use existing `cmdk` dep)
 - [ ] Actions: jump to entity, create entity of any Structure, toggle sidebar
@@ -360,7 +362,7 @@ service EntityService {
 | Mentions wired to store | 4 | ✅ |
 | Backlinks | 5 | ✅ |
 | Calendar + Daily Notes | 6 | ✅ |
-| Command palette | 7 | ⬜ |
+| Command palette | 7 | 💤 |
 | Go server (Connect-RPC + SQLite) | 8 | ⬜ |
 | Embeddings (RAG substrate) | 9 | ⬜ |
 | AI chat (RAG) | 10 | ⬜ |
