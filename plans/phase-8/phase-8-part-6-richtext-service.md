@@ -2,6 +2,14 @@
 
 Part of `app-plan.md` Phase 8. The hot-path service for richtext documents — separate from `EntityService` for the same reason richtext lives in a parallel slice on the FE: list responses stay lean, and editor autosave doesn't ship the entire entity body on every keystroke.
 
+> **Amendment (post-0a data-model review) — `Put` is the single write path for richtext-sourced graph edges.** Today the FE's `linkSync.ts` walks the saved doc and writes links/dates. Keeping that on the FE after the swap means *two* non-atomic RPCs per save (`Put` for the doc, `Update` for the derived links) and forces every future non-FE writer (Phases 12–13 extraction / agents) to faithfully re-implement `linkSync` or silently corrupt backlinks. Since the server already holds the doc as inspectable JSON, derive inside `Put` instead. In the `Put` transaction, after upserting the doc:
+> 1. **Walk the TipTap JSON** (serde_json, mirroring `extractDocReferences`) → mention targets + date isos.
+> 2. **Scoped link replace for this property:** `DELETE FROM links WHERE entity_id = ? AND source_property_id = ?`, then insert one row per mention stamped with this `property_id`. Preserve `created_at` for targets that already existed (SELECT the old rows first and merge — same rule as the FE's 0a reconcile).
+> 3. **Recompute `referenced_dates` as the entity-scoped union** across all of the entity's richtext docs (the FE's 0a behavior), then `DELETE FROM referenced_dates WHERE entity_id = ?` + reinsert.
+> 4. **Drop mentions whose `target_id` has no `entities` row.** Safe here precisely because the server is authoritative — this is *why* the FE must NOT filter this way (an FE chip for a not-yet-synced or offline entity is a tombstone, not a deletion signal).
+>
+> Consequence for Part 8: the FE deletes `linkSync.ts` entirely; a doc save is one `Put` RPC, and the `Watch` stream refreshes backlinks on the target. `EntityService.Update` retains only relation-property link handling (Part 5 amendment).
+
 ## Goal
 
 Two RPCs, two queries:

@@ -16,7 +16,7 @@ calcifer/src/model/api.ts            ← NEW: clients, transports, hooks
 calcifer/src/model/store.ts          ← REWRITTEN
 calcifer/src/model/richtext.ts       ← REWRITTEN
 calcifer/src/model/backlinks.ts      ← MODIFIED (derive from cache)
-calcifer/src/model/linkSync.ts       ← MODIFIED (calls mutation)
+calcifer/src/model/linkSync.ts       ← DELETED (link/date derivation moved server-side to RichTextService.Put; see Part 6 amendment)
 calcifer/src/routes/e.$id.tsx        ← MODIFIED (use new hooks)
 calcifer/src/routes/s.$structureType.tsx
 calcifer/src/components/sidebar/*    ← MODIFIED
@@ -262,7 +262,7 @@ Async iterator is the cleanest API; connect-web returns one for server-streaming
 - `routes/e.$id.tsx`: replace `useEntityStore(...)` with `useEntity(id)`; replace store update calls with mutation hooks.
 - `routes/s.$structureType.tsx`: same pattern with `useEntities(type)`.
 - `model/backlinks.ts`: derive from `useEntities()` data.
-- `model/linkSync.ts`: still derives links from the doc; now calls `useUpdateEntity().mutate(...)` instead of writing the store directly.
+- `model/linkSync.ts`: **deleted.** Link/date derivation moves into `RichTextService.Put` server-side (Part 6 amendment), so the FE no longer walks the doc on save — `Put` does, atomically with the doc write. The autosave callback in `EntityRichTextField` drops its `syncLinksFromDoc(...)` call and just fires the `Put` mutation.
 - Sidebar / `+ New` / `createDailyNote` / `moveDailyNote`: route through mutation hooks.
 
 ### 11. Document the dev loop

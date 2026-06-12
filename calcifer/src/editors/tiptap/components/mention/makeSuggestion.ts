@@ -1,6 +1,6 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
 import { useEntityStore } from '~/model/store'
-import { STRUCTURES, isMentionable, type StructureType } from '~/model/structures'
+import { STRUCTURES, hasUniqueNames, isMentionable, type StructureType } from '~/model/structures'
 import { createSuggestionPopup } from '~/editors/tiptap/components/suggestionPopup'
 import { MentionMenu } from './MentionMenu'
 import { parseQuery } from './parseQuery'
@@ -32,14 +32,18 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
         if (filterByMentionable && !isMentionable(entity.structureType)) continue
         if (q && !entity.title.toLowerCase().includes(q)) continue
         if (entity.title.toLowerCase() === q) exactMatch = true
-        const meta = STRUCTURES[entity.structureType as StructureType]
-        results.push({
-          id: entity.id,
-          label: entity.title,
-          structureType: entity.structureType,
-          color: meta?.color ?? 'var(--muted-foreground)',
-        })
-        if (results.length >= MAX_RESULTS) break
+        if (results.length < MAX_RESULTS) {
+          const meta = STRUCTURES[entity.structureType as StructureType]
+          results.push({
+            id: entity.id,
+            label: entity.title,
+            structureType: entity.structureType,
+            color: meta?.color ?? 'var(--muted-foreground)',
+          })
+        }
+        // Keep scanning past the cap only to settle exactMatch (it gates the
+        // create-on-miss item below); once it's true there's nothing more to learn.
+        if (results.length >= MAX_RESULTS && exactMatch) break
       }
 
       const createStructureType = resolveCreateStructureType(structureType)
@@ -93,6 +97,19 @@ function resolveCreateStructureType(narrowedStructureType: StructureType | null)
 
 function createEntityForMention(props: EntitySuggestionItem) {
   const structureType = props.structureType as Exclude<StructureType, 'DailyNote'>
-  const entity = useEntityStore.getState().createEntity(structureType, props.label)
+  const store = useEntityStore.getState()
+  // For uniqueNames Structures (Tags), reuse an existing case-insensitive match
+  // instead of spawning a duplicate — guards the casing/race the items() exact-
+  // match check can't catch on its own.
+  if (hasUniqueNames(structureType)) {
+    const term = props.label.toLowerCase()
+    const existing = Object.values(store.entities).find(
+      (e) => e.structureType === structureType && e.title.toLowerCase() === term,
+    )
+    if (existing) {
+      return { id: existing.id, label: existing.title, structureType: existing.structureType }
+    }
+  }
+  const entity = store.createEntity(structureType, props.label)
   return { id: entity.id, label: entity.title, structureType: entity.structureType }
 }

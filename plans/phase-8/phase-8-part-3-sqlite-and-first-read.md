@@ -2,6 +2,17 @@
 
 Part of `app-plan.md` Phase 8. Replace the hardcoded `EntityService::Get` with a real DB query. The SQLite schema lands here in its first migration.
 
+> **Amendment (post-0a data-model review).** Two schema refinements land with the migration below:
+> 1. **`entities.date_key TEXT`** + a partial unique index moves the "one DailyNote per calendar day" invariant out of app code (`moveDailyNote`) and into the DB:
+>    ```sql
+>    ALTER TABLE entities ADD COLUMN date_key TEXT;  -- fold into the CREATE TABLE
+>    CREATE UNIQUE INDEX one_daily_note_per_day
+>      ON entities(date_key)
+>      WHERE structure_type = 'DailyNote' AND date_key IS NOT NULL;
+>    ```
+>    The server mirrors the `date` property's value into `date_key` on write (NULL for non-DailyNotes). A `moveDailyNote` collision then surfaces as a unique-constraint violation → map to `Status::already_exists` (the FE already has refusal UX). Querying "the DailyNote for 2026-06-12" becomes a column lookup instead of decoding every `properties.value_blob`.
+> 2. **`links.source_property_id`** (already in the schema) is now meaningfully populated, not always `''` — see the Part 5 / Part 6 amendments for scoped replacement.
+
 ## Goal
 
 `Get` returns a row read from `server/calcifer.db`. The compile-time SQL check is the headline — if you typo a column, `cargo build` fails before the binary runs.

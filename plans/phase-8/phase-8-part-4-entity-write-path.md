@@ -176,6 +176,8 @@ async fn update(&self, req: Request<UpdateEntityRequest>) -> Result<Response<Ent
 
 ### 5. `Delete`
 
+> **Amendment (post-0a review).** Also sweep *inbound* links so the index never points at a tombstone — `DELETE FROM links WHERE target_id = ?` inside the transaction (see the added line below). The `ON DELETE CASCADE` only removes the deleted entity's *outbound* links; inbound `LinkRef`s authored by other entities are orphaned otherwise. This is safe server-side because the server holds the authoritative entity set. Note the asymmetry with the FE: mention **chips** in other docs deliberately survive as clickable tombstones (see app-plan Data Model) — the doc is their source of truth — but the relational `links` index is kept referentially clean.
+
 ```rust
 async fn delete(&self, req: Request<DeleteEntityRequest>) -> Result<Response<()>, Status> {
     let id = req.into_inner().id;
@@ -188,6 +190,10 @@ async fn delete(&self, req: Request<DeleteEntityRequest>) -> Result<Response<()>
 
     // richtext has no FK reference — purge explicitly.
     sqlx::query!("DELETE FROM richtext WHERE entity_id = ?", id)
+        .execute(&mut *tx).await.map_err(AppError::from)?;
+
+    // Inbound links from OTHER entities aren't covered by the cascade — sweep them.
+    sqlx::query!("DELETE FROM links WHERE target_id = ?", id)
         .execute(&mut *tx).await.map_err(AppError::from)?;
 
     tx.commit().await.map_err(AppError::from)?;

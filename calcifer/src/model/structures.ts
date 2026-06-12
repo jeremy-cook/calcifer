@@ -22,6 +22,7 @@ export interface StructureMeta {
   properties: readonly PropertyDef[]
   creatable?: boolean
   mentionable?: boolean
+  uniqueNames?: boolean
   title?: TitleMeta
 }
 
@@ -42,6 +43,7 @@ export const STRUCTURES = {
     color: 'var(--chart-2)',
     properties: [],
     mentionable: false,
+    uniqueNames: true,
   },
   DailyNote: {
     type: 'DailyNote',
@@ -75,4 +77,9 @@ export function isMentionable(structureType: string): boolean {
 export function isTitleEditable(structureType: string): boolean {
   const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
   return meta?.title?.editable !== false
+}
+
+export function hasUniqueNames(structureType: string): boolean {
+  const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
+  return meta?.uniqueNames === true
 }

@@ -24,10 +24,10 @@ export function EntityRichTextField({ propertyId, propertyRef, autoFocus, hideTo
       if (timerRef.current) clearTimeout(timerRef.current)
       timerRef.current = setTimeout(() => {
         putRichText(propertyRef, JSON.stringify(json))
-        syncLinksFromDoc(propertyRef.entityId, json)
+        syncLinksFromDoc(propertyRef.entityId, propertyId, json)
       }, RICHTEXT_DEBOUNCE_MS)
     },
-    [propertyRef, putRichText],
+    [propertyId, propertyRef, putRichText],
   )
 
   return (

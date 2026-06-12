@@ -64,10 +64,11 @@ message RichText {
 message LinkRef {
   string id = 1;                // relationship uuid
   EntityRef target = 2;         // { id, structure_type }
-  // Always "Dependency" (inline body mention) in v1. If property-level
-  // links become a thing, `source_property_id` is set — the spec.md
-  // `'Database'` link type maps to "source_property_id is set".
-  string source_property_id = 3; // empty = inline / Dependency link
+  // Set to the originating property's id (e.g. 'content') as of the 0a
+  // per-property link reconciliation. Link *kind* is derived from that
+  // property's type in Structure metadata: richtext → body mention,
+  // relation → property link. Empty is legacy/unmigrated only.
+  string source_property_id = 3;
   google.protobuf.Timestamp created_at = 4;
 }
 
@@ -114,6 +115,12 @@ Per-property and per-Structure rules carried in this metadata:
 - **`creatable`** (default `true`) — whether the sidebar "+ New" menu offers it. `false` means "no zero-arg create" — the Structure has a dedicated create path that requires context (e.g. `createDailyNote(iso)`).
 - **`editable`** on a property / `title.editable` on a Structure — controls whether the entity page renders an input or read-only display.
 - **`title.derive`** — slot for system-derived titles. Currently unused: DailyNote sets `title` once at creation rather than re-deriving on every read.
+- **`uniqueNames`** (default `false`) — whether two entities of this Structure may share a (case-insensitive) name. `true` for `Tag` (the name *is* the identity): the `@`/`#` create-on-miss item is suppressed when an exact match exists, and the mention create path get-or-creates rather than spawning a duplicate. Enforcement is intentionally soft — bare `createEntity` and rename-into-collision are not blocked (that needs conflict UX not yet worth building); Phase 8 may add a partial unique index.
+
+**Graph invariants (as of the 0a data-model review):**
+- **Links mirror content verbatim.** `linkSync` re-derives the full outgoing set from doc content on every save; `Entity.links` is an index over the doc, never authored directly. Each link is scoped to the property it came from via `source_property_id`, so an entity with multiple richtext/relation properties reconciles each independently (saving one property's doc can't clobber another's links).
+- **`referenced_dates` is entity-scoped** — the union of date chips across all of the entity's richtext docs, recomputed per save.
+- **Deletion is lazy and content-truthful.** Deleting an entity leaves mention chips pointing at it intact in other docs; they render as clickable *tombstones* (struck-through, routing to a not-found page) until the author removes them. Dangling `LinkRef`s are harmless — backlinks only surface live sources. The Phase 8 server additionally sweeps `links WHERE target_id = ?` on delete to keep its relational index clean (safe because it's authoritative); the FE deliberately does not, because the chip in the doc *is* the source of truth.
 
 Adding a new Structure = editing this file (later: editing the server-side equivalent) + adding any custom rendering. No DB migration.
 

@@ -2,6 +2,11 @@
 
 Part of `app-plan.md` Phase 8. Persist outgoing links and date references on every Create/Update so backlinks and the calendar references panel work once the FE is rewired in Part 8.
 
+> **Amendment (post-0a data-model review).** Derivation of *richtext-sourced* links and dates moves to `RichTextService.Put` (see Part 6), because a doc save knows only its own property. That changes this part:
+> - **`replace_links` here covers only non-richtext (relation-property) links** written via `EntityService.Update`. It must scope its delete per property — `DELETE FROM links WHERE entity_id = ? AND source_property_id = ?` — **not** the wholesale `DELETE FROM links WHERE entity_id = ?` shown below, or it would clobber the richtext-sourced links `Put` maintains. (Until relation properties exist, `Update` carries no links and this is a no-op.)
+> - **`replace_referenced_dates` likewise moves to `Put`** as an entity-scoped union; `Update` no longer owns it.
+> - The hydrate-on-read logic (step 3) is unchanged — it reads whatever rows exist regardless of who wrote them.
+
 ## Goal
 
 Mirror what `linkSync.ts` already does on the FE: after every successful entity write, replace the entity's `links` and `referenced_dates` rows wholesale.
