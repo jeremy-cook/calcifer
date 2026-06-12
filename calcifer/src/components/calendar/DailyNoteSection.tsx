@@ -124,7 +124,7 @@ function DailyNoteActions({ dailyNote }: DailyNoteActionsProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete daily note?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the daily note for "{dailyNote.title}" and its content.
+              This will permanently delete the daily note for "{dailyNote.name}" and its content.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

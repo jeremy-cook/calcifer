@@ -1,1 +1,7 @@
 **/.DS_Store
+server/target/
+book/book/
+server/calcifer.db
+server/calcifer.db-shm
+server/calcifer.db-wal
+server/.env

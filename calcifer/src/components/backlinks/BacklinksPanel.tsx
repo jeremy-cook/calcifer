@@ -193,7 +193,7 @@ function BacklinkRow({ backlink }: BacklinkRowProps) {
         )}
       >
         {Icon && <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />}
-        <span className="truncate">{backlink.title}</span>
+        <span className="truncate">{backlink.name}</span>
       </Link>
     </li>
   )

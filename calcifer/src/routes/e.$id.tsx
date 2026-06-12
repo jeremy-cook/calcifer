@@ -18,7 +18,7 @@ import { EntityDateField } from '~/components/entity/EntityDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
 import type { Entity } from '~/model/store'
 import { useEntityStore } from '~/model/store'
-import { STRUCTURES, type StructureType, isTitleEditable } from '~/model/structures'
+import { STRUCTURES, type StructureType, isNameEditable } from '~/model/structures'
 import type { Property } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
@@ -60,8 +60,8 @@ function EntityHeader({ entity }: EntityHeaderProps) {
   const navigate = useNavigate()
 
   const structureName = STRUCTURES[entity.structureType as StructureType]?.name ?? entity.structureType
-  const isDefaultTitle = entity.title === `Untitled ${structureName}`
-  const titleEditable = isTitleEditable(entity.structureType)
+  const isDefaultName = entity.name === `Untitled ${structureName}`
+  const nameEditable = isNameEditable(entity.structureType)
 
   const handleDelete = () => {
     deleteEntity(entity.id)
@@ -69,16 +69,16 @@ function EntityHeader({ entity }: EntityHeaderProps) {
   }
 
   const renderTitle = () =>
-    titleEditable ? (
+    nameEditable ? (
       <Input
-        value={entity.title}
-        autoFocus={isDefaultTitle}
-        onChange={(e) => updateEntity(entity.id, { title: e.target.value })}
+        value={entity.name}
+        autoFocus={isDefaultName}
+        onChange={(e) => updateEntity(entity.id, { name: e.target.value })}
         className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
         aria-label="Entity title"
       />
     ) : (
-      <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.title}</h1>
+      <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.name}</h1>
     )
 
   return (
@@ -94,7 +94,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {structureName.toLowerCase()}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete "{entity.title}" and its content.
+              This will permanently delete "{entity.name}" and its content.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

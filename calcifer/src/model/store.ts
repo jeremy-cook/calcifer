@@ -24,9 +24,9 @@ type CreatableStructureType = Exclude<StructureType, 'DailyNote'>
 
 interface EntityState {
   entities: Record<string, Entity>
-  createEntity: (structureType: CreatableStructureType, title?: string) => Entity
+  createEntity: (structureType: CreatableStructureType, name?: string) => Entity
   createDailyNote: (iso: string) => Entity
-  updateEntity: (id: string, patch: { title?: string }) => void
+  updateEntity: (id: string, patch: { name?: string }) => void
   deleteEntity: (id: string) => void
   setLinks: (id: string, links: LinkRef[]) => void
   setReferencedDates: (id: string, isos: string[]) => void
@@ -35,7 +35,7 @@ interface EntityState {
 
 type PersistedEntityState = Pick<EntityState, 'entities'>
 
-function defaultTitleFor(structureType: CreatableStructureType): string {
+function defaultNameFor(structureType: CreatableStructureType): string {
   return `Untitled ${STRUCTURES[structureType].name}`
 }
 
@@ -80,7 +80,7 @@ export const useEntityStore = create<EntityState>()(
   persist(
     (set, get) => ({
       entities: {},
-      createEntity: (structureType, title) => {
+      createEntity: (structureType, name) => {
         const id = crypto.randomUUID()
         const now = timestampNow()
         const structure = STRUCTURES[structureType]
@@ -101,7 +101,7 @@ export const useEntityStore = create<EntityState>()(
         const entity = createMessage(EntitySchema, {
           id,
           structureType,
-          title: title ?? defaultTitleFor(structureType),
+          name: name ?? defaultNameFor(structureType),
           properties,
           links: [],
           createdAt: now,
@@ -135,7 +135,7 @@ export const useEntityStore = create<EntityState>()(
         const entity = createMessage(EntitySchema, {
           id,
           structureType: 'DailyNote',
-          title: formatLongDate(iso),
+          name: formatLongDate(iso),
           properties,
           links: [],
           createdAt: now,
@@ -149,7 +149,7 @@ export const useEntityStore = create<EntityState>()(
         if (!current) return
         const next = createMessage(EntitySchema, {
           ...current,
-          title: patch.title ?? current.title,
+          name: patch.name ?? current.name,
           updatedAt: timestampNow(),
         })
         set({ entities: { ...get().entities, [id]: next } })
@@ -200,7 +200,7 @@ export const useEntityStore = create<EntityState>()(
         const next = createMessage(EntitySchema, {
           ...current,
           properties,
-          title: formatLongDate(newIso),
+          name: formatLongDate(newIso),
           updatedAt: timestampNow(),
         })
         set({ entities: { ...get().entities, [id]: next } })
@@ -208,7 +208,7 @@ export const useEntityStore = create<EntityState>()(
       },
     }),
     {
-      name: 'calcifer.entities.v1',
+      name: 'calcifer.entities.v2',
       storage: entityStorage,
       partialize: (state) => ({ entities: state.entities }),
     },
@@ -229,7 +229,7 @@ export function listByStructure(
 ): Entity[] {
   const matches = Object.values(entities).filter((e) => e.structureType === structureType)
   if (structureType === 'DailyNote') {
-    return matches.sort((a, b) => b.title.localeCompare(a.title))
+    return matches.sort((a, b) => b.name.localeCompare(a.name))
   }
   return matches.sort((a, b) => updatedAtMillis(b) - updatedAtMillis(a))
 }

@@ -46,7 +46,7 @@ message LinkRef {
 message Entity {
   string id = 1;
   string structure_type = 2;
-  string title = 3;
+  string name = 3;
   repeated Property properties = 4;
   repeated LinkRef links = 5;
   google.protobuf.Timestamp created_at = 6;

@@ -58,7 +58,7 @@ function Row({ entity }: RowProps) {
         className={cn('flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted')}
       >
         {Icon && <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />}
-        <span className="truncate">{entity.title}</span>
+        <span className="truncate">{entity.name}</span>
       </Link>
     </li>
   )

@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package calcifer.v1;
+
+import "calcifer/v1/entities.proto";
+import "google/protobuf/empty.proto";
+
+service EntityService {
+  rpc Get(GetEntityRequest) returns (Entity);
+  rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);
+  rpc Create(CreateEntityRequest) returns (Entity);
+  rpc Update(UpdateEntityRequest) returns (Entity);
+  rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
+  rpc Watch(WatchRequest) returns (stream EntityEvent);
+}
+
+service RichTextService {
+  rpc Get(RichTextRef) returns (RichText);
+  rpc Put(RichText) returns (RichText);
+}
+
+message GetEntityRequest      { string id = 1; }
+message ListEntitiesRequest   { string structure_type = 1; }
+message ListEntitiesResponse  { repeated Entity entities = 1; }
+message CreateEntityRequest   { Entity entity = 1; }
+message UpdateEntityRequest   { Entity entity = 1; }
+message DeleteEntityRequest   { string id = 1; }
+message WatchRequest          {}
+
+message EntityEvent {
+  oneof event {
+    Entity upserted = 1;
+    string deleted_id = 2;
+  }
+}

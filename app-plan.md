@@ -75,7 +75,7 @@ message LinkRef {
 message Entity {
   string id = 1;
   string structure_type = 2;  // 'Note' | 'Tag' | 'DailyNote' | ...
-  string title = 3;
+  string name = 3;
   repeated Property properties = 4;
   repeated LinkRef links = 5;   // outgoing only; backlinks are derived
   google.protobuf.Timestamp created_at = 6;
@@ -105,7 +105,7 @@ export const STRUCTURES = {
     ],
     creatable: false,                      // needs a date arg; created via the calendar surface
     mentionable: false,                    // reach via calendar / sidebar, not @
-    title: { editable: false },            // set to formatLongDate(iso) at creation
+    nameMeta: { editable: false },         // set to formatLongDate(iso) at creation
   },
 } as const
 ```
@@ -113,8 +113,8 @@ export const STRUCTURES = {
 Per-property and per-Structure rules carried in this metadata:
 - **`mentionable`** (default `true`) — whether `@` autocomplete includes this Structure. Set `false` when the Structure has its own dedicated UI (`#` for Tags, calendar for DailyNote).
 - **`creatable`** (default `true`) — whether the sidebar "+ New" menu offers it. `false` means "no zero-arg create" — the Structure has a dedicated create path that requires context (e.g. `createDailyNote(iso)`).
-- **`editable`** on a property / `title.editable` on a Structure — controls whether the entity page renders an input or read-only display.
-- **`title.derive`** — slot for system-derived titles. Currently unused: DailyNote sets `title` once at creation rather than re-deriving on every read.
+- **`editable`** on a property / `nameMeta.editable` on a Structure — controls whether the entity page renders an input or read-only display.
+- **`nameMeta.derive`** — slot for system-derived names. Currently unused: DailyNote sets `name` once at creation rather than re-deriving on every read.
 - **`uniqueNames`** (default `false`) — whether two entities of this Structure may share a (case-insensitive) name. `true` for `Tag` (the name *is* the identity): the `@`/`#` create-on-miss item is suppressed when an exact match exists, and the mention create path get-or-creates rather than spawning a duplicate. Enforcement is intentionally soft — bare `createEntity` and rename-into-collision are not blocked (that needs conflict UX not yet worth building); Phase 8 may add a partial unique index.
 
 **Graph invariants (as of the 0a data-model review):**

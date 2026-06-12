@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix && prettier --write .",
     "preview": "vite preview",
-    "proto:gen": "cd .. && buf generate",
+    "proto:gen": "buf generate",
     "proto:lint": "cd .. && buf lint"
   },
   "dependencies": {

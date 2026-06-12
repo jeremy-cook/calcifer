@@ -30,13 +30,13 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
       for (const entity of Object.values(entities)) {
         if (structureType && entity.structureType !== structureType) continue
         if (filterByMentionable && !isMentionable(entity.structureType)) continue
-        if (q && !entity.title.toLowerCase().includes(q)) continue
-        if (entity.title.toLowerCase() === q) exactMatch = true
+        if (q && !entity.name.toLowerCase().includes(q)) continue
+        if (entity.name.toLowerCase() === q) exactMatch = true
         if (results.length < MAX_RESULTS) {
           const meta = STRUCTURES[entity.structureType as StructureType]
           results.push({
             id: entity.id,
-            label: entity.title,
+            label: entity.name,
             structureType: entity.structureType,
             color: meta?.color ?? 'var(--muted-foreground)',
           })
@@ -104,12 +104,12 @@ function createEntityForMention(props: EntitySuggestionItem) {
   if (hasUniqueNames(structureType)) {
     const term = props.label.toLowerCase()
     const existing = Object.values(store.entities).find(
-      (e) => e.structureType === structureType && e.title.toLowerCase() === term,
+      (e) => e.structureType === structureType && e.name.toLowerCase() === term,
     )
     if (existing) {
-      return { id: existing.id, label: existing.title, structureType: existing.structureType }
+      return { id: existing.id, label: existing.name, structureType: existing.structureType }
     }
   }
   const entity = store.createEntity(structureType, props.label)
-  return { id: entity.id, label: entity.title, structureType: entity.structureType }
+  return { id: entity.id, label: entity.name, structureType: entity.structureType }
 }

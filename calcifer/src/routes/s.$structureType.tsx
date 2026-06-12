@@ -32,7 +32,7 @@ export const Route = createFileRoute('/s/$structureType')({
               params={{ id: entity.id }}
               className="flex items-center justify-between gap-4 rounded-md px-3 py-2 hover:bg-muted"
             >
-              <span className="truncate">{entity.title}</span>
+              <span className="truncate">{entity.name}</span>
               <span className="shrink-0 text-xs text-muted-foreground">
                 {formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}
               </span>

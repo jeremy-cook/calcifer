@@ -8,7 +8,7 @@ export interface PropertyDef {
   editable?: boolean
 }
 
-export interface TitleMeta {
+export interface NameMeta {
   editable: boolean
   derive?: (entity: Entity) => string
 }
@@ -23,7 +23,7 @@ export interface StructureMeta {
   creatable?: boolean
   mentionable?: boolean
   uniqueNames?: boolean
-  title?: TitleMeta
+  nameMeta?: NameMeta
 }
 
 export const STRUCTURES = {
@@ -55,7 +55,7 @@ export const STRUCTURES = {
       { id: 'date', type: 'date' },
       { id: 'content', type: 'richtext' },
     ],
-    title: { editable: false },
+    nameMeta: { editable: false },
     creatable: false,
     mentionable: false,
   },
@@ -74,9 +74,9 @@ export function isMentionable(structureType: string): boolean {
   return meta?.mentionable !== false
 }
 
-export function isTitleEditable(structureType: string): boolean {
+export function isNameEditable(structureType: string): boolean {
   const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
-  return meta?.title?.editable !== false
+  return meta?.nameMeta?.editable !== false
 }
 
 export function hasUniqueNames(structureType: string): boolean {

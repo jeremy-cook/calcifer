@@ -7,7 +7,7 @@ import type { Timestamp } from '@bufbuild/protobuf/wkt'
 export interface Backlink {
   entityId: string
   structureType: string
-  title: string
+  name: string
   mostRecentAt: Date
 }
 
@@ -49,7 +49,7 @@ export function selectBacklinks(
     results.push({
       entityId: source.id,
       structureType: source.structureType,
-      title: source.title,
+      name: source.name,
       mostRecentAt: new Date(ms),
     })
   }
