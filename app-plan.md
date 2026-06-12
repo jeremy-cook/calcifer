@@ -4,14 +4,14 @@
 
 `spec.md` specs the rich-text editor internals (mentions / slash menu / drag handle). `editor-comparison-plan.md` tracks editor feature parity. Both are **editor-level**. Most of `editor-comparison-plan.md` Phases 1–6 already ships in `calcifer/src/editors/tiptap/`.
 
-This plan is the **application-level** counterpart: the shell around the editor — layout, sidebar, entity model, Go server, AI. It's the roadmap from "an editor demo" to "a knowledge-capture app with AI as a first-class capability."
+This plan is the **application-level** counterpart: the shell around the editor — layout, sidebar, entity model, Rust server, AI. It's the roadmap from "an editor demo" to "a knowledge-capture app with AI as a first-class capability."
 
 ### Direction decisions
 
 - **Entity model:** a single polymorphic `Entity` type. A Note is an `Entity` with `structureId = 'Note'` (Capacities-inspired; see `spec.md` §2.4 / §4.1).
-- **Schema-first via protobuf.** The communication layer will be RPC, so the data model is authored once in `.proto` and generated into both Go and TS. This starts at Phase 3 — the local store uses proto-generated types from day one, so the Phase 8 Go handoff is a storage swap, not a type rewrite.
+- **Schema-first via protobuf.** The communication layer will be RPC, so the data model is authored once in `.proto` and generated into both Rust (via `tonic-build`) and TS (via `buf` + `connect-es`). This starts at Phase 3 — the local store uses proto-generated types from day one, so the Phase 8 Rust handoff is a storage swap, not a type rewrite.
 - **TS "oneof":** discriminated unions. `@bufbuild/protobuf` generates these from proto `oneof` — so `PropertyValue` is strongly typed end-to-end (no `Record<string, unknown>`).
-- **FE first, backend later.** Phases 1–7 are frontend against a localStorage-backed store; Phase 8 swaps to Connect-RPC + Go + SQLite.
+- **FE first, backend later.** Phases 1–7 are frontend against a localStorage-backed store; Phase 8 swaps to tonic (Rust) + SQLite, with the browser talking gRPC-Web.
 - **Single-user.** No auth, no multi-tenant concerns.
 - **Dropped:** runtime structure editor (user owns the source), server-authoritative sync, full-text / lexical search. Keeping vector search because it's the RAG substrate — not a user-facing search feature.
 - **AI scope:** RAG chat
@@ -165,7 +165,7 @@ Three trigger characters drive entity workflows inside the editor. **`@`** opens
 **Goal:** Author the data model in proto, generate TS types, and build a localStorage-backed store against those types so Phase 8 is a storage swap rather than a type rewrite.
 
 - [X] `buf` toolchain configured; `entities.proto` authored per the schema above
-- [X] TS types generated and aliased as `@calcifer/proto`; Go generation deferred to Phase 8
+- [X] TS types generated and aliased as `@calcifer/proto`; Rust generation lands in Phase 8 via `tonic-build` at server compile time
 - [X] Source-of-truth Structure constants
 - [X] Zustand entity store; richtext docs in a parallel slice (so list/metadata reads don't pull in document bodies)
 - [X] localStorage persistence using proto JSON serialization
@@ -249,54 +249,65 @@ Three trigger characters drive entity workflows inside the editor. **`@`** opens
 
 ---
 
-### Phase 8 — Go Backend: Connect-RPC + SQLite
+### Phase 8 — Rust Backend: tonic + SQLite
 
-**Goal:** Swap the FE storage layer from `localStorage` to a Go server. Types don't change — they're already proto-generated from Phase 3.
+**Detailed plans:** [`plans/phase-8/phase-8-part-0-rename-title-to-name.md`](plans/phase-8/phase-8-part-0-rename-title-to-name.md), [`plans/phase-8/phase-8-part-1-workspace-and-hello-server.md`](plans/phase-8/phase-8-part-1-workspace-and-hello-server.md), [`plans/phase-8/phase-8-part-2-proto-codegen-and-service-skeleton.md`](plans/phase-8/phase-8-part-2-proto-codegen-and-service-skeleton.md), [`plans/phase-8/phase-8-part-3-sqlite-and-first-read.md`](plans/phase-8/phase-8-part-3-sqlite-and-first-read.md), [`plans/phase-8/phase-8-part-4-entity-write-path.md`](plans/phase-8/phase-8-part-4-entity-write-path.md), [`plans/phase-8/phase-8-part-5-links-and-referenced-dates.md`](plans/phase-8/phase-8-part-5-links-and-referenced-dates.md), [`plans/phase-8/phase-8-part-6-richtext-service.md`](plans/phase-8/phase-8-part-6-richtext-service.md), [`plans/phase-8/phase-8-part-7-streaming-and-browser-transport.md`](plans/phase-8/phase-8-part-7-streaming-and-browser-transport.md), [`plans/phase-8/phase-8-part-8-fe-swap.md`](plans/phase-8/phase-8-part-8-fe-swap.md)
 
-**Why Connect-RPC:** protobuf schema → Go server stubs, TS client, *and* the foundation for AI tool-use schemas (Phase 13). Connect speaks HTTP/1.1 JSON to the browser (no envoy/grpc-web proxy) and gRPC server-to-server.
+**Goal:** Swap the FE storage layer from `localStorage` to a Rust server. Types don't change — they're already proto-generated from Phase 3.
+
+**Stack shift from the original Phase 8 sketch:** the original plan said Go + Connect-RPC + sqlc. We're doing **Rust + tonic + sqlx + SQLite** instead. Connect-Web still drives the browser side — it just speaks gRPC-Web to the Rust server (`tonic-web` bridges). Authoring once in proto still means a single TypeScript client; the swap from sqlc/Go to sqlx/Rust is invisible to the FE.
+
+**Companion artifact:** alongside this phase, we're building a standalone Rust-backend tutorial as an mdBook under `book/`. It's its own deliverable — readable cover-to-cover with no calcifer-app context — that ends with the same `server/` this phase produces. See `book/src/SUMMARY.md`.
 
 **Repo layout:**
 ```
 calcifer/                   ← Vite app
-server/                     ← NEW Go module
-  cmd/calcifer/main.go
-  internal/
-    store/                  ← sqlc-generated
-    api/                    ← Connect service impls
-    db/migrations/
+server/                     ← NEW Rust workspace
+  Cargo.toml
+  build.rs                  ← runs tonic-build over ../proto
+  src/{main,db,error,proto,watch}.rs
+  src/services/{entity,richtext}.rs
+  migrations/*.sql
 proto/calcifer/v1/
   entities.proto            ← authored in Phase 3
   services.proto            ← NEW
 buf.yaml, buf.gen.yaml
-gen/ts/, gen/go/
+gen/ts/                     ← TS only; Rust types generated by tonic-build at server compile time
+book/                       ← NEW: companion mdBook tutorial
 ```
 
 **Services:**
 ```proto
 service EntityService {
-  rpc Get(GetRequest) returns (Entity);
-  rpc List(ListRequest) returns (ListResponse);
-  rpc Create(CreateRequest) returns (Entity);
-  rpc Update(UpdateRequest) returns (Entity);
-  rpc Delete(DeleteRequest) returns (google.protobuf.Empty);
+  rpc Get(GetEntityRequest) returns (Entity);
+  rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);
+  rpc Create(CreateEntityRequest) returns (Entity);
+  rpc Update(UpdateEntityRequest) returns (Entity);
+  rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
   rpc Watch(WatchRequest) returns (stream EntityEvent);
+}
 
-  // Richtext — separate from Entity so list responses stay lean
-  // and autosave doesn't ship the whole entity on every keystroke.
-  rpc GetRichText(RichTextRef) returns (RichText);
-  rpc PutRichText(RichText) returns (RichText);
+// Richtext — separate service so list responses stay lean
+// and autosave doesn't ship the whole entity on every keystroke.
+service RichTextService {
+  rpc Get(RichTextRef) returns (RichText);
+  rpc Put(RichText) returns (RichText);
 }
 ```
 
-- [ ] Go module + `air` for reload
-- [ ] SQLite schema: `entities(id, structure_id, title, created_at, updated_at)` + `properties(entity_id, property_id, value_blob)` + `richtext(entity_id, property_id, doc, updated_at)` + `links(entity_id, link_id, target_id, target_structure_id, source_property_id, created_at)`. `value_blob` is the proto-encoded `PropertyValue`; when a property's type is richtext, `value_blob` holds the `RichTextRef` pointer and the actual doc lives in the `richtext` table (keyed on `(entity_id, property_id)`)
-- [ ] sqlc queries
-- [ ] Connect service implementations
-- [ ] Replace Zustand's `localStorage` adapter with TanStack Query hooks over the Connect client
-- [ ] Vite proxies `/api` → `:8080`
-- [ ] `Watch` stream → live sidebar updates
+**Sub-phases (each independently shippable):**
+- [ ] **Part 0** — Rename `title` → `name` on `Entity` (FE-only cleanup so the new DB schema can lock in the cleaner name)
+- [ ] **Part 1** — Cargo workspace + `tokio` runtime + listener
+- [ ] **Part 2** — `tonic-build` proto codegen + `EntityService.Get` stub
+- [ ] **Part 3** — SQLite schema + `sqlx` pool + first real `Get` query
+- [ ] **Part 4** — `Create`/`Update`/`Delete` + properties (BLOB-encoded `PropertyValue`)
+- [ ] **Part 5** — `links` and `referenced_dates` reconciliation on every write
+- [ ] **Part 6** — `RichTextService` (separate hot path)
+- [ ] **Part 7** — `Watch` server-streaming + `tonic-web` + CORS
+- [ ] **Part 8** — FE swap: Connect-Web client + TanStack Query + Watch consumer + Vite `/api` proxy
 
-**Deps:** `@connectrpc/connect`, `@connectrpc/connect-web`, `@bufbuild/protobuf`, `@tanstack/react-query`.
+**Deps (FE):** `@connectrpc/connect`, `@connectrpc/connect-web`, `@bufbuild/protobuf`, `@tanstack/react-query`.
+**Deps (Rust):** `tokio`, `tonic`, `tonic-web`, `prost`, `sqlx`, `thiserror`, `anyhow`, `tower-http`.
 
 ---
 
@@ -363,7 +374,7 @@ service EntityService {
 | Backlinks | 5 | ✅ |
 | Calendar + Daily Notes | 6 | ✅ |
 | Command palette | 7 | 💤 |
-| Go server (Connect-RPC + SQLite) | 8 | ⬜ |
+| Rust server (tonic + SQLite) | 8 | ⬜ |
 | Embeddings (RAG substrate) | 9 | ⬜ |
 | AI chat (RAG) | 10 | ⬜ |
 | Inline editor AI | 11 | ⬜ |
@@ -391,7 +402,7 @@ End-to-end through the browser per phase:
 - **Phase 1:** `pnpm dev`, `Cmd+\` collapses sidebar, state survives reload.
 - **Phase 3:** create a Note, type, reload → content restored. Inspect localStorage: two keys — one for entity metadata (with a RichTextRef pointer under the `content` property), one for the richtext doc JSON.
 - **Phase 4:** `@` picks an existing entity; chip renders; `links[]` on source entity contains a `LinkRef`. Clicking navigates.
-- **Phase 8:** drop localStorage, create entity via UI → row appears in `sqlite3 calcifer.db`. `Watch` stream: edit in tab A, tab B updates live.
+- **Phase 8:** drop localStorage, create entity via UI → row appears in `sqlite3 server/calcifer.db`. `Watch` stream: edit in tab A, tab B updates live.
 - **Phase 10:** create two thematically related notes; ask "what did I write about X?" — streamed answer cites both.
 - **Phase 13:** agent prompt "create a Person called Alice and link her to today's note" → audit log shows `createEntity` + `linkEntities` calls; both artifacts exist in DB.
 
