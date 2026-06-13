@@ -5,10 +5,10 @@ use tonic::{Request, Response, Status};
 
 use crate::error::AppError;
 use crate::proto::{
-    entity_event, entity_service_server::EntityService as EntityServiceTrait, CreateEntityRequest,
-    DeleteEntityRequest, Entity, EntityEvent, EntityRef, GetEntityRequest, LinkRef,
-    ListEntitiesRequest, ListEntitiesResponse, Property, PropertyValue, UpdateEntityRequest,
-    WatchRequest,
+    entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
+    CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent, EntityRef, GetEntityRequest,
+    LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property, PropertyValue, RichTextRef,
+    ResolveByNameRequest, ResolveByNameResponse, UpdateEntityRequest, WatchRequest,
 };
 use crate::watch::WatchHub;
 
@@ -20,6 +20,48 @@ pub struct EntityService {
 impl EntityService {
     pub fn new(pool: SqlitePool, hub: WatchHub) -> Self {
         Self { pool, hub }
+    }
+
+    /// Insert a brand-new entity (row + properties + links + dates) in one tx and
+    /// return the hydrated result. Shared by Create and ResolveByName.
+    async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
+        let now = chrono::Utc::now().timestamp_millis();
+        let mut tx = self.pool.begin().await?;
+        sqlx::query!(
+            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)",
+            entity.id,
+            entity.structure_type,
+            entity.name,
+            now,
+            now,
+        )
+        .execute(&mut *tx)
+        .await?;
+        self.replace_properties(&mut tx, entity).await?;
+        self.replace_links(&mut tx, &entity.id, &entity.links).await?;
+        self.replace_referenced_dates(&mut tx, &entity.id, &entity.referenced_dates)
+            .await?;
+        tx.commit().await?;
+        self.load_entity(&entity.id).await
+    }
+
+    /// Case-insensitive lookup of an entity id by (structure_type, name).
+    async fn find_by_name(
+        &self,
+        structure_type: &str,
+        name: &str,
+    ) -> Result<Option<String>, AppError> {
+        let row = sqlx::query_scalar!(
+            r#"SELECT id AS "id!" FROM entities
+               WHERE structure_type = ? AND name = ? COLLATE NOCASE
+               LIMIT 1"#,
+            structure_type,
+            name
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
     }
 
     /// Hydrate a full Entity (metadata + properties + links + referenced_dates).
@@ -201,6 +243,34 @@ pub(crate) fn ts_from_millis(millis: i64) -> prost_types::Timestamp {
     }
 }
 
+/// Build a new Entity for ResolveByName's create path, carrying its structure's
+/// richtext property pointers (mirrors the FE's buildEntityMessage).
+fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
+    let id = uuid::Uuid::new_v4().to_string();
+    let properties = crate::structures::richtext_properties(structure_type)
+        .iter()
+        .map(|pid| Property {
+            id: pid.to_string(),
+            value: Some(PropertyValue {
+                value: Some(property_value::Value::Richtext(RichTextRef {
+                    entity_id: id.clone(),
+                    property_id: pid.to_string(),
+                })),
+            }),
+        })
+        .collect();
+    Entity {
+        id,
+        structure_type: structure_type.to_string(),
+        name: name.to_string(),
+        properties,
+        links: vec![],
+        referenced_dates: vec![],
+        created_at: None,
+        updated_at: None,
+    }
+}
+
 #[tonic::async_trait]
 impl EntityServiceTrait for EntityService {
     async fn get(&self, req: Request<GetEntityRequest>) -> Result<Response<Entity>, Status> {
@@ -244,36 +314,8 @@ impl EntityServiceTrait for EntityService {
             .into_inner()
             .entity
             .ok_or_else(|| Status::invalid_argument("missing entity"))?;
-        let now = chrono::Utc::now().timestamp_millis();
 
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
-
-        sqlx::query!(
-            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)",
-            entity.id,
-            entity.structure_type,
-            entity.name,
-            now,
-            now,
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(AppError::from)?;
-
-        self.replace_properties(&mut tx, &entity)
-            .await
-            .map_err(Status::from)?;
-        self.replace_links(&mut tx, &entity.id, &entity.links)
-            .await
-            .map_err(Status::from)?;
-        self.replace_referenced_dates(&mut tx, &entity.id, &entity.referenced_dates)
-            .await
-            .map_err(Status::from)?;
-
-        tx.commit().await.map_err(AppError::from)?;
-
-        let saved = self.load_entity(&entity.id).await.map_err(Status::from)?;
+        let saved = self.persist_new_entity(&entity).await.map_err(Status::from)?;
         self.hub.publish(EntityEvent {
             event: Some(entity_event::Event::Upserted(saved.clone())),
         });
@@ -343,6 +385,48 @@ impl EntityServiceTrait for EntityService {
             event: Some(entity_event::Event::DeletedId(id)),
         });
         Ok(Response::new(()))
+    }
+
+    async fn resolve_by_name(
+        &self,
+        req: Request<ResolveByNameRequest>,
+    ) -> Result<Response<ResolveByNameResponse>, Status> {
+        let r = req.into_inner();
+        let name = r.name.trim();
+        if name.is_empty() {
+            return Err(Status::invalid_argument("name is required"));
+        }
+
+        // Get: a case-insensitive name match is the canonical entity.
+        if let Some(id) = self
+            .find_by_name(&r.structure_type, name)
+            .await
+            .map_err(Status::from)?
+        {
+            let entity = self.load_entity(&id).await.map_err(Status::from)?;
+            return Ok(Response::new(ResolveByNameResponse {
+                entity: Some(entity),
+                created: false,
+            }));
+        }
+
+        if !r.create_if_missing {
+            return Err(Status::not_found(format!(
+                "{} named {:?}",
+                r.structure_type, name
+            )));
+        }
+
+        // Create: a fresh entity carrying its structure's richtext properties.
+        let entity = build_resolved_entity(&r.structure_type, name);
+        let saved = self.persist_new_entity(&entity).await.map_err(Status::from)?;
+        self.hub.publish(EntityEvent {
+            event: Some(entity_event::Event::Upserted(saved.clone())),
+        });
+        Ok(Response::new(ResolveByNameResponse {
+            entity: Some(saved),
+            created: true,
+        }))
     }
 
     type WatchStream = futures::stream::BoxStream<'static, Result<EntityEvent, Status>>;

@@ -12,6 +12,9 @@ service EntityService {
   rpc Update(UpdateEntityRequest) returns (Entity);
   rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
   rpc Watch(WatchRequest) returns (stream EntityEvent);
+  // Get-or-create an entity by (structure_type, name), case-insensitive.
+  // The single server-authoritative identity path for [[wikilinks]] / #tags.
+  rpc ResolveByName(ResolveByNameRequest) returns (ResolveByNameResponse);
 }
 
 service RichTextService {
@@ -26,6 +29,16 @@ message CreateEntityRequest   { Entity entity = 1; }
 message UpdateEntityRequest   { Entity entity = 1; }
 message DeleteEntityRequest   { string id = 1; }
 message WatchRequest          {}
+
+message ResolveByNameRequest {
+  string structure_type = 1;
+  string name = 2;
+  bool create_if_missing = 3;
+}
+message ResolveByNameResponse {
+  Entity entity = 1;
+  bool created = 2;   // true if this call minted the entity
+}
 
 message EntityEvent {
   oneof event {

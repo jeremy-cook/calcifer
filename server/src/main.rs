@@ -6,6 +6,7 @@ mod error;
 mod links;
 mod proto;
 mod services;
+mod structures;
 mod watch;
 
 use crate::proto::entity_service_server::EntityServiceServer;

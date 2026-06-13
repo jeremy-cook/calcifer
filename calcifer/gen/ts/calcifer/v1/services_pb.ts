@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE0NyZWF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE1VwZGF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IiEKE0RlbGV0ZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkiDgoMV2F0Y2hSZXF1ZXN0IlUKC0VudGl0eUV2ZW50EicKCHVwc2VydGVkGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5SAASFAoKZGVsZXRlZF9pZBgCIAEoCUgAQgcKBWV2ZW50Mp0DCg1FbnRpdHlTZXJ2aWNlEjkKA0dldBIdLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSSwoETGlzdBIgLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1JlcXVlc3QaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZRI/CgZDcmVhdGUSIC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5Ej8KBlVwZGF0ZRIgLmNhbGNpZmVyLnYxLlVwZGF0ZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSQgoGRGVsZXRlEiAuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRI+CgVXYXRjaBIZLmNhbGNpZmVyLnYxLldhdGNoUmVxdWVzdBoYLmNhbGNpZmVyLnYxLkVudGl0eUV2ZW50MAEyfgoPUmljaFRleHRTZXJ2aWNlEjYKA0dldBIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmGhUuY2FsY2lmZXIudjEuUmljaFRleHQSMwoDUHV0EhUuY2FsY2lmZXIudjEuUmljaFRleHQaFS5jYWxjaWZlci52MS5SaWNoVGV4dGIGcHJvdG8z", [file_calcifer_v1_entities, file_google_protobuf_empty]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE0NyZWF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE1VwZGF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IiEKE0RlbGV0ZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkiDgoMV2F0Y2hSZXF1ZXN0IlcKFFJlc29sdmVCeU5hbWVSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJEgwKBG5hbWUYAiABKAkSGQoRY3JlYXRlX2lmX21pc3NpbmcYAyABKAgiTQoVUmVzb2x2ZUJ5TmFtZVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIlUKC0VudGl0eUV2ZW50EicKCHVwc2VydGVkGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5SAASFAoKZGVsZXRlZF9pZBgCIAEoCUgAQgcKBWV2ZW50MvUDCg1FbnRpdHlTZXJ2aWNlEjkKA0dldBIdLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSSwoETGlzdBIgLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1JlcXVlc3QaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZRI/CgZDcmVhdGUSIC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5Ej8KBlVwZGF0ZRIgLmNhbGNpZmVyLnYxLlVwZGF0ZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSQgoGRGVsZXRlEiAuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRI+CgVXYXRjaBIZLmNhbGNpZmVyLnYxLldhdGNoUmVxdWVzdBoYLmNhbGNpZmVyLnYxLkVudGl0eUV2ZW50MAESVgoNUmVzb2x2ZUJ5TmFtZRIhLmNhbGNpZmVyLnYxLlJlc29sdmVCeU5hbWVSZXF1ZXN0GiIuY2FsY2lmZXIudjEuUmVzb2x2ZUJ5TmFtZVJlc3BvbnNlMn4KD1JpY2hUZXh0U2VydmljZRI2CgNHZXQSGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhoVLmNhbGNpZmVyLnYxLlJpY2hUZXh0EjMKA1B1dBIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0GhUuY2FsY2lmZXIudjEuUmljaFRleHRiBnByb3RvMw", [file_calcifer_v1_entities, file_google_protobuf_empty]);
 
 /**
  * @generated from message calcifer.v1.GetEntityRequest
@@ -132,6 +132,57 @@ export const WatchRequestSchema: GenMessage<WatchRequest> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_services, 6);
 
 /**
+ * @generated from message calcifer.v1.ResolveByNameRequest
+ */
+export type ResolveByNameRequest = Message<"calcifer.v1.ResolveByNameRequest"> & {
+  /**
+   * @generated from field: string structure_type = 1;
+   */
+  structureType: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: bool create_if_missing = 3;
+   */
+  createIfMissing: boolean;
+};
+
+/**
+ * Describes the message calcifer.v1.ResolveByNameRequest.
+ * Use `create(ResolveByNameRequestSchema)` to create a new message.
+ */
+export const ResolveByNameRequestSchema: GenMessage<ResolveByNameRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 7);
+
+/**
+ * @generated from message calcifer.v1.ResolveByNameResponse
+ */
+export type ResolveByNameResponse = Message<"calcifer.v1.ResolveByNameResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
+
+  /**
+   * true if this call minted the entity
+   *
+   * @generated from field: bool created = 2;
+   */
+  created: boolean;
+};
+
+/**
+ * Describes the message calcifer.v1.ResolveByNameResponse.
+ * Use `create(ResolveByNameResponseSchema)` to create a new message.
+ */
+export const ResolveByNameResponseSchema: GenMessage<ResolveByNameResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 8);
+
+/**
  * @generated from message calcifer.v1.EntityEvent
  */
 export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
@@ -158,7 +209,7 @@ export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
  * Use `create(EntityEventSchema)` to create a new message.
  */
 export const EntityEventSchema: GenMessage<EntityEvent> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 7);
+  messageDesc(file_calcifer_v1_services, 9);
 
 /**
  * @generated from service calcifer.v1.EntityService
@@ -211,6 +262,17 @@ export const EntityService: GenService<{
     methodKind: "server_streaming";
     input: typeof WatchRequestSchema;
     output: typeof EntityEventSchema;
+  },
+  /**
+   * Get-or-create an entity by (structure_type, name), case-insensitive.
+   * The single server-authoritative identity path for [[wikilinks]] / #tags.
+   *
+   * @generated from rpc calcifer.v1.EntityService.ResolveByName
+   */
+  resolveByName: {
+    methodKind: "unary";
+    input: typeof ResolveByNameRequestSchema;
+    output: typeof ResolveByNameResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_calcifer_v1_services, 0);
