@@ -1,4 +1,5 @@
 **/.DS_Store
+**/node_modules/
 server/target/
 book/book/
 server/calcifer.db
@@ -6,3 +7,4 @@ server/calcifer.db-shm
 server/calcifer.db-wal
 server/.env
 .claude/launch.json
+mcp-server/src/gen/
