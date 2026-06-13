@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "smoke": "tsx src/smoke.ts",
+    "test:md": "tsx src/markdown/verify.ts",
     "typecheck": "tsc --noEmit",
     "proto:gen": "buf generate"
   },
