@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { useEntityStore } from '~/model/store'
+import { useAllEntities } from '~/model/store'
 import { STRUCTURE_LIST } from '~/model/structures'
 import type { Entity, LinkRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import type { Timestamp } from '@bufbuild/protobuf/wkt'
@@ -37,12 +37,9 @@ function compareBacklinks(a: Backlink, b: Backlink): number {
   return b.mostRecentAt.getTime() - a.mostRecentAt.getTime()
 }
 
-export function selectBacklinks(
-  entities: Record<string, Entity>,
-  targetEntityId: string,
-): Backlink[] {
+export function selectBacklinks(entities: Entity[], targetEntityId: string): Backlink[] {
   const results: Backlink[] = []
-  for (const source of Object.values(entities)) {
+  for (const source of entities) {
     if (source.id === targetEntityId) continue
     const ms = mostRecentLinkMillis(source.links, targetEntityId)
     if (ms === 0) continue
@@ -58,6 +55,6 @@ export function selectBacklinks(
 }
 
 export function useBacklinks(targetEntityId: string): Backlink[] {
-  const entities = useEntityStore((s) => s.entities)
+  const entities = useAllEntities()
   return useMemo(() => selectBacklinks(entities, targetEntityId), [entities, targetEntityId])
 }

@@ -7,7 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
-import { useEntityStore } from '~/model/store'
+import { useCreateEntity } from '~/model/store'
 import type { StructureType } from '~/model/structures'
 import { CREATABLE_STRUCTURES } from '~/model/structures'
 
@@ -21,10 +21,10 @@ const classnamesDropdownMenuTrigger = [
 
 export function NewButton() {
   const navigate = useNavigate()
-  const createEntity = useEntityStore((s) => s.createEntity)
+  const createEntity = useCreateEntity()
 
-  const handleCreate = (structureType: StructureType) => {
-    const entity = createEntity(structureType as Exclude<StructureType, 'DailyNote'>)
+  const handleCreate = async (structureType: StructureType) => {
+    const entity = await createEntity(structureType as Exclude<StructureType, 'DailyNote'>)
     void navigate({ to: '/e/$id', params: { id: entity.id } })
   }
 
@@ -39,7 +39,7 @@ export function NewButton() {
           {CREATABLE_STRUCTURES.map((s) => {
             const IconComponent = s.icon
             return (
-              <DropdownMenuItem key={s.type} onSelect={() => handleCreate(s.type as StructureType)}>
+              <DropdownMenuItem key={s.type} onSelect={() => void handleCreate(s.type as StructureType)}>
                 <IconComponent />
                 {s.name}
               </DropdownMenuItem>

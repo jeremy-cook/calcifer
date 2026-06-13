@@ -15,10 +15,13 @@
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
+    "@connectrpc/connect": "^2.1.2",
+    "@connectrpc/connect-web": "^2.1.2",
     "@floating-ui/dom": "^1.7.6",
     "@fontsource-variable/montserrat": "^5.2.8",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.2.2",
+    "@tanstack/react-query": "^5.101.0",
     "@tanstack/react-router": "^1.168.23",
     "@tiptap/core": "^3.22.2",
     "@tiptap/extension-blockquote": "^3.22.2",

@@ -1,66 +1,11 @@
-import { create } from 'zustand'
-import { persist, type PersistStorage } from 'zustand/middleware'
-import {
-  create as createMessage,
-  fromJson,
-  toJson,
-  type JsonValue,
-} from '@bufbuild/protobuf'
-import { timestampNow } from '@bufbuild/protobuf/wkt'
-import {
-  RichTextSchema,
-  type RichText,
-  type RichTextRef,
-} from '@calcifer/proto/calcifer/v1/entities_pb'
-
-interface RichTextState {
-  docs: Record<string, RichText>
-  getRichText: (ref: RichTextRef) => RichText | undefined
-  putRichText: (ref: RichTextRef, doc: string) => void
-  deleteByEntity: (entityId: string) => void
-}
-
-type PersistedRichTextState = Pick<RichTextState, 'docs'>
+import { useCallback } from 'react'
+import { create as createMessage } from '@bufbuild/protobuf'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { RichTextSchema, type RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { isNotFound, qk, queryClient, richTextClient } from '~/model/api'
 
 export function richTextKey(ref: RichTextRef): string {
   return `${ref.entityId}:${ref.propertyId}`
-}
-
-const richTextStorage: PersistStorage<PersistedRichTextState> = {
-  getItem: (name) => {
-    const raw = localStorage.getItem(name)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as {
-      state: { docs: Record<string, JsonValue> }
-      version?: number
-    }
-    return {
-      state: {
-        docs: Object.fromEntries(
-          Object.entries(parsed.state.docs).map(([key, json]) => [
-            key,
-            fromJson(RichTextSchema, json),
-          ]),
-        ),
-      },
-      version: parsed.version,
-    }
-  },
-  setItem: (name, value) => {
-    const serialized = {
-      state: {
-        docs: Object.fromEntries(
-          Object.entries(value.state.docs).map(([key, doc]) => [
-            key,
-            toJson(RichTextSchema, doc),
-          ]),
-        ),
-      },
-      version: value.version,
-    }
-    localStorage.setItem(name, JSON.stringify(serialized))
-  },
-  removeItem: (name) => localStorage.removeItem(name),
 }
 
 interface RichTextDocNode {
@@ -84,33 +29,42 @@ export function isRichTextEmpty(doc: string | undefined): boolean {
   return !only.content || only.content.length === 0
 }
 
-export const useRichTextStore = create<RichTextState>()(
-  persist(
-    (set, get) => ({
-      docs: {},
-      getRichText: (ref) => get().docs[richTextKey(ref)],
-      putRichText: (ref, doc) => {
-        const key = richTextKey(ref)
-        const message = createMessage(RichTextSchema, {
-          ref,
-          doc,
-          updatedAt: timestampNow(),
-        })
-        set({ docs: { ...get().docs, [key]: message } })
-      },
-      deleteByEntity: (entityId) => {
-        const prefix = `${entityId}:`
-        const next: Record<string, RichText> = {}
-        for (const [key, doc] of Object.entries(get().docs)) {
-          if (!key.startsWith(prefix)) next[key] = doc
-        }
-        set({ docs: next })
-      },
-    }),
-    {
-      name: 'calcifer.richtext.v1',
-      storage: richTextStorage,
-      partialize: (state) => ({ docs: state.docs }),
+// Returns the doc JSON string; a not-yet-saved doc reads as '' (NOT_FOUND).
+export function useRichText(ref: RichTextRef) {
+  return useQuery({
+    queryKey: qk.richtext(ref.entityId, ref.propertyId),
+    queryFn: async () => {
+      try {
+        const rt = await richTextClient.get({ entityId: ref.entityId, propertyId: ref.propertyId })
+        return rt.doc
+      } catch (err) {
+        if (isNotFound(err)) return ''
+        throw err
+      }
     },
-  ),
-)
+    enabled: !!ref.entityId,
+  })
+}
+
+export function usePutRichText() {
+  const m = useMutation({
+    mutationFn: ({ ref, doc }: { ref: RichTextRef; doc: string }) =>
+      richTextClient.put(createMessage(RichTextSchema, { ref, doc })),
+    onSuccess: (saved) => {
+      const ref = saved.ref
+      if (ref) {
+        queryClient.setQueryData(qk.richtext(ref.entityId, ref.propertyId), saved.doc)
+        // Put derived this entity's links + referenced_dates server-side, which
+        // also changes targets' backlinks — refresh the source entity and the
+        // list that backlinks/calendar derive from.
+        void queryClient.invalidateQueries({ queryKey: qk.entity(ref.entityId) })
+      }
+      void queryClient.invalidateQueries({ queryKey: ['entities'] })
+    },
+  })
+  return useCallback((ref: RichTextRef, doc: string) => m.mutate({ ref, doc }), [m])
+}
+
+export function getRichTextSnapshot(ref: RichTextRef): string | undefined {
+  return queryClient.getQueryData<string>(qk.richtext(ref.entityId, ref.propertyId))
+}

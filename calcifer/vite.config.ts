@@ -19,4 +19,14 @@ export default defineConfig({
       '@calcifer/proto': path.resolve(__dirname, 'gen/ts'),
     },
   },
+  server: {
+    proxy: {
+      // Forward gRPC-Web calls to the tonic server; strip the /api prefix.
+      '/api': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (p) => p.replace(/^\/api/, ''),
+      },
+    },
+  },
 })

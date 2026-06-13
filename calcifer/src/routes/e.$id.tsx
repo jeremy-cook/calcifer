@@ -16,15 +16,21 @@ import { Input } from '~/components/ui/input'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityDateField } from '~/components/entity/EntityDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
-import type { Entity } from '~/model/store'
-import { useEntityStore } from '~/model/store'
+import {
+  useDeleteEntity,
+  useEntity,
+  useMoveDailyNote,
+  useRenameEntity,
+  type Entity,
+} from '~/model/store'
 import { STRUCTURES, type StructureType, isNameEditable } from '~/model/structures'
 import type { Property } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
     const { id } = Route.useParams()
-    const entity = useEntityStore((s) => s.entities[id])
+    const { data: entity, isPending } = useEntity(id)
+    if (isPending) return null
     if (!entity) return <EntityNotFound />
 
     return (
@@ -55,8 +61,8 @@ interface EntityHeaderProps {
 }
 
 function EntityHeader({ entity }: EntityHeaderProps) {
-  const updateEntity = useEntityStore((s) => s.updateEntity)
-  const deleteEntity = useEntityStore((s) => s.deleteEntity)
+  const rename = useRenameEntity()
+  const deleteEntity = useDeleteEntity()
   const navigate = useNavigate()
 
   const structureName = STRUCTURES[entity.structureType as StructureType]?.name ?? entity.structureType
@@ -73,7 +79,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
       <Input
         value={entity.name}
         autoFocus={isDefaultName}
-        onChange={(e) => updateEntity(entity.id, { name: e.target.value })}
+        onChange={(e) => rename(entity, e.target.value)}
         className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
         aria-label="Entity title"
       />
@@ -112,7 +118,7 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
-  const moveDailyNote = useEntityStore((s) => s.moveDailyNote)
+  const moveDailyNote = useMoveDailyNote()
   if (entity.properties.length === 0) return null
 
   const renderProperty = (property: Property) => {
@@ -128,7 +134,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
             key={property.id}
             label="Date"
             iso={value.value}
-            onChange={(iso) => moveDailyNote(entity.id, iso)}
+            onChange={(iso) => moveDailyNote(entity, iso)}
           />
         )
       default:
@@ -138,4 +144,3 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
 
   return <>{entity.properties.map(renderProperty)}</>
 }
-

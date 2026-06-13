@@ -15,8 +15,16 @@ import {
 import { Button } from '~/components/ui/button'
 import { PlusIcon } from '@phosphor-icons/react'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
-import { dailyNoteByDate, useEntityStore, type Entity } from '~/model/store'
-import { isRichTextEmpty, useRichTextStore } from '~/model/richtext'
+import {
+  dailyNoteByDate,
+  deleteEntityImperative,
+  getEntitiesSnapshot,
+  useAllEntities,
+  useCreateDailyNote,
+  useDeleteEntity,
+  type Entity,
+} from '~/model/store'
+import { getRichTextSnapshot, isRichTextEmpty } from '~/model/richtext'
 import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 interface DailyNoteSectionProps {
@@ -24,25 +32,26 @@ interface DailyNoteSectionProps {
 }
 
 export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
-  const dailyNote = useEntityStore((s) => dailyNoteByDate(s.entities, iso))
-  const createDailyNote = useEntityStore((s) => s.createDailyNote)
+  const entities = useAllEntities()
+  const dailyNote = dailyNoteByDate(entities, iso)
+  const createDailyNote = useCreateDailyNote()
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null)
   if (autoFocusKey !== null && autoFocusKey !== iso) setAutoFocusKey(null)
 
   const handleCreate = () => {
-    createDailyNote(iso)
+    void createDailyNote(iso)
     setAutoFocusKey(iso)
   }
 
   useEffect(() => {
     return () => {
-      const state = useEntityStore.getState()
-      const existing = dailyNoteByDate(state.entities, iso)
+      // Prune an empty daily note when leaving its day (reads the live cache).
+      const existing = dailyNoteByDate(getEntitiesSnapshot(), iso)
       if (!existing) return
       const ref = contentRichTextRef(existing)
-      const doc = ref ? useRichTextStore.getState().getRichText(ref) : undefined
-      if (isRichTextEmpty(doc?.doc)) {
-        state.deleteEntity(existing.id)
+      const doc = ref ? getRichTextSnapshot(ref) : undefined
+      if (isRichTextEmpty(doc)) {
+        deleteEntityImperative(existing.id)
       }
     }
   }, [iso])
@@ -89,7 +98,7 @@ interface DailyNoteActionsProps {
 }
 
 function DailyNoteActions({ dailyNote }: DailyNoteActionsProps) {
-  const deleteEntity = useEntityStore((s) => s.deleteEntity)
+  const deleteEntity = useDeleteEntity()
   const navigate = useNavigate()
 
   const handleExpand = () => {

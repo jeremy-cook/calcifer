@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
-import { entitiesByDate, useEntityStore, type Entity } from '~/model/store'
+import { entitiesByDate, useAllEntities, type Entity } from '~/model/store'
 import { STRUCTURES, type StructureType } from '~/model/structures'
 import { cn } from '~/lib/utils'
 
@@ -9,7 +9,7 @@ interface DateReferencesSectionProps {
 }
 
 export function DateReferencesSection({ iso }: DateReferencesSectionProps) {
-  const entities = useEntityStore((s) => s.entities)
+  const entities = useAllEntities()
   const filtered = useMemo(
     () => entitiesByDate(entities, iso).filter((e) => e.structureType !== 'DailyNote'),
     [entities, iso],

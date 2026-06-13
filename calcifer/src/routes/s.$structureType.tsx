@@ -1,13 +1,13 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
-import { entityUpdatedAtDate, listByStructure, useEntityStore } from '~/model/store'
+import { entityUpdatedAtDate, listByStructure, useAllEntities } from '~/model/store'
 import type { StructureType } from '~/model/structures'
 import { STRUCTURES } from '~/model/structures'
 
 export const Route = createFileRoute('/s/$structureType')({
   component: function StructureListRoute() {
     const { structureType } = Route.useParams()
-    const entities = useEntityStore((s) => s.entities)
+    const entities = useAllEntities()
 
     if (!(structureType in STRUCTURES)) {
       return (

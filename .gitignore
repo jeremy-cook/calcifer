@@ -5,3 +5,4 @@ server/calcifer.db
 server/calcifer.db-shm
 server/calcifer.db-wal
 server/.env
+.claude/launch.json
