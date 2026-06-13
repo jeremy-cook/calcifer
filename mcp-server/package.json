@@ -6,13 +6,17 @@
   "scripts": {
     "smoke": "tsx src/smoke.ts",
     "test:md": "tsx src/markdown/verify.ts",
+    "test:tools": "tsx src/tools-test.ts",
+    "start": "tsx src/server.ts",
     "typecheck": "tsc --noEmit",
     "proto:gen": "buf generate"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",
     "@connectrpc/connect": "^2.1.2",
-    "@connectrpc/connect-node": "^2.1.2"
+    "@connectrpc/connect-node": "^2.1.2",
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
