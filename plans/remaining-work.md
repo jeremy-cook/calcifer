@@ -131,7 +131,7 @@ Replace the per-package proto-stub duplication (M2 decision) with a real pnpm wo
 Stop the FE preview before reinstalling; re-verify FE typecheck + a browser load, and
 `mcp-server` typecheck + `pnpm test:tools` after. Lower priority; do when touching build setup.
 
-### Unit G — M5 finalization   ·  size: S  ·  deps: M5 (done)  ·  mostly user action
+### Unit G — M5 finalization   ·  ✅ DONE (registered + `mcp-server/README.md`)
 Register the MCP server with Claude Code and exercise it interactively.
 - `mcp-server` runs via `pnpm start` (stdio). Register, e.g. `claude mcp add calcifer -- node --import tsx /Users/bebop/Github/calcifer/mcp-server/src/server.ts` (or a built JS entry).
 - **Verify:** from Claude Code, `create_note` / `search_notes` / `get_backlinks`; confirm notes
