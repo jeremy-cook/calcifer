@@ -30,8 +30,9 @@ async function getDoc(entityId: string): Promise<TTNode> {
 }
 
 async function backlinkNames(targetId: string): Promise<string[]> {
-  const res = await entityClient.list({ structureType: '' })
-  return res.entities.filter((e) => e.links.some((l) => l.target?.id === targetId)).map((e) => e.name)
+  // Server-side backlink scan (SELECT ... WHERE target_id = ?), no client-side List.
+  const res = await entityClient.listBacklinks({ id: targetId, structureType: '' })
+  return res.entities.map((e) => e.name)
 }
 
 export async function createNote(name: string, markdown: string): Promise<string> {
@@ -89,6 +90,39 @@ export async function linkNotes(from: string, to: string): Promise<string> {
   // Links are content-derived, so "linking" = adding a [[to]] mention to `from`.
   await appendToNote(from, `Related: [[${to}]]`)
   return `Linked "${from}" -> "${to}".`
+}
+
+// Get-or-create the DailyNote for `date` (ISO "YYYY-MM-DD"), returning its id +
+// name. CreateDailyNote is server-authoritative (one note per day); on a repeat
+// call it returns already_exists, so we fall back to resolving by name.
+async function resolveDailyNote(date: string): Promise<{ id: string; name: string }> {
+  try {
+    const e = await entityClient.createDailyNote({ date })
+    return { id: e.id, name: e.name }
+  } catch (err) {
+    if (!(err instanceof ConnectError && err.code === Code.AlreadyExists)) throw err
+    const list = await entityClient.list({ structureType: 'DailyNote' })
+    const existing = list.entities.find((e) =>
+      e.properties.some((p) => p.value?.value?.case === 'date' && p.value.value.value === date),
+    )
+    if (!existing) throw err
+    return { id: existing.id, name: existing.name }
+  }
+}
+
+export async function createDailyNote(date: string): Promise<string> {
+  const { id, name } = await resolveDailyNote(date)
+  return `Daily note "${name}" (${id}) ready for ${date}.`
+}
+
+export async function appendToDailyNote(date: string, markdown: string): Promise<string> {
+  const { id, name } = await resolveDailyNote(date)
+  const existing = await getDoc(id)
+  const addition = await toTipTap(markdown, resolver)
+  const merged: TTNode = { type: 'doc', content: [...(existing.content ?? []), ...(addition.content ?? [])] }
+  await richTextClient.put({ ref: contentRef(id), doc: JSON.stringify(merged) })
+  const ent = await entityClient.get({ id })
+  return `Appended to daily note "${name}" (${id}); now ${ent.links.length} link(s).`
 }
 
 export function listStructures(): string {

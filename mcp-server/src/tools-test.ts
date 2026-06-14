@@ -26,7 +26,26 @@ async function main(): Promise<void> {
   const note2 = await ops.getNote('Transformers')
   assert(note2.includes('[[Positional Encoding]]'), 'append added content')
 
-  console.log('M5 OK — MCP knowledge ops work end-to-end')
+  // Backlinks now resolve server-side (EntityService.ListBacklinks).
+  const back2 = await ops.getBacklinks('Positional Encoding')
+  console.log('get_backlinks(Positional Encoding):', back2.replace(/\n/g, ' '))
+  assert(back2.includes('Transformers'), 'server-side backlinks see Transformers')
+
+  // Daily notes: get-or-create + append, idempotent per calendar day.
+  const date = '2026-06-13'
+  const created = await ops.createDailyNote(date)
+  console.log('create_daily_note:', created)
+  assert(created.includes(date), 'create_daily_note acknowledges the date')
+
+  // Second create for the same day is a no-op (already_exists handled internally).
+  const again = await ops.createDailyNote(date)
+  assert(/ready for 2026-06-13/.test(again), 'create_daily_note is idempotent per day')
+
+  await ops.appendToDailyNote(date, 'Read about [[Transformers]] today.')
+  const dailyBack = await ops.getBacklinks('Transformers')
+  assert(/June 13, 2026/.test(dailyBack), 'daily note links back to Transformers under its long-date name')
+
+  console.log('Unit D OK — backlinks + daily-note ops work end-to-end')
 }
 
 main().catch((e) => {

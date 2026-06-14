@@ -15,6 +15,11 @@ service EntityService {
   // Get-or-create an entity by (structure_type, name), case-insensitive.
   // The single server-authoritative identity path for [[wikilinks]] / #tags.
   rpc ResolveByName(ResolveByNameRequest) returns (ResolveByNameResponse);
+  // Entities whose link graph points AT this entity (server-side backlink scan).
+  rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);
+  // Server-authoritative creation of the one DailyNote for a calendar day.
+  // Returns already_exists if a DailyNote for that date already exists.
+  rpc CreateDailyNote(CreateDailyNoteRequest) returns (Entity);
 }
 
 service RichTextService {
@@ -42,6 +47,8 @@ message CreateEntityRequest   { Entity entity = 1; }
 message UpdateEntityRequest   { Entity entity = 1; }
 message DeleteEntityRequest   { string id = 1; }
 message WatchRequest          {}
+
+message CreateDailyNoteRequest { string date = 1; }  // ISO calendar day, e.g. "2026-06-13"
 
 message ResolveByNameRequest {
   string structure_type = 1;

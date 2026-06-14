@@ -52,6 +52,20 @@ server.tool(
 )
 
 server.tool(
+  'create_daily_note',
+  "Create the journal entry for a calendar day (ISO date, e.g. \"2026-06-13\"). One DailyNote exists per day; if it already exists this is a no-op that returns the existing note.",
+  { date: z.string() },
+  async ({ date }) => text(await ops.createDailyNote(date)),
+)
+
+server.tool(
+  'append_to_daily_note',
+  'Append markdown to the journal entry for a calendar day (ISO date), creating it if needed. [[Wikilinks]], #tags and dates in the text become graph links automatically.',
+  { date: z.string(), markdown: z.string() },
+  async ({ date, markdown }) => text(await ops.appendToDailyNote(date, markdown)),
+)
+
+server.tool(
   'list_structures',
   'List the entity types (structures) available in this knowledge base.',
   {},

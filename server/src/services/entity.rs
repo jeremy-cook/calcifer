@@ -6,9 +6,10 @@ use tonic::{Request, Response, Status};
 use crate::error::AppError;
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
-    CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent, EntityRef, GetEntityRequest,
-    LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property, PropertyValue, RichTextRef,
-    ResolveByNameRequest, ResolveByNameResponse, UpdateEntityRequest, WatchRequest,
+    CreateDailyNoteRequest, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
+    EntityRef, GetEntityRequest, LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property,
+    PropertyValue, RichTextRef, ResolveByNameRequest, ResolveByNameResponse, UpdateEntityRequest,
+    WatchRequest,
 };
 use crate::watch::WatchHub;
 
@@ -26,13 +27,15 @@ impl EntityService {
     /// return the hydrated result. Shared by Create and ResolveByName.
     async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
         let now = chrono::Utc::now().timestamp_millis();
+        let date_key = date_key_for(entity);
         let mut tx = self.pool.begin().await?;
         sqlx::query!(
-            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO entities (id, structure_type, name, date_key, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
             entity.id,
             entity.structure_type,
             entity.name,
+            date_key,
             now,
             now,
         )
@@ -293,6 +296,42 @@ pub(crate) fn ts_from_millis(millis: i64) -> prost_types::Timestamp {
     }
 }
 
+/// The `date_key` mirror for an entity: the value of its `date` property when the
+/// entity is a DailyNote, else None. Populating this column is what arms the
+/// `one_daily_note_per_day` unique index. Returning None for non-DailyNote types
+/// keeps the partial index inert for everything else.
+fn date_key_for(entity: &Entity) -> Option<String> {
+    if entity.structure_type != "DailyNote" {
+        return None;
+    }
+    entity.properties.iter().find_map(|p| match &p.value {
+        Some(PropertyValue {
+            value: Some(property_value::Value::Date(d)),
+        }) if p.id == "date" && !d.is_empty() => Some(d.clone()),
+        _ => None,
+    })
+}
+
+/// Format an ISO calendar day ("2026-06-13") as a long human date
+/// ("June 13, 2026"). Falls back to the raw input on a parse failure.
+fn format_long_date(date: &str) -> String {
+    match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
+        Ok(d) => d.format("%B %-d, %Y").to_string(),
+        Err(_) => date.to_string(),
+    }
+}
+
+/// Map a SQLite UNIQUE-constraint failure to a tonic status, else fall back to
+/// the standard AppError -> Status conversion. Used by the DailyNote create path.
+fn map_unique_violation(err: AppError, msg: &str) -> Status {
+    if let AppError::Db(sqlx::Error::Database(ref db)) = err {
+        if db.is_unique_violation() {
+            return Status::already_exists(msg.to_string());
+        }
+    }
+    Status::from(err)
+}
+
 /// Build a new Entity for ResolveByName's create path, carrying its structure's
 /// richtext property pointers (mirrors the FE's buildEntityMessage).
 fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
@@ -313,6 +352,40 @@ fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
         id,
         structure_type: structure_type.to_string(),
         name: name.to_string(),
+        properties,
+        links: vec![],
+        referenced_dates: vec![],
+        created_at: None,
+        updated_at: None,
+    }
+}
+
+/// Build a new DailyNote entity for `date`: a `date` property (drives date_key),
+/// the structure's richtext `content` property, and a long-human-date name.
+fn build_daily_note(date: &str) -> Entity {
+    let id = uuid::Uuid::new_v4().to_string();
+    let mut properties: Vec<Property> = crate::structures::richtext_properties("DailyNote")
+        .iter()
+        .map(|pid| Property {
+            id: pid.to_string(),
+            value: Some(PropertyValue {
+                value: Some(property_value::Value::Richtext(RichTextRef {
+                    entity_id: id.clone(),
+                    property_id: pid.to_string(),
+                })),
+            }),
+        })
+        .collect();
+    properties.push(Property {
+        id: "date".to_string(),
+        value: Some(PropertyValue {
+            value: Some(property_value::Value::Date(date.to_string())),
+        }),
+    });
+    Entity {
+        id,
+        structure_type: "DailyNote".to_string(),
+        name: format_long_date(date),
         properties,
         links: vec![],
         referenced_dates: vec![],
@@ -365,7 +438,10 @@ impl EntityServiceTrait for EntityService {
             .entity
             .ok_or_else(|| Status::invalid_argument("missing entity"))?;
 
-        let saved = self.persist_new_entity(&entity).await.map_err(Status::from)?;
+        let saved = self
+            .persist_new_entity(&entity)
+            .await
+            .map_err(|e| map_unique_violation(e, "a DailyNote for this date already exists"))?;
         self.hub.publish(EntityEvent {
             event: Some(entity_event::Event::Upserted(saved.clone())),
         });
@@ -378,19 +454,21 @@ impl EntityServiceTrait for EntityService {
             .entity
             .ok_or_else(|| Status::invalid_argument("missing entity"))?;
         let now = chrono::Utc::now().timestamp_millis();
+        let date_key = date_key_for(&entity);
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
 
         sqlx::query!(
-            "UPDATE entities SET structure_type = ?, name = ?, updated_at = ? WHERE id = ?",
+            "UPDATE entities SET structure_type = ?, name = ?, date_key = ?, updated_at = ? WHERE id = ?",
             entity.structure_type,
             entity.name,
+            date_key,
             now,
             entity.id,
         )
         .execute(&mut *tx)
         .await
-        .map_err(AppError::from)?;
+        .map_err(|e| map_unique_violation(AppError::from(e), "a DailyNote for this date already exists"))?;
 
         self.replace_properties(&mut tx, &entity)
             .await
@@ -484,6 +562,48 @@ impl EntityServiceTrait for EntityService {
             entity: Some(saved),
             created: true,
         }))
+    }
+
+    async fn list_backlinks(
+        &self,
+        req: Request<EntityRef>,
+    ) -> Result<Response<ListEntitiesResponse>, Status> {
+        let target_id = req.into_inner().id;
+
+        let ids: Vec<String> = sqlx::query_scalar!(
+            r#"SELECT DISTINCT entity_id AS "entity_id!" FROM links WHERE target_id = ?"#,
+            target_id
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(AppError::from)?;
+
+        let mut entities = Vec::with_capacity(ids.len());
+        for id in ids {
+            entities.push(self.load_entity(&id).await.map_err(Status::from)?);
+        }
+
+        Ok(Response::new(ListEntitiesResponse { entities }))
+    }
+
+    async fn create_daily_note(
+        &self,
+        req: Request<CreateDailyNoteRequest>,
+    ) -> Result<Response<Entity>, Status> {
+        let date = req.into_inner().date;
+        let date = date.trim();
+        if date.is_empty() {
+            return Err(Status::invalid_argument("date is required"));
+        }
+
+        let entity = build_daily_note(date);
+        let saved = self.persist_new_entity(&entity).await.map_err(|e| {
+            map_unique_violation(e, &format!("a DailyNote for {} already exists", date))
+        })?;
+        self.hub.publish(EntityEvent {
+            event: Some(entity_event::Event::Upserted(saved.clone())),
+        });
+        Ok(Response::new(saved))
     }
 
     type WatchStream = futures::stream::BoxStream<'static, Result<EntityEvent, Status>>;
