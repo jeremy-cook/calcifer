@@ -1,5 +1,16 @@
 // TipTap JSON -> markdown. mention -> [[label]], hashtag -> #label, dateChip -> ISO.
+// Marks round-trip: code -> `…` (verbatim, exclusive), bold -> **…**, italic -> *…*.
 import type { TTNode } from './types.js'
+
+function applyMarks(text: string, marks?: { type: string }[]): string {
+  if (!marks?.length) return text
+  const has = (t: string) => marks.some((m) => m.type === t)
+  if (has('code')) return `\`${text}\`` // code is verbatim; no nested emphasis
+  let out = text
+  if (has('bold')) out = `**${out}**`
+  if (has('italic')) out = `*${out}*`
+  return out
+}
 
 function inlineToMd(content?: TTNode[]): string {
   if (!content) return ''
@@ -7,7 +18,7 @@ function inlineToMd(content?: TTNode[]): string {
     .map((n) => {
       switch (n.type) {
         case 'text':
-          return n.text ?? ''
+          return applyMarks(n.text ?? '', n.marks)
         case 'mention':
           return `[[${n.attrs?.label ?? ''}]]`
         case 'hashtag':

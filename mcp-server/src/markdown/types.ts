@@ -6,6 +6,7 @@ export interface TTNode {
   attrs?: Record<string, unknown>
   content?: TTNode[]
   text?: string
+  marks?: { type: string }[]
 }
 
 // Resolves a (structureType, name) to a canonical entity id (server ResolveByName).

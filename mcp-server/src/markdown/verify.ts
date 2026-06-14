@@ -25,6 +25,7 @@ async function pureRoundTrip(): Promise<void> {
     'See [[Photosynthesis]] and #biology on 2026-06-15.',
     '# Heading\n\nA paragraph with [[Krebs Cycle]] and #metabolism.',
     '- one\n- two with [[Link]]\n- three',
+    'Search by *meaning*, not keywords, via **mean pooling** and `cosine similarity`.',
   ]
   for (const md of cases) {
     const doc = await toTipTap(md, fake)
@@ -36,7 +37,20 @@ async function pureRoundTrip(): Promise<void> {
     t.includes('mention') && t.includes('hashtag') && t.includes('dateChip'),
     'emits mention/hashtag/dateChip nodes',
   )
-  console.log('✓ pure round-trip (3 cases) + node shapes')
+
+  // Inline marks land on text nodes (bold/italic/code), not literal characters.
+  const marked = await toTipTap('*a* **b** `c`', fake)
+  const marks = new Set<string>()
+  const collect = (n: TTNode) => {
+    n.marks?.forEach((m) => marks.add(m.type))
+    ;(n.content ?? []).forEach(collect)
+  }
+  collect(marked)
+  assert(marks.has('italic') && marks.has('bold') && marks.has('code'), 'emits italic/bold/code marks')
+  // Underscores in prose must NOT become emphasis (snake_case survives).
+  const us = fromTipTap(await toTipTap('the one_daily_note_per_day index', fake)).trim()
+  assert(us === 'the one_daily_note_per_day index', `snake_case mangled: ${us}`)
+  console.log('✓ pure round-trip (4 cases) + node shapes + marks + snake_case safety')
 }
 
 async function liveDerivation(): Promise<void> {
