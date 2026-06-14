@@ -22,6 +22,19 @@ service RichTextService {
   rpc Put(RichText) returns (RichText);
 }
 
+// Lexical (full-text) search over note names + bodies, backed by SQLite FTS5.
+service SearchService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+
+message SearchRequest  { string query = 1; uint32 limit = 2; }
+message SearchResponse { repeated SearchHit hits = 1; }
+message SearchHit {
+  Entity entity = 1;
+  string snippet = 2;
+  double score = 3;
+}
+
 message GetEntityRequest      { string id = 1; }
 message ListEntitiesRequest   { string structure_type = 1; }
 message ListEntitiesResponse  { repeated Entity entities = 1; }

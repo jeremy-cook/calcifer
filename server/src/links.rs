@@ -83,6 +83,36 @@ fn walk(
     }
 }
 
+/// Collect the plain-text content of a TipTap JSON doc into a single string,
+/// space-joining text nodes across blocks. Used to feed the FTS `body` column
+/// (M7) — sibling to `extract_doc_references`, walking the same node tree.
+/// An empty / blank doc yields an empty string.
+pub fn extract_plain_text(doc_json: &str) -> Result<String, AppError> {
+    if doc_json.trim().is_empty() {
+        return Ok(String::new());
+    }
+    let doc: Value = serde_json::from_str(doc_json)
+        .map_err(|e| AppError::Invalid(format!("invalid richtext doc json: {e}")))?;
+
+    let mut out = String::new();
+    collect_text(&doc, &mut out);
+    Ok(out.trim().to_string())
+}
+
+fn collect_text(node: &Value, out: &mut String) {
+    if let Some(text) = node.get("text").and_then(Value::as_str) {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.push_str(text);
+    }
+    if let Some(content) = node.get("content").and_then(Value::as_array) {
+        for child in content {
+            collect_text(child, out);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -110,5 +140,24 @@ mod tests {
     fn empty_doc_is_ok() {
         assert!(extract_doc_references("").unwrap().entities.is_empty());
         assert!(extract_doc_references("   ").unwrap().dates.is_empty());
+    }
+
+    #[test]
+    fn collects_plain_text_across_blocks() {
+        let doc = r#"{"type":"doc","content":[
+            {"type":"paragraph","content":[
+                {"type":"text","text":"Hello"},
+                {"type":"mention","attrs":{"id":"e1","structureType":"Note"}},
+                {"type":"text","text":"world"}
+            ]},
+            {"type":"paragraph","content":[{"type":"text","text":"second"}]}
+        ]}"#;
+        assert_eq!(extract_plain_text(doc).unwrap(), "Hello world second");
+    }
+
+    #[test]
+    fn empty_doc_yields_empty_text() {
+        assert_eq!(extract_plain_text("").unwrap(), "");
+        assert_eq!(extract_plain_text("   ").unwrap(), "");
     }
 }

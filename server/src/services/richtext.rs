@@ -2,7 +2,7 @@ use sqlx::SqlitePool;
 use tonic::{Request, Response, Status};
 
 use crate::error::AppError;
-use crate::links::extract_doc_references;
+use crate::links::{extract_doc_references, extract_plain_text};
 use crate::proto::{
     rich_text_service_server::RichTextService as RichTextServiceTrait, RichText, RichTextRef,
 };
@@ -164,6 +164,44 @@ impl RichTextServiceTrait for RichTextService {
             .await
             .map_err(AppError::from)?;
         }
+
+        // 5. Sync the FTS `body` as the entity-scoped concatenation of all its docs'
+        //    plain text (mirrors the referenced_dates union above). Preserve `name`,
+        //    which is owned by EntityService; delete-then-insert keeps one row per entity.
+        let mut fts_body = String::new();
+        for d in &all_docs {
+            if let Ok(text) = extract_plain_text(d) {
+                if text.is_empty() {
+                    continue;
+                }
+                if !fts_body.is_empty() {
+                    fts_body.push(' ');
+                }
+                fts_body.push_str(&text);
+            }
+        }
+
+        // Runtime (non-macro) queries: sqlx's compile-time introspection chokes on
+        // FTS5 virtual tables, so all `entity_fts` access is unchecked.
+        let name: String = sqlx::query_scalar("SELECT name FROM entity_fts WHERE entity_id = ?")
+            .bind(&entity_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(AppError::from)?
+            .unwrap_or_default();
+
+        sqlx::query("DELETE FROM entity_fts WHERE entity_id = ?")
+            .bind(&entity_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        sqlx::query("INSERT INTO entity_fts (entity_id, name, body) VALUES (?, ?, ?)")
+            .bind(&entity_id)
+            .bind(&name)
+            .bind(&fts_body)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
 

@@ -1,7 +1,7 @@
 // Knowledge operations the MCP tools delegate to. Everything goes through the
 // tonic core: agents author markdown, the server derives the link graph.
 import { Code, ConnectError } from '@connectrpc/connect'
-import { entityClient, richTextClient } from './calciferClient.js'
+import { entityClient, richTextClient, searchClient } from './calciferClient.js'
 import { toTipTap } from './markdown/parse.js'
 import { fromTipTap } from './markdown/serialize.js'
 import type { TTNode } from './markdown/types.js'
@@ -70,11 +70,12 @@ export async function getNote(name: string): Promise<string> {
 }
 
 export async function searchNotes(query: string, limit = 10): Promise<string> {
-  const res = await entityClient.list({ structureType: '' })
-  const q = query.toLowerCase()
-  const hits = res.entities.filter((e) => e.name.toLowerCase().includes(q)).slice(0, limit)
-  if (hits.length === 0) return `No matches for "${query}".`
-  return hits.map((e) => `- [${e.structureType}] ${e.name}`).join('\n')
+  // Real full-text search (FTS5) over note names + bodies, ranked server-side.
+  const res = await searchClient.search({ query, limit })
+  if (res.hits.length === 0) return `No matches for "${query}".`
+  return res.hits
+    .map((h) => `- [${h.entity!.structureType}] ${h.entity!.name}: ${h.snippet}`)
+    .join('\n')
 }
 
 export async function getBacklinks(name: string): Promise<string> {

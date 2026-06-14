@@ -11,8 +11,10 @@ mod watch;
 
 use crate::proto::entity_service_server::EntityServiceServer;
 use crate::proto::rich_text_service_server::RichTextServiceServer;
+use crate::proto::search_service_server::SearchServiceServer;
 use crate::services::entity::EntityService;
 use crate::services::richtext::RichTextService;
+use crate::services::search::SearchService;
 use crate::watch::WatchHub;
 
 #[tokio::main]
@@ -37,7 +39,10 @@ async fn main() -> anyhow::Result<()> {
             pool.clone(),
             hub,
         )))
-        .add_service(RichTextServiceServer::new(RichTextService::new(pool)))
+        .add_service(RichTextServiceServer::new(RichTextService::new(
+            pool.clone(),
+        )))
+        .add_service(SearchServiceServer::new(SearchService::new(pool)))
         .serve(addr)
         .await?;
 

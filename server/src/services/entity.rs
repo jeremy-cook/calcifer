@@ -42,6 +42,7 @@ impl EntityService {
         self.replace_links(&mut tx, &entity.id, &entity.links).await?;
         self.replace_referenced_dates(&mut tx, &entity.id, &entity.referenced_dates)
             .await?;
+        fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
         tx.commit().await?;
         self.load_entity(&entity.id).await
     }
@@ -67,75 +68,7 @@ impl EntityService {
     /// Hydrate a full Entity (metadata + properties + links + referenced_dates).
     /// Shared by Get / Create / Update / List so the read shape is defined once.
     async fn load_entity(&self, id: &str) -> Result<Entity, AppError> {
-        let row = sqlx::query!(
-            r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
-                      created_at AS "created_at!", updated_at AS "updated_at!"
-               FROM entities WHERE id = ?"#,
-            id
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("entity {}", id)))?;
-
-        let prop_rows = sqlx::query!(
-            r#"SELECT property_id AS "property_id!", value_blob AS "value_blob!"
-               FROM properties WHERE entity_id = ?"#,
-            id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let properties = prop_rows
-            .into_iter()
-            .map(|r| {
-                let value: PropertyValue = prost::Message::decode(&*r.value_blob)?;
-                Ok::<_, AppError>(Property {
-                    id: r.property_id,
-                    value: Some(value),
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let link_rows = sqlx::query!(
-            r#"SELECT link_id AS "link_id!", target_id AS "target_id!",
-                      target_structure AS "target_structure!",
-                      source_property_id AS "source_property_id!", created_at AS "created_at!"
-               FROM links WHERE entity_id = ?"#,
-            id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        let links = link_rows
-            .into_iter()
-            .map(|r| LinkRef {
-                id: r.link_id,
-                target: Some(EntityRef {
-                    id: r.target_id,
-                    structure_type: r.target_structure,
-                }),
-                source_property_id: r.source_property_id,
-                created_at: Some(ts_from_millis(r.created_at)),
-            })
-            .collect();
-
-        let referenced_dates = sqlx::query_scalar!(
-            r#"SELECT iso_date AS "iso_date!" FROM referenced_dates WHERE entity_id = ?"#,
-            id
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(Entity {
-            id: row.id,
-            structure_type: row.structure_type,
-            name: row.name,
-            properties,
-            links,
-            referenced_dates,
-            created_at: Some(ts_from_millis(row.created_at)),
-            updated_at: Some(ts_from_millis(row.updated_at)),
-        })
+        load_entity(&self.pool, id).await
     }
 
     /// Replace an entity's properties wholesale inside a transaction.
@@ -233,6 +166,123 @@ impl EntityService {
         }
         Ok(())
     }
+}
+
+/// Hydrate a full Entity (metadata + properties + links + referenced_dates) from
+/// the pool. The single read-shape definition, shared by EntityService and
+/// SearchService so both services return identical entities.
+pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, AppError> {
+    let row = sqlx::query!(
+        r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
+                  created_at AS "created_at!", updated_at AS "updated_at!"
+           FROM entities WHERE id = ?"#,
+        id
+    )
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("entity {}", id)))?;
+
+    let prop_rows = sqlx::query!(
+        r#"SELECT property_id AS "property_id!", value_blob AS "value_blob!"
+           FROM properties WHERE entity_id = ?"#,
+        id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let properties = prop_rows
+        .into_iter()
+        .map(|r| {
+            let value: PropertyValue = prost::Message::decode(&*r.value_blob)?;
+            Ok::<_, AppError>(Property {
+                id: r.property_id,
+                value: Some(value),
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    let link_rows = sqlx::query!(
+        r#"SELECT link_id AS "link_id!", target_id AS "target_id!",
+                  target_structure AS "target_structure!",
+                  source_property_id AS "source_property_id!", created_at AS "created_at!"
+           FROM links WHERE entity_id = ?"#,
+        id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let links = link_rows
+        .into_iter()
+        .map(|r| LinkRef {
+            id: r.link_id,
+            target: Some(EntityRef {
+                id: r.target_id,
+                structure_type: r.target_structure,
+            }),
+            source_property_id: r.source_property_id,
+            created_at: Some(ts_from_millis(r.created_at)),
+        })
+        .collect();
+
+    let referenced_dates = sqlx::query_scalar!(
+        r#"SELECT iso_date AS "iso_date!" FROM referenced_dates WHERE entity_id = ?"#,
+        id
+    )
+    .fetch_all(pool)
+    .await?;
+
+    Ok(Entity {
+        id: row.id,
+        structure_type: row.structure_type,
+        name: row.name,
+        properties,
+        links,
+        referenced_dates,
+        created_at: Some(ts_from_millis(row.created_at)),
+        updated_at: Some(ts_from_millis(row.updated_at)),
+    })
+}
+
+/// Sync the FTS `name` column for an entity, preserving the existing `body`
+/// (owned by `RichTextService.Put`). Delete-then-insert by entity_id so there is
+/// always exactly one `entity_fts` row per entity. Call inside the same tx as the
+/// entities-table write.
+pub(crate) async fn fts_upsert_name(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity_id: &str,
+    name: &str,
+) -> Result<(), AppError> {
+    // Runtime (non-macro) queries: sqlx's compile-time introspection chokes on
+    // FTS5 virtual tables, so all `entity_fts` access is unchecked.
+    let body: String = sqlx::query_scalar("SELECT body FROM entity_fts WHERE entity_id = ?")
+        .bind(entity_id)
+        .fetch_optional(&mut **tx)
+        .await?
+        .unwrap_or_default();
+
+    sqlx::query("DELETE FROM entity_fts WHERE entity_id = ?")
+        .bind(entity_id)
+        .execute(&mut **tx)
+        .await?;
+    sqlx::query("INSERT INTO entity_fts (entity_id, name, body) VALUES (?, ?, ?)")
+        .bind(entity_id)
+        .bind(name)
+        .bind(body)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
+}
+
+/// Remove an entity's FTS row. Call inside the same tx as the entity delete.
+pub(crate) async fn fts_delete(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity_id: &str,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM entity_fts WHERE entity_id = ?")
+        .bind(entity_id)
+        .execute(&mut **tx)
+        .await?;
+    Ok(())
 }
 
 /// Convert unix-millis to a protobuf Timestamp.
@@ -347,6 +397,10 @@ impl EntityServiceTrait for EntityService {
             .map_err(Status::from)?;
         // links / referenced_dates intentionally untouched here — see replace_links docs.
 
+        fts_upsert_name(&mut tx, &entity.id, &entity.name)
+            .await
+            .map_err(Status::from)?;
+
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(&entity.id).await.map_err(Status::from)?;
@@ -379,6 +433,9 @@ impl EntityServiceTrait for EntityService {
             .execute(&mut *tx)
             .await
             .map_err(AppError::from)?;
+
+        // entity_fts has no FK reference — purge explicitly (mirrors richtext above).
+        fts_delete(&mut tx, &id).await.map_err(Status::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
         self.hub.publish(EntityEvent {
