@@ -11,9 +11,13 @@ const server = new McpServer({ name: 'calcifer', version: '0.0.0' })
 
 server.tool(
   'search_notes',
-  'Search existing notes and tags by name. Use this before creating, to find and reuse existing notes instead of making duplicates.',
-  { query: z.string(), limit: z.number().int().positive().optional() },
-  async ({ query, limit }) => text(await ops.searchNotes(query, limit)),
+  'Search existing notes and tags. Use this before creating, to find and reuse existing notes instead of making duplicates. `mode` picks the ranking: "lexical" (keyword/FTS5), "semantic" (meaning via embeddings), or "hybrid" (both, fused — the default and best for natural-language queries).',
+  {
+    query: z.string(),
+    limit: z.number().int().positive().optional(),
+    mode: z.enum(['lexical', 'semantic', 'hybrid']).optional(),
+  },
+  async ({ query, limit, mode }) => text(await ops.searchNotes(query, limit, mode)),
 )
 
 server.tool(

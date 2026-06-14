@@ -6,5 +6,7 @@ server/calcifer.db
 server/calcifer.db-shm
 server/calcifer.db-wal
 server/.env
+# Local fastembed model cache (~90 MB ONNX model, downloaded on first run).
+server/.fastembed_cache/
 .claude/launch.json
 mcp-server/src/gen/

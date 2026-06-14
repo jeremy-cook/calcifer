@@ -27,12 +27,22 @@ service RichTextService {
   rpc Put(RichText) returns (RichText);
 }
 
-// Lexical (full-text) search over note names + bodies, backed by SQLite FTS5.
+// Search over note names + bodies. `Search` is lexical (SQLite FTS5); `Retrieve`
+// is semantic — embeds the query and runs vector KNN over chunk embeddings
+// (sqlite-vec), optionally fused with FTS5 via reciprocal-rank fusion.
 service SearchService {
   rpc Search(SearchRequest) returns (SearchResponse);
+  // Semantic retrieval. With hybrid=true, fuses vector KNN + FTS5 via RRF;
+  // otherwise pure vector KNN. Falls back to lexical when embeddings are off.
+  rpc Retrieve(RetrieveRequest) returns (SearchResponse);
 }
 
 message SearchRequest  { string query = 1; uint32 limit = 2; }
+message RetrieveRequest {
+  string query = 1;
+  uint32 k = 2;       // number of hits to return (0 => server default)
+  bool hybrid = 3;    // true: RRF-fuse vector + FTS5; false: pure vector KNN
+}
 message SearchResponse { repeated SearchHit hits = 1; }
 message SearchHit {
   Entity entity = 1;

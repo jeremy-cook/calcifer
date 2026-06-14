@@ -3,6 +3,7 @@ use sqlx::SqlitePool;
 use tokio_stream::wrappers::BroadcastStream;
 use tonic::{Request, Response, Status};
 
+use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
@@ -16,11 +17,12 @@ use crate::watch::WatchHub;
 pub struct EntityService {
     pool: SqlitePool,
     hub: WatchHub,
+    embed: EmbedHandle,
 }
 
 impl EntityService {
-    pub fn new(pool: SqlitePool, hub: WatchHub) -> Self {
-        Self { pool, hub }
+    pub fn new(pool: SqlitePool, hub: WatchHub, embed: EmbedHandle) -> Self {
+        Self { pool, hub, embed }
     }
 
     /// Insert a brand-new entity (row + properties + links + dates) in one tx and
@@ -47,6 +49,9 @@ impl EntityService {
             .await?;
         fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
         tx.commit().await?;
+        // New entity: queue for embedding (no-op until it has content, but keeps
+        // the path uniform — ResolveByName-create / CreateDailyNote flow here too).
+        self.embed.enqueue(&entity.id);
         self.load_entity(&entity.id).await
     }
 
@@ -514,6 +519,26 @@ impl EntityServiceTrait for EntityService {
 
         // entity_fts has no FK reference — purge explicitly (mirrors richtext above).
         fts_delete(&mut tx, &id).await.map_err(Status::from)?;
+
+        // Semantic rows (chunks + their vec0 embeddings) have no FK either — purge
+        // explicitly so KNN never returns a tombstone. entity_vec keys on chunk ids.
+        let chunk_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM chunks WHERE entity_id = ?")
+            .bind(&id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        for cid in &chunk_ids {
+            sqlx::query("DELETE FROM entity_vec WHERE id = ?")
+                .bind(cid)
+                .execute(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+        }
+        sqlx::query("DELETE FROM chunks WHERE entity_id = ?")
+            .bind(&id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
         self.hub.publish(EntityEvent {

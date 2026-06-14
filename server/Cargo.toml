@@ -21,6 +21,13 @@ uuid = { version = "1", features = ["v4"] }
 tonic-web = "0.12"
 tower-http = { version = "0.6", features = ["cors"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
+# Semantic retrieval (M8): sqlite-vec for vec0 KNN, fastembed for in-process
+# local ONNX embeddings (downloads all-MiniLM-L6-v2 on first use, 384-dim).
+# libsqlite3-sys is pinned to sqlx-sqlite 0.9's version so we can register the
+# sqlite-vec extension via sqlite3_auto_extension before any pool connects.
+sqlite-vec = "0.1"
+libsqlite3-sys = "0.37"
+fastembed = "5"
 
 [build-dependencies]
 tonic-build = "0.12"

@@ -1,6 +1,7 @@
 use sqlx::SqlitePool;
 use tonic::{Request, Response, Status};
 
+use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::links::{extract_doc_references, extract_plain_text};
 use crate::proto::{
@@ -10,11 +11,12 @@ use crate::services::entity::ts_from_millis;
 
 pub struct RichTextService {
     pool: SqlitePool,
+    embed: EmbedHandle,
 }
 
 impl RichTextService {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(pool: SqlitePool, embed: EmbedHandle) -> Self {
+        Self { pool, embed }
     }
 }
 
@@ -104,7 +106,13 @@ impl RichTextServiceTrait for RichTextService {
         for m in &refs.entities {
             // Drop mentions whose target has no entities row. Safe because the server is
             // authoritative — unlike the FE, where such a chip is a tombstone, not a deletion.
-            let exists = sqlx::query_scalar!(r#"SELECT 1 AS "x!" FROM entities WHERE id = ?"#, m.id)
+            // Runtime (non-macro) query: once the `entity_vec` vec0 virtual table
+            // entered the schema, sqlx's compile-time introspection began
+            // mistyping this `SELECT 1` literal as NULL (the same virtual-table
+            // hazard that forces unchecked access for entity_fts/entity_vec), so
+            // this existence check uses the unchecked API.
+            let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM entities WHERE id = ?")
+                .bind(&m.id)
                 .fetch_optional(&mut *tx)
                 .await
                 .map_err(AppError::from)?
@@ -204,6 +212,9 @@ impl RichTextServiceTrait for RichTextService {
             .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
+
+        // Content changed: queue the entity for (re)embedding off the hot-path.
+        self.embed.enqueue(&entity_id);
 
         Ok(Response::new(RichText {
             r#ref: body.r#ref,

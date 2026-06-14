@@ -70,12 +70,26 @@ export async function getNote(name: string): Promise<string> {
   return `# ${entityName}\n\n${md || '(empty)'}\n\n---\nLinked from: ${back.join(', ') || '(nothing)'}`
 }
 
-export async function searchNotes(query: string, limit = 10): Promise<string> {
-  // Real full-text search (FTS5) over note names + bodies, ranked server-side.
-  const res = await searchClient.search({ query, limit })
+export type SearchMode = 'lexical' | 'semantic' | 'hybrid'
+
+export async function searchNotes(
+  query: string,
+  limit = 10,
+  mode: SearchMode = 'hybrid',
+): Promise<string> {
+  // Route by mode: `lexical` hits FTS5 (Search); `semantic`/`hybrid` hit the
+  // embedding-backed Retrieve (pure vector vs RRF-fused with FTS5). Retrieve
+  // degrades to lexical server-side when embeddings are disabled.
+  const res =
+    mode === 'lexical'
+      ? await searchClient.search({ query, limit })
+      : await searchClient.retrieve({ query, k: limit, hybrid: mode === 'hybrid' })
   if (res.hits.length === 0) return `No matches for "${query}".`
   return res.hits
-    .map((h) => `- [${h.entity!.structureType}] ${h.entity!.name}: ${h.snippet}`)
+    .map((h) => {
+      const detail = h.snippet || `(score ${h.score.toFixed(3)})`
+      return `- [${h.entity!.structureType}] ${h.entity!.name}: ${detail}`
+    })
     .join('\n')
 }
 

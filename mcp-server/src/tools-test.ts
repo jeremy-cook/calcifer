@@ -45,7 +45,35 @@ async function main(): Promise<void> {
   const dailyBack = await ops.getBacklinks('Transformers')
   assert(/June 13, 2026/.test(dailyBack), 'daily note links back to Transformers under its long-date name')
 
+  // Semantic retrieval (M8): two thematically related notes with NO shared
+  // keywords. A paraphrased query that overlaps neither should surface both via
+  // semantic/hybrid search where lexical (FTS5) finds nothing.
+  await ops.createNote('Sailboat Maintenance', 'Trimming the canvas and patching the hull keeps a vessel gliding across open water.')
+  await ops.createNote('Aircraft Servicing', 'Mechanics inspect the fuselage and tune the engines so a plane stays aloft through the sky.')
+  const semQuery = 'keeping a craft moving through its medium'
+
+  // Embedding runs on an async background worker, so poll until both notes are
+  // retrievable (or give up after a few seconds) before asserting.
+  for (let i = 0; i < 30; i++) {
+    const s = await ops.searchNotes(semQuery, 5, 'semantic')
+    if (/Sailboat/.test(s) && /Aircraft/.test(s)) break
+    await new Promise((r) => setTimeout(r, 500))
+  }
+
+  const lexical = await ops.searchNotes(semQuery, 5, 'lexical')
+  console.log('search(lexical):', lexical.replace(/\n/g, ' '))
+  assert(!/Sailboat|Aircraft/.test(lexical), 'lexical search misses keyword-free paraphrase')
+
+  const semantic = await ops.searchNotes(semQuery, 5, 'semantic')
+  console.log('search(semantic):', semantic.replace(/\n/g, ' '))
+  assert(/Sailboat/.test(semantic) && /Aircraft/.test(semantic), 'semantic retrieval surfaces both related notes')
+
+  const hybrid = await ops.searchNotes(semQuery, 5, 'hybrid')
+  console.log('search(hybrid):', hybrid.replace(/\n/g, ' '))
+  assert(/Sailboat/.test(hybrid) || /Aircraft/.test(hybrid), 'hybrid retrieval surfaces related notes')
+
   console.log('Unit D OK — backlinks + daily-note ops work end-to-end')
+  console.log('Unit B OK — semantic/hybrid retrieval beats lexical on paraphrase')
 }
 
 main().catch((e) => {
