@@ -66,35 +66,51 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
     },
 
     command: ({ editor, range, props }) => {
-      let item: { id: string; label: string; structureType: string }
-      if (props.isCreate) {
-        const created = getOrCreateEntityForMention(props.structureType as CreatableStructureType, props.label)
-        item = { id: created.id, label: created.name, structureType: created.structureType }
-      } else {
-        item = { id: props.id, label: props.label, structureType: props.structureType }
-      }
-
-      editor
-        .chain()
-        .focus()
-        .deleteRange(range)
-        .insertContent([
-          {
-            type: config.char === '#' ? 'hashtag' : 'mention',
-            attrs: {
-              id: item.id,
-              label: item.label,
-              structureType: item.structureType,
-              char: config.char,
-            },
-          },
-          { type: 'text', text: ' ' },
-        ])
-        .run()
+      void resolveMentionItem(props).then((item) => insertMention(editor, range, config.char, item))
     },
 
     render: createSuggestionPopup(MentionMenu),
   }
+}
+
+interface MentionItem {
+  id: string
+  label: string
+  structureType: string
+}
+
+async function resolveMentionItem(props: EntitySuggestionItem): Promise<MentionItem> {
+  if (props.isCreate) {
+    // Server-authoritative get-or-create: browser and MCP agent resolve to one id.
+    const created = await getOrCreateEntityForMention(props.structureType as CreatableStructureType, props.label)
+    return { id: created.id, label: created.name, structureType: created.structureType }
+  }
+  return { id: props.id, label: props.label, structureType: props.structureType }
+}
+
+function insertMention(
+  editor: Parameters<NonNullable<SuggestionOptions<EntitySuggestionItem>['command']>>[0]['editor'],
+  range: Parameters<NonNullable<SuggestionOptions<EntitySuggestionItem>['command']>>[0]['range'],
+  char: '@' | '#',
+  item: MentionItem,
+) {
+  editor
+    .chain()
+    .focus()
+    .deleteRange(range)
+    .insertContent([
+      {
+        type: char === '#' ? 'hashtag' : 'mention',
+        attrs: {
+          id: item.id,
+          label: item.label,
+          structureType: item.structureType,
+          char,
+        },
+      },
+      { type: 'text', text: ' ' },
+    ])
+    .run()
 }
 
 function resolveCreateStructureType(narrowedStructureType: StructureType | null): StructureType | undefined {

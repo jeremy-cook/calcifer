@@ -10,7 +10,7 @@ import {
   type Entity,
   type Property,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { STRUCTURES, hasUniqueNames, type StructureType } from '~/model/structures'
+import { STRUCTURES, type StructureType } from '~/model/structures'
 import { formatLongDate } from '~/model/dates'
 import { entityClient, qk, queryClient } from '~/model/api'
 
@@ -192,23 +192,15 @@ export function getEntitiesSnapshot(): Entity[] {
   return queryClient.getQueryData<Entity[]>(qk.entities()) ?? []
 }
 
-export function getOrCreateEntityForMention(
+export async function getOrCreateEntityForMention(
   structureType: CreatableStructureType,
   name: string,
-): { id: string; name: string; structureType: string } {
-  if (hasUniqueNames(structureType)) {
-    const lower = name.toLowerCase()
-    const existing = getEntitiesSnapshot().find(
-      (e) => e.structureType === structureType && e.name.toLowerCase() === lower,
-    )
-    if (existing) return { id: existing.id, name: existing.name, structureType: existing.structureType }
-  }
-  // Fire-and-forget create; the client-minted id makes the chip valid immediately.
-  const entity = buildEntityMessage(structureType, name)
-  void entityClient
-    .create({ entity })
-    .then(onEntityWritten)
-    .catch((err) => console.error('mention create failed', err))
+): Promise<{ id: string; name: string; structureType: string }> {
+  // Server-authoritative get-or-create so the browser and the MCP agent share
+  // one identity path. The server dedupes by (structureType, name).
+  const { entity } = await entityClient.resolveByName({ structureType, name, createIfMissing: true })
+  if (!entity) throw new Error(`resolveByName returned no entity for ${structureType} "${name}"`)
+  onEntityWritten(entity)
   return { id: entity.id, name: entity.name, structureType: entity.structureType }
 }
 

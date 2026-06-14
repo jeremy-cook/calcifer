@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { TrashIcon } from '@phosphor-icons/react'
 import {
@@ -61,12 +62,10 @@ interface EntityHeaderProps {
 }
 
 function EntityHeader({ entity }: EntityHeaderProps) {
-  const rename = useRenameEntity()
   const deleteEntity = useDeleteEntity()
   const navigate = useNavigate()
 
   const structureName = STRUCTURES[entity.structureType as StructureType]?.name ?? entity.structureType
-  const isDefaultName = entity.name === `Untitled ${structureName}`
   const nameEditable = isNameEditable(entity.structureType)
 
   const handleDelete = () => {
@@ -76,13 +75,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
 
   const renderTitle = () =>
     nameEditable ? (
-      <Input
-        value={entity.name}
-        autoFocus={isDefaultName}
-        onChange={(e) => rename(entity, e.target.value)}
-        className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
-        aria-label="Entity title"
-      />
+      <EntityTitleInput entity={entity} structureName={structureName} />
     ) : (
       <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.name}</h1>
     )
@@ -110,6 +103,45 @@ function EntityHeader({ entity }: EntityHeaderProps) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+interface EntityTitleInputProps {
+  entity: Entity
+  structureName: string
+}
+
+// Local input state seeded from entity.name so the optimistic rename round-trip
+// (onMutate's async `await cancelQueries` -> setQueryData) can never visibly
+// revert the field mid-typing: keystrokes update local state synchronously, and
+// the effect below only re-syncs when entity.name actually changes.
+function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
+  const rename = useRenameEntity()
+  const [value, setValue] = useState(entity.name)
+
+  const isDefaultName = entity.name === `Untitled ${structureName}`
+
+  // Sync the canonical name down only when it actually differs (an external
+  // rename, e.g. another client). Our own keystrokes already set `value` first
+  // and the optimistic cache update makes entity.name match, so this never fires
+  // for self-edits and the field cannot revert mid-typing.
+  useEffect(() => {
+    setValue(entity.name)
+  }, [entity.name])
+
+  const handleChange = (next: string) => {
+    setValue(next)
+    rename(entity, next)
+  }
+
+  return (
+    <Input
+      value={value}
+      autoFocus={isDefaultName}
+      onChange={(e) => handleChange(e.target.value)}
+      className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
+      aria-label="Entity title"
+    />
   )
 }
 
