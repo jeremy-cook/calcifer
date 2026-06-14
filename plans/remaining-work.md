@@ -20,6 +20,7 @@ Branch `data-model-graph-fixes`. Committed & verified:
 | `3585531` | **M7 (Unit A)** FTS5 lexical search behind `SearchService.Search`; MCP `search_notes` re-pointed |
 | `4824a53` | **Unit E** FE polish: title-rename flash fixed; mention create routed through `ResolveByName` |
 | `a9ebbc1` | **M6 (Unit D)** `ListBacklinks` + `CreateDailyNote` RPCs + `date_key`; journal MCP tools |
+| `8391594` | **M8 (Unit B)** semantic retrieval: sqlite-vec + local fastembed worker; hybrid `Retrieve` (RRF) |
 
 **Works end-to-end:** an agent (or `mcp-server/src/tools-test.ts`) creates a note with
 `[[wikilinks]]`/`#tags`; the server derives links; the browser shows it live.
@@ -79,7 +80,7 @@ MCP `search_notes` tool to it (currently a `List`+substring stub in `tools.ts`).
 - **mcp:** `tools.ts::searchNotes` calls `searchClient.search(...)`; regen mcp stubs.
 - **Verify:** seed notes; `grpcurl Search {"query":"..."}` ranked hits; `pnpm test:tools` search still passes.
 
-### Unit B — M8: Semantic retrieval (sqlite-vec + local embedder)   ·  size: L  ·  deps: A (for hybrid)  ·  parallel with: C, D, E, F
+### Unit B — M8: Semantic retrieval (sqlite-vec + local embedder)   ·  ✅ DONE (`8391594`)
 Vector embeddings of chunked content, fused with FTS5 into a hybrid `Retrieve`. Default to a
 **local** in-process embedding model (no API key, nothing leaves the machine) behind an `Embedder`
 trait; pin the vector dimension in the migration.
@@ -152,4 +153,4 @@ knowledge-ops logic. Only when the user wants it.
   `Embedder` trait, the worker, `entity_vec`) can be built independently and wired to hybrid last.
 - **H** is last (needs B + an LLM provider decision).
 
-Recommended first wave for separate contexts: **A (search)**, **D (RPC gaps + journal)**, **E (FE polish)** — fully independent, high value, small/medium. **✅ All three landed** (A→D sequenced for the shared `services.proto`/`tools.ts`; E ran concurrently). Next: **B** (semantic retrieval, now unblocked by A for hybrid), then **C**/**F** as desired, **G** as a user action, **H** last.
+Recommended first wave for separate contexts: **A (search)**, **D (RPC gaps + journal)**, **E (FE polish)** — fully independent, high value, small/medium. **✅ All three landed** (A→D sequenced for the shared `services.proto`/`tools.ts`; E ran concurrently). **✅ B (semantic retrieval) landed** on top of A. Remaining: **C** (provenance) / **F** (workspace consolidation) as desired, **G** (register MCP — a user action), **H** (in-app AI panel — needs an LLM provider decision) last.
