@@ -17,6 +17,9 @@ Branch `data-model-graph-fixes`. Committed & verified:
 | `833e9c9` | **M3** `EntityService.ResolveByName` (get-or-create by name) |
 | `75b522d` | **M4** markdown↔TipTap converter (`mcp-server/src/markdown/`) |
 | `ba584a7` | **M5** MCP server + 7 knowledge tools (`mcp-server/src/{tools,server}.ts`) |
+| `3585531` | **M7 (Unit A)** FTS5 lexical search behind `SearchService.Search`; MCP `search_notes` re-pointed |
+| `4824a53` | **Unit E** FE polish: title-rename flash fixed; mention create routed through `ResolveByName` |
+| `a9ebbc1` | **M6 (Unit D)** `ListBacklinks` + `CreateDailyNote` RPCs + `date_key`; journal MCP tools |
 
 **Works end-to-end:** an agent (or `mcp-server/src/tools-test.ts`) creates a note with
 `[[wikilinks]]`/`#tags`; the server derives links; the browser shows it live.
@@ -60,7 +63,7 @@ cd mcp-server && pnpm test:tools
 
 Each is self-contained. **Dependencies** and **parallel-safe-with** noted. Sizes rough.
 
-### Unit A — M7: Lexical search (FTS5)   ·  size: M  ·  deps: none  ·  parallel with: C, D, E, F
+### Unit A — M7: Lexical search (FTS5)   ·  ✅ DONE (`3585531`)
 Real full-text search over note names+bodies behind a `SearchService.Search` RPC; re-point the
 MCP `search_notes` tool to it (currently a `List`+substring stub in `tools.ts`).
 
@@ -98,7 +101,7 @@ structure + provenance properties (`authored_by` human|machine, `agent_id`, `sou
 `StructureService.List` RPC makes structures server-authoritative; FE shows a provenance badge.
 Skip unless the user re-prioritizes it.
 
-### Unit D — Server RPC gaps + journal tools   ·  size: S  ·  deps: none  ·  parallel with: A, B, C, E, F
+### Unit D — Server RPC gaps + journal tools   ·  ✅ DONE (`a9ebbc1`)
 Two small RPCs + the MCP tools that need them.
 - **`EntityService.ListBacklinks(EntityRef) returns (ListEntitiesResponse)`** — one SQL query
   (`SELECT entity_id FROM links WHERE target_id=?`, then `load_entity`). Replace the client-side
@@ -110,7 +113,7 @@ Two small RPCs + the MCP tools that need them.
   `one_daily_note_per_day` index is inert until then) — map a unique-violation → `Status::already_exists`.
 - **Verify:** grpcurl both RPCs; add cases to `tools-test.ts`.
 
-### Unit E — FE polish   ·  size: S  ·  deps: none  ·  parallel with: A, B, C, D, F
+### Unit E — FE polish   ·  ✅ DONE (`4824a53`)
 - **Title-rename flash:** `calcifer/src/routes/e.$id.tsx` `EntityHeader` — the optimistic
   `useRenameEntity` (`onMutate` awaits `cancelQueries`) can briefly revert the controlled input
   while typing. Fix with local input state seeded from `entity.name` (sync via `useEffect`), firing
@@ -149,4 +152,4 @@ knowledge-ops logic. Only when the user wants it.
   `Embedder` trait, the worker, `entity_vec`) can be built independently and wired to hybrid last.
 - **H** is last (needs B + an LLM provider decision).
 
-Recommended first wave for separate contexts: **A (search)**, **D (RPC gaps + journal)**, **E (FE polish)** — fully independent, high value, small/medium.
+Recommended first wave for separate contexts: **A (search)**, **D (RPC gaps + journal)**, **E (FE polish)** — fully independent, high value, small/medium. **✅ All three landed** (A→D sequenced for the shared `services.proto`/`tools.ts`; E ran concurrently). Next: **B** (semantic retrieval, now unblocked by A for hybrid), then **C**/**F** as desired, **G** as a user action, **H** last.
