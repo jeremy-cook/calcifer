@@ -3,6 +3,7 @@ use tonic::{Request, Response, Status};
 
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
+use crate::link_store::replace_scoped_links;
 use crate::links::{extract_doc_references, extract_plain_text};
 use crate::proto::{
     rich_text_service_server::RichTextService as RichTextServiceTrait, RichText, RichTextRef,
@@ -80,65 +81,9 @@ impl RichTextServiceTrait for RichTextService {
         let refs = extract_doc_references(&body.doc).map_err(Status::from)?;
 
         // 3. Scoped link replace for THIS property, preserving link_id/created_at per target.
-        let existing = sqlx::query!(
-            "SELECT link_id, target_id, created_at FROM links
-             WHERE entity_id = ? AND source_property_id = ?",
-            entity_id,
-            property_id
-        )
-        .fetch_all(&mut *tx)
-        .await
-        .map_err(AppError::from)?;
-        let prev: std::collections::HashMap<String, (String, i64)> = existing
-            .into_iter()
-            .map(|row| (row.target_id, (row.link_id, row.created_at)))
-            .collect();
-
-        sqlx::query!(
-            "DELETE FROM links WHERE entity_id = ? AND source_property_id = ?",
-            entity_id,
-            property_id
-        )
-        .execute(&mut *tx)
-        .await
-        .map_err(AppError::from)?;
-
-        for m in &refs.entities {
-            // Drop mentions whose target has no entities row. Safe because the server is
-            // authoritative — unlike the FE, where such a chip is a tombstone, not a deletion.
-            // Runtime (non-macro) query: once the `entity_vec` vec0 virtual table
-            // entered the schema, sqlx's compile-time introspection began
-            // mistyping this `SELECT 1` literal as NULL (the same virtual-table
-            // hazard that forces unchecked access for entity_fts/entity_vec), so
-            // this existence check uses the unchecked API.
-            let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM entities WHERE id = ?")
-                .bind(&m.id)
-                .fetch_optional(&mut *tx)
-                .await
-                .map_err(AppError::from)?
-                .is_some();
-            if !exists {
-                continue;
-            }
-
-            let (link_id, created_at) = match prev.get(&m.id) {
-                Some((lid, ts)) => (lid.clone(), *ts),
-                None => (uuid::Uuid::new_v4().to_string(), now),
-            };
-            sqlx::query!(
-                "INSERT INTO links (entity_id, link_id, target_id, target_structure, source_property_id, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?)",
-                entity_id,
-                link_id,
-                m.id,
-                m.structure_type,
-                property_id,
-                created_at,
-            )
-            .execute(&mut *tx)
+        replace_scoped_links(&mut tx, &entity_id, &property_id, &refs.entities, now)
             .await
-            .map_err(AppError::from)?;
-        }
+            .map_err(Status::from)?;
 
         // 4. Recompute referenced_dates as the entity-scoped union across all richtext docs.
         let all_docs = sqlx::query_scalar!(

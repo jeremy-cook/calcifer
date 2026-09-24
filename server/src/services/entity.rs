@@ -5,6 +5,7 @@ use tonic::{Request, Response, Status};
 
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
+use crate::link_store::sync_relation_links;
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
     CreateDailyNoteRequest, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
@@ -47,6 +48,7 @@ impl EntityService {
         self.replace_links(&mut tx, &entity.id, &entity.links).await?;
         self.replace_referenced_dates(&mut tx, &entity.id, &entity.referenced_dates)
             .await?;
+        sync_relation_links(&mut tx, entity, now).await?;
         fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
         tx.commit().await?;
         // New entity: queue for embedding (no-op until it has content, but keeps
@@ -112,8 +114,8 @@ impl EntityService {
     /// Update intentionally does NOT call this: richtext-sourced links are owned
     /// by `RichTextService.Put` (scoped by source_property_id, Part 6), so a
     /// metadata-only Update must not wipe an entity's content-derived links.
-    /// Relation-property links (none exist yet) will get per-property scoped
-    /// replacement when that property type lands.
+    /// Relation-property links get their own scoped replacement via
+    /// `sync_relation_links`, called separately by both Create and Update.
     async fn replace_links(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -338,10 +340,10 @@ fn map_unique_violation(err: AppError, msg: &str) -> Status {
 }
 
 /// Build a new Entity for ResolveByName's create path, carrying its structure's
-/// richtext property pointers (mirrors the FE's buildEntityMessage).
+/// richtext property pointers and select defaults (mirrors the FE's buildEntityMessage).
 fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
     let id = uuid::Uuid::new_v4().to_string();
-    let properties = crate::structures::richtext_properties(structure_type)
+    let mut properties: Vec<Property> = crate::structures::richtext_properties(structure_type)
         .iter()
         .map(|pid| Property {
             id: pid.to_string(),
@@ -353,6 +355,14 @@ fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
             }),
         })
         .collect();
+    properties.extend(crate::structures::select_defaults(structure_type).iter().map(
+        |(pid, default)| Property {
+            id: pid.to_string(),
+            value: Some(PropertyValue {
+                value: Some(property_value::Value::Select(default.to_string())),
+            }),
+        },
+    ));
     Entity {
         id,
         structure_type: structure_type.to_string(),
@@ -479,6 +489,10 @@ impl EntityServiceTrait for EntityService {
             .await
             .map_err(Status::from)?;
         // links / referenced_dates intentionally untouched here — see replace_links docs.
+
+        sync_relation_links(&mut tx, &entity, now)
+            .await
+            .map_err(Status::from)?;
 
         fts_upsert_name(&mut tx, &entity.id, &entity.name)
             .await

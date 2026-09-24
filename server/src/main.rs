@@ -4,6 +4,7 @@ use tonic::transport::Server;
 mod db;
 mod embed;
 mod error;
+mod link_store;
 mod links;
 mod proto;
 mod services;
