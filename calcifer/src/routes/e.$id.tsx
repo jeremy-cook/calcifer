@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { TrashIcon } from '@phosphor-icons/react'
 import { create as createMessage } from '@bufbuild/protobuf'
@@ -74,7 +74,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
 
   const renderTitle = () =>
     nameEditable ? (
-      <EntityTitleInput entity={entity} structureName={structureName} />
+      <EntityTitleInput key={entity.id} entity={entity} structureName={structureName} />
     ) : (
       <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.name}</h1>
     )
@@ -110,33 +110,67 @@ interface EntityTitleInputProps {
   structureName: string
 }
 
-// Local input state seeded from entity.name so the optimistic rename round-trip
-// (onMutate's async `await cancelQueries` -> setQueryData) can never visibly
-// revert the field mid-typing: keystrokes update local state synchronously, and
-// the effect below only re-syncs when entity.name actually changes.
+// Renames are debounced so a typing burst sends one Update. While the field is
+// focused, `value` is the source of truth and entity.name is never synced into
+// it: watch-stream echoes of earlier writes can land after a later optimistic
+// update and briefly move entity.name back to an older prefix. Outside of focus,
+// external renames (another client, the MCP agent) are adopted during render.
 function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
   const updateEntity = useUpdateEntity()
   const [value, setValue] = useState(entity.name)
+  const [focused, setFocused] = useState(false)
+  const [syncedName, setSyncedName] = useState(entity.name)
+  const latestEntity = useRef(entity)
+  const pendingName = useRef<string | null>(null)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
-  const isDefaultName = entity.name === `Untitled ${structureName}`
+  if (entity.name !== syncedName) {
+    setSyncedName(entity.name)
+    if (!focused) setValue(entity.name)
+  }
 
-  // Sync the canonical name down only when it actually differs (an external
-  // rename, e.g. another client). Our own keystrokes already set `value` first
-  // and the optimistic cache update makes entity.name match, so this never fires
-  // for self-edits and the field cannot revert mid-typing.
+  // The debounced write must build on the latest entity, not the one captured
+  // when the timer started, or it would undo a concurrent property change.
   useEffect(() => {
-    setValue(entity.name)
-  }, [entity.name])
+    latestEntity.current = entity
+  }, [entity])
+
+  const flush = useCallback(() => {
+    clearTimeout(timer.current)
+    timer.current = undefined
+    const name = pendingName.current
+    if (name === null) return
+    pendingName.current = null
+    updateEntity(withName(latestEntity.current, name))
+  }, [updateEntity])
+
+  // Unmount (including navigation to another entity, via the key in
+  // EntityHeader) must not drop the last characters typed.
+  useEffect(() => flush, [flush])
 
   const handleChange = (next: string) => {
     setValue(next)
-    updateEntity(withName(entity, next))
+    pendingName.current = next
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, RENAME_DEBOUNCE_MS)
   }
+
+  const handleBlur = () => {
+    setFocused(false)
+    // No rename of ours pending: adopt any rename that arrived while focused.
+    if (pendingName.current === null) setValue(entity.name)
+    flush()
+  }
+
+  const isDefaultName = entity.name === `Untitled ${structureName}`
+  const RENAME_DEBOUNCE_MS = 300
 
   return (
     <Input
       value={value}
       autoFocus={isDefaultName}
+      onFocus={() => setFocused(true)}
+      onBlur={handleBlur}
       onChange={(e) => handleChange(e.target.value)}
       className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
       aria-label="Entity title"
