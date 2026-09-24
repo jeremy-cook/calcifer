@@ -11,6 +11,10 @@ service EntityService {
   rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);
   rpc Create(CreateEntityRequest) returns (Entity);
   rpc Update(UpdateEntityRequest) returns (Entity);
+  // Write one property without resending the rest of the entity, so concurrent
+  // edits to different properties don't overwrite each other. Returns the saved
+  // entity. Use Update for renames and multi-field edits.
+  rpc SetProperty(SetPropertyRequest) returns (Entity);
   rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
   rpc Watch(WatchRequest) returns (stream EntityEvent);
   // Get-or-create an entity by (structure_type, name), case-insensitive.
@@ -64,6 +68,11 @@ message ListEntitiesResponse  { repeated Entity entities = 1; }
 message CreateEntityRequest   { Entity entity = 1; }
 message UpdateEntityRequest   { Entity entity = 1; }
 message DeleteEntityRequest   { string id = 1; }
+message SetPropertyRequest {
+  string entity_id = 1;
+  string property_id = 2;
+  PropertyValue value = 3;   // unset, or set with no case = clear (delete the property row)
+}
 message WatchRequest          {}
 
 message ListStructuresRequest  {}
