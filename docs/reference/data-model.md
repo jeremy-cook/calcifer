@@ -102,7 +102,7 @@ message StructureDef {
 The server derives what its write paths need from the same table: `richtext_properties`
 and `select_defaults` (what `ResolveByName` puts on a new entity), `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups.
-`Create` and `Update` check select values against it and return `InvalidArgument` for
+`Create`, `Update` and `SetProperty` check select values against it and return `InvalidArgument` for
 a key that isn't one of the property's options, a `select` value on a property not
 declared as a select, or a non-select value on a declared select. Structures missing
 from the table have no schema and aren't checked; other kinds aren't checked either.
@@ -149,7 +149,7 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 - Relation properties (`relation`/`relations`) also produce `links` rows, scoped by
   `source_property_id` the same way as richtext-derived links — see
   `sync_relation_links` in `server/src/link_store.rs`. Server-derived only; no
-  client ever authors a link row directly. `Create`/`Update` return
+  client ever authors a link row directly. `Create`/`Update`/`SetProperty` return
   `InvalidArgument` if a ref's target isn't the property's declared
   `target_structure`, or if the ref's non-empty `structure_type` isn't the target's
   real type; the link row records the real type. Refs to ids with no entity get no
@@ -170,6 +170,8 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 ```proto
 service EntityService {
   rpc Get / List / Create / Update / Delete
+  // One property of an existing entity; an unset value clears it. Returns the entity.
+  rpc SetProperty(SetPropertyRequest) returns (Entity);  // entity_id, property_id, value
   rpc Watch(WatchRequest) returns (stream EntityEvent);
   rpc ResolveByName(...)     // get-or-create by (structure_type, name), case-insensitive
   rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);
@@ -187,6 +189,13 @@ service StructureService {
   rpc List(ListStructuresRequest) returns (ListStructuresResponse);  // repeated StructureDef
 }
 ```
+
+Property edits go through `SetProperty`, which writes only that property's row and
+re-syncs only that property's relation links, so the browser and the agent editing
+different properties of one entity don't overwrite each other. `Update` replaces all
+of an entity's properties and stays for renames and multi-field edits (moving a
+DailyNote, which also renames it, uses `Update`); it can still overwrite a concurrent
+`SetProperty` from a stale copy.
 
 Transport is gRPC-Web from the browser (`tonic-web` bridges; Vite proxies `/api` →
 `:8080`). `Watch` is a server-streaming fan-out that keeps open tabs live.
