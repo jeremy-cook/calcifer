@@ -60,24 +60,6 @@ it.
 
 ---
 
-### I-3 · `Update` can change an entity's `structure_type` · medium · confirmed
-
-**Where:** `server/src/services/entity.rs` (`update`)
-
-**Problem:** The `UPDATE entities SET structure_type = ?, …` statement writes the
-client's value, so any `Update` can turn a Note into a Tag. Nothing in the app needs to
-change an entity's type, and doing so breaks property and link assumptions (e.g. a
-DailyNote without a `date`).
-
-**Fix:** Drop `structure_type` from the `UPDATE`. Also read the stored type first and
-return `InvalidArgument` if the request's differs, so callers learn about it rather than
-having it silently ignored.
-
-**Done when:** an `Update` with a different `structure_type` is rejected, and the stored
-type is unchanged.
-
----
-
 ### I-4 · To-do "today" doesn't roll over at midnight · medium · confirmed
 
 **Where:** `calcifer/src/model/todos.ts` (`useTodos`)
@@ -227,6 +209,7 @@ updates one property row and runs relation link sync for just that property. Mov
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks \`rows_affected()\` and returns \`NotFound\` for an unknown id; covered by \`update_missing_entity_is_not_found\`.
+- **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes \`structure_type\`; a mismatch with the stored type returns \`InvalidArgument\`; covered by \`update_rejects_structure_type_change\`.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
