@@ -73,7 +73,7 @@ server.tool(
   'list_structures',
   'List the entity types (structures) available in this knowledge base.',
   {},
-  async () => text(ops.listStructures()),
+  async () => text(await ops.listStructures()),
 )
 
 const transport = new StdioServerTransport()

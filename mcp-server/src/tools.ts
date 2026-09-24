@@ -1,7 +1,8 @@
 // Knowledge operations the MCP tools delegate to. Everything goes through the
 // tonic core: agents author markdown, the server derives the link graph.
 import { Code, ConnectError } from '@connectrpc/connect'
-import { entityClient, richTextClient, searchClient } from './calciferClient.js'
+import { entityClient, richTextClient, searchClient, structureClient } from './calciferClient.js'
+import { PropertyKind, type PropertyDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { toTipTap } from './markdown/parse.js'
 import { fromTipTap } from './markdown/serialize.js'
 import type { TTNode } from './markdown/types.js'
@@ -139,11 +140,38 @@ export async function appendToDailyNote(date: string, markdown: string): Promise
   return `Appended to daily note "${name}" (${id}); now ${ent.links.length} link(s).`
 }
 
-export function listStructures(): string {
-  return [
-    '- Note: a concept/topic note (the main building block; reference with [[Name]])',
-    '- Tag: a label, written #tag in note content',
-    '- DailyNote: a journal entry for a calendar day',
-    '- Todo: an actionable item with status, priority, due date, and tags (reference with [[Name]])',
-  ].join('\n')
+const KIND_NAMES: Record<PropertyKind, string> = {
+  [PropertyKind.UNSPECIFIED]: 'unspecified',
+  [PropertyKind.RICHTEXT]: 'richtext',
+  [PropertyKind.TEXT]: 'text',
+  [PropertyKind.NUMBER]: 'number',
+  [PropertyKind.DATE]: 'date',
+  [PropertyKind.SELECT]: 'select',
+  [PropertyKind.RELATION]: 'relation',
+  [PropertyKind.RELATIONS]: 'relations',
+}
+
+// e.g. "priority (select: none|low|medium|high, default none)", "tags (relations -> Tag)".
+function describeProperty(p: PropertyDef): string {
+  const kind = KIND_NAMES[p.kind] ?? 'unknown'
+  if (p.kind === PropertyKind.SELECT) {
+    const keys = p.options.map((o) => o.key).join('|')
+    return `${p.id} (${kind}: ${keys}${p.defaultOption ? `, default ${p.defaultOption}` : ''})`
+  }
+  if (p.kind === PropertyKind.RELATION || p.kind === PropertyKind.RELATIONS) {
+    return `${p.id} (${kind} -> ${p.targetStructure || 'any'})`
+  }
+  return `${p.id} (${kind})`
+}
+
+// The registry lives on the server (StructureService); this only formats it.
+export async function listStructures(): Promise<string> {
+  const { structures } = await structureClient.list({})
+  return structures
+    .map((s) => {
+      const line = `- ${s.type}: ${s.description}`
+      if (s.properties.length === 0) return line
+      return `${line}\n  properties: ${s.properties.map(describeProperty).join(', ')}`
+    })
+    .join('\n')
 }
