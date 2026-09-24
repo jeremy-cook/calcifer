@@ -16,22 +16,6 @@ running app. Nothing below has been reproduced yet.
 
 ## Open
 
-### I-11 · Property edits send the whole entity (last write wins) · low now, medium once the agent edits to-dos · design debt
-
-**Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`), `EntityService.Update`
-
-**Problem:** Toggling a checkbox sends every property of the entity. If the browser and
-the MCP agent edit different properties of the same entity at the same time, one write
-silently undoes the other. Raised in the original review.
-
-**Fix:** Add `EntityService.SetProperty(entity_id, property_id, value | clear)` that
-updates one property row and runs relation link sync for just that property. Move
-`withProperty` callers onto it. Keep `Update` for renames and bulk edits.
-
-**Done when:** concurrent edits to two different properties both survive.
-
----
-
 ### I-13 · `buf lint` reports RPC naming errors in `services.proto` · low · confirmed
 
 **Where:** `proto/calcifer/v1/services.proto`
@@ -87,6 +71,7 @@ covers it.
 - **I-10 · The structure registry is defined three times.** Fixed 2026-09-24. Registry authored only in `server/src/structures.rs`, served by `StructureService.List` (ADR 7); frontend keeps icons/colors and fetches the rest; MCP `list_structures` reads the RPC. Verified by adding a priority option to `structures.rs` alone: server, frontend and MCP all build and test clean. Generated TS now carries `// @ts-nocheck` because proto enums aren't erasable syntax.
 - **I-9 · Select values aren't checked against the allowed options.** Fixed 2026-09-24. Create/Update check every property against the registry: a declared select must hold one of its options, and a select value is only allowed on a declared select. Covered by `update_rejects_unknown_select_value` and three more tests.
 - **I-2 · Relation targets aren't checked against `targetStructure`.** Fixed 2026-09-24. Relation link sync loads each target's real type and rejects a mismatch with the declared `target_structure` or with the ref's claimed type; links store the real type. Refs to deleted targets are still accepted (see I-14). Covered by `update_rejects_note_in_todo_tags` and three more tests.
+- **I-11 · Property edits send the whole entity (last write wins).** Fixed 2026-09-24. New `EntityService.SetProperty` writes one property row and syncs only that property's links, reusing the I-9 select check and I-2 relation checks; the frontend's `useSetProperty` (per-property optimistic rollback) now backs to-do status and the entity page's property fields. Covered by `concurrent_set_property_edits_both_survive` and six more tests. `Update` can still overwrite properties (see I-15).
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
