@@ -734,7 +734,8 @@ impl EntityServiceTrait for EntityService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{entity_service, memory_pool, note, todo};
+    use crate::proto::EntityRefList;
+    use crate::test_support::{entity_service, memory_pool, note, tag, todo};
 
     async fn create(svc: &EntityService, entity: Entity) -> Entity {
         svc.create(Request::new(CreateEntityRequest {
@@ -931,5 +932,162 @@ mod tests {
         }))
         .await
         .expect("unknown structure is unchecked");
+    }
+
+    fn with_relations(mut entity: Entity, property_id: &str, refs: &[(&str, &str)]) -> Entity {
+        let value = Some(PropertyValue {
+            value: Some(property_value::Value::Relations(EntityRefList {
+                refs: refs
+                    .iter()
+                    .map(|(id, structure_type)| EntityRef {
+                        id: id.to_string(),
+                        structure_type: structure_type.to_string(),
+                    })
+                    .collect(),
+            })),
+        });
+        entity.properties.retain(|p| p.id != property_id);
+        entity.properties.push(Property {
+            id: property_id.to_string(),
+            value,
+        });
+        entity
+    }
+
+    async fn update(svc: &EntityService, entity: Entity) -> Result<Entity, Status> {
+        svc.update(Request::new(UpdateEntityRequest {
+            entity: Some(entity),
+        }))
+        .await
+        .map(Response::into_inner)
+    }
+
+    /// (target_id, target_structure) of an entity's links from `property_id`.
+    fn link_targets(entity: &Entity, property_id: &str) -> Vec<(String, String)> {
+        entity
+            .links
+            .iter()
+            .filter(|l| l.source_property_id == property_id)
+            .filter_map(|l| l.target.as_ref())
+            .map(|t| (t.id.clone(), t.structure_type.clone()))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn update_rejects_note_in_todo_tags() {
+        let svc = entity_service(memory_pool().await);
+        let urgent = create(&svc, tag("urgent")).await;
+        let other = create(&svc, note("Not a tag")).await;
+        let todo = create(
+            &svc,
+            with_relations(todo("Water plants"), "tags", &[(&urgent.id, "Tag")]),
+        )
+        .await;
+
+        let err = update(
+            &svc,
+            with_relations(
+                todo.clone(),
+                "tags",
+                &[(&urgent.id, "Tag"), (&other.id, "Note")],
+            ),
+        )
+        .await
+        .expect_err("a Note in tags should be rejected");
+
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("tags"), "{}", err.message());
+        let stored = svc.load_entity(&todo.id).await.expect("load");
+        assert_eq!(stored.properties, todo.properties);
+        assert_eq!(
+            link_targets(&stored, "tags"),
+            [(urgent.id.clone(), "Tag".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn tag_in_todo_tags_links_with_its_real_type() {
+        let svc = entity_service(memory_pool().await);
+        let urgent = create(&svc, tag("urgent")).await;
+        let todo = create(&svc, todo("Water plants")).await;
+
+        // An empty claimed type is allowed; the link still records the real one.
+        let updated = update(&svc, with_relations(todo, "tags", &[(&urgent.id, "")]))
+            .await
+            .expect("update");
+
+        assert_eq!(
+            link_targets(&updated, "tags"),
+            [(urgent.id.clone(), "Tag".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn relation_ref_with_wrong_claimed_type_is_rejected() {
+        let svc = entity_service(memory_pool().await);
+        let target = create(&svc, note("Target")).await;
+        let source = create(&svc, note("Source")).await;
+
+        // Claims a Tag in a declared Tag-only property, but the target is a Note.
+        let todo = create(&svc, todo("Water plants")).await;
+        let err = update(&svc, with_relations(todo, "tags", &[(&target.id, "Tag")]))
+            .await
+            .expect_err("lying claimed type should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        // Ad-hoc properties have no declared target, but the claim is still checked...
+        let err = update(
+            &svc,
+            with_relations(source.clone(), "related", &[(&target.id, "Tag")]),
+        )
+        .await
+        .expect_err("lying claimed type on an ad-hoc property should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        // ...and a truthful one links with the real type.
+        let updated = update(
+            &svc,
+            with_relations(source, "related", &[(&target.id, "Note")]),
+        )
+        .await
+        .expect("ad-hoc relation to any structure");
+        assert_eq!(
+            link_targets(&updated, "related"),
+            [(target.id.clone(), "Note".to_string())]
+        );
+    }
+
+    // A deleted Tag stays in the Todo's stored `tags` value (Delete only sweeps
+    // links), and every Update resends it, so a dead ref must not block the write.
+    #[tokio::test]
+    async fn dead_relation_ref_does_not_block_update() {
+        let svc = entity_service(memory_pool().await);
+        let gone = create(&svc, tag("gone")).await;
+        let kept = create(&svc, tag("kept")).await;
+        let todo = create(
+            &svc,
+            with_relations(
+                todo("Water plants"),
+                "tags",
+                &[(&gone.id, "Tag"), (&kept.id, "Tag")],
+            ),
+        )
+        .await;
+        svc.delete(Request::new(DeleteEntityRequest {
+            id: gone.id.clone(),
+        }))
+        .await
+        .expect("delete tag");
+        let todo = svc.load_entity(&todo.id).await.expect("load");
+
+        let updated = update(&svc, with_select(todo, "status", "done"))
+            .await
+            .expect("status change with a dead tag ref");
+
+        assert_eq!(select_value(&updated, "status").as_deref(), Some("done"));
+        assert_eq!(
+            link_targets(&updated, "tags"),
+            [(kept.id.clone(), "Tag".to_string())]
+        );
     }
 }

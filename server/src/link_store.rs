@@ -4,8 +4,8 @@
 
 use crate::error::AppError;
 use crate::links::MentionRef;
-use crate::proto::{property_value, Entity};
-use crate::structures::relation_properties;
+use crate::proto::{property_value, Entity, EntityRef};
+use crate::structures::{self, relation_properties};
 
 /// Scoped link replace for a single (entity_id, source_property_id): select existing
 /// link_id/created_at pairs for that scope, delete them, then re-insert one row per
@@ -77,6 +77,8 @@ pub(crate) async fn replace_scoped_links(
 
 /// Scoped-replace links derived from an entity's `relation`/`relations` property
 /// values (as opposed to richtext-derived links, owned by `RichTextService.Put`).
+/// Each existing target is checked by `check_relation_targets` first, so a bad
+/// ref fails the whole write.
 ///
 /// Iterates the structure's *declared* relation properties as well as any present
 /// on the entity, so a relation property that was removed or emptied still has its
@@ -104,24 +106,59 @@ pub(crate) async fn sync_relation_links(
             .find(|p| p.id == property_id)
             .and_then(|p| p.value.as_ref())
             .and_then(|v| v.value.as_ref());
-        let targets: Vec<MentionRef> = match value {
-            Some(property_value::Value::Relation(r)) => {
-                vec![MentionRef {
-                    id: r.id.clone(),
-                    structure_type: r.structure_type.clone(),
-                }]
-            }
-            Some(property_value::Value::Relations(list)) => list
-                .refs
-                .iter()
-                .map(|r| MentionRef {
-                    id: r.id.clone(),
-                    structure_type: r.structure_type.clone(),
-                })
-                .collect(),
+        let refs: Vec<&EntityRef> = match value {
+            Some(property_value::Value::Relation(r)) => vec![r],
+            Some(property_value::Value::Relations(list)) => list.refs.iter().collect(),
             _ => Vec::new(),
         };
+        let targets = check_relation_targets(tx, entity, property_id, &refs).await?;
         replace_scoped_links(tx, &entity.id, property_id, &targets, now).await?;
     }
     Ok(())
+}
+
+/// Check a relation property's refs against the targets' real `structure_type`
+/// (I-2) and return them as link targets carrying that real type, so the stored
+/// value and its links never disagree. Rejects a ref whose claimed type (when
+/// non-empty) isn't the target's, or whose target isn't the property's declared
+/// `target_structure`. Ad-hoc properties have no declared target to check.
+/// Refs to ids with no `entities` row are dropped, not rejected: a deleted
+/// target stays in other entities' stored values, and rejecting it would block
+/// every later Update of those entities.
+async fn check_relation_targets(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity: &Entity,
+    property_id: &str,
+    refs: &[&EntityRef],
+) -> Result<Vec<MentionRef>, AppError> {
+    let expected = structures::property(&entity.structure_type, property_id)
+        .and_then(|def| def.target_structure);
+    let mut targets = Vec::with_capacity(refs.len());
+    for r in refs {
+        let actual = sqlx::query_scalar!("SELECT structure_type FROM entities WHERE id = ?", r.id)
+            .fetch_optional(&mut **tx)
+            .await?;
+        let Some(actual) = actual else {
+            continue;
+        };
+        if !r.structure_type.is_empty() && r.structure_type != actual {
+            return Err(AppError::Invalid(format!(
+                "{}.{property_id}: relation target {} is a {actual}, not a {}",
+                entity.structure_type, r.id, r.structure_type
+            )));
+        }
+        if let Some(expected) = expected {
+            if actual != expected {
+                return Err(AppError::Invalid(format!(
+                    "{}.{property_id} must reference a {expected}; {} is a {actual}",
+                    entity.structure_type, r.id
+                )));
+            }
+        }
+        targets.push(MentionRef {
+            id: r.id.clone(),
+            structure_type: actual,
+        });
+    }
+    Ok(targets)
 }

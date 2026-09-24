@@ -149,7 +149,11 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 - Relation properties (`relation`/`relations`) also produce `links` rows, scoped by
   `source_property_id` the same way as richtext-derived links — see
   `sync_relation_links` in `server/src/link_store.rs`. Server-derived only; no
-  client ever authors a link row directly.
+  client ever authors a link row directly. `Create`/`Update` return
+  `InvalidArgument` if a ref's target isn't the property's declared
+  `target_structure`, or if the ref's non-empty `structure_type` isn't the target's
+  real type; the link row records the real type. Refs to ids with no entity get no
+  link row but aren't rejected (a deleted target stays in stored values).
 - **`referenced_dates`** — entity-scoped; the union of date chips across all of the
   entity's richtext documents, recomputed per save.
 - **Backlinks** — never stored. Derived by `EntityService.ListBacklinks` via

@@ -79,3 +79,11 @@ pub(crate) fn todo(name: &str) -> Entity {
     }
     entity
 }
+
+/// A new Tag entity (Tags carry no properties).
+pub(crate) fn tag(name: &str) -> Entity {
+    let mut entity = note(name);
+    entity.structure_type = "Tag".to_string();
+    entity.properties.clear();
+    entity
+}
