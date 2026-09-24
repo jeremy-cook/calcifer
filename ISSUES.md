@@ -37,25 +37,6 @@ it.
 
 ---
 
-### I-4 · To-do "today" doesn't roll over at midnight · medium · confirmed
-
-**Where:** `calcifer/src/model/todos.ts` (`useTodos`)
-
-**Problem:** `todayIso()` runs inside a `useMemo` whose deps are
-`[entities, filter, sort]`. If the app stays open past midnight, the Overdue, Today and
-This week filters use yesterday's date until the entity list changes. `TodoRow`'s
-overdue styling reads `todayIso()` on every render, so it can disagree with the filter.
-
-**Fix:** Add a `useToday()` hook in `~/model/dates` that returns `todayIso()` and
-re-renders at the next local midnight (a `setTimeout` to midnight, rescheduled each time
-it fires). Pass its value into `useMemo` as a dependency, and use it in `TodoRow` and
-anywhere else that calls `todayIso()` during render.
-
-**Done when:** with the system clock moved past midnight, the list and the row styling
-update without a reload.
-
----
-
 ### I-7 · `TodoRow` subscribes to the whole entity list · low · confirmed
 
 **Where:** `calcifer/src/components/todo/TodoRow.tsx`, `TodoList.tsx`
@@ -130,6 +111,7 @@ updates one property row and runs relation link sync for just that property. Mov
 - **I-12 · Eight ESLint errors on `main`.** Fixed 2026-09-24. ESLint config turns off \`only-export-components\` for \`src/routes/**\` and \`src/components/ui/**\`; \`prefer-const\` fixed by hand. \`pnpm lint\` exits 0.
 - **I-6 · Concurrent optimistic updates can undo each other on rollback.** Fixed 2026-09-24. Rollback replaces only the failed entity (list row and detail cache), never the whole list snapshot. Verified by reasoning.
 - **I-5 · A daily-note move the server rejects fails silently.** Fixed 2026-09-24. \`useUpdateEntity\` takes an \`onError\`; \`DailyNoteDateField\` shows an inline error on \`AlreadyExists\`. No shared toast (no toast library). Verified by reasoning.
+- **I-4 · To-do "today" doesn't roll over at midnight.** Fixed 2026-09-24. \`useToday()\` in \`model/dates.ts\` re-renders at local midnight and re-checks on focus/visibility; used by the to-do list, rows and calendar route. Midnight arithmetic exercised by script (incl. DST); clock change not observed in the browser.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
