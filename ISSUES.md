@@ -157,37 +157,12 @@ updates one property row and runs relation link sync for just that property. Mov
 
 ---
 
-### I-12 · Eight ESLint errors on `main` · low · confirmed
-
-**Where:** `calcifer/src/components/ui/badge.tsx`, `ui/button.tsx`,
-`editors/tiptap/components/date/showDatePicker.ts`, `routes/e.$id.tsx`
-
-**Problem:**
-
-| File | Errors | Rule |
-|---|---|---|
-| `badge.tsx`, `button.tsx` | 1 each | `react-refresh/only-export-components`: shadcn `*Variants` exports |
-| `showDatePicker.ts` | 1 | `prefer-const` |
-| `e.$id.tsx` | 4 | `react-refresh/only-export-components`: sub-components in a route file |
-| `e.$id.tsx` | 1 | `react-hooks/set-state-in-effect`: title sync effect, see I-1 |
-
-**Fix:**
-- `prefer-const`: auto-fixable.
-- Route files: move sub-components out to `components/entity/`, or turn off
-  `only-export-components` for `src/routes/**`, since TanStack route files always mix
-  exports.
-- shadcn exports: turn the rule off for `components/ui/**`.
-- `set-state-in-effect`: goes away with the I-1 fix.
-
-**Done when:** `pnpm lint` exits 0.
-
----
-
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks \`rows_affected()\` and returns \`NotFound\` for an unknown id; covered by \`update_missing_entity_is_not_found\`.
 - **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes \`structure_type\`; a mismatch with the stored type returns \`InvalidArgument\`; covered by \`update_rejects_structure_type_change\`.
 - **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and \`entity.name\` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
+- **I-12 · Eight ESLint errors on `main`.** Fixed 2026-09-24. ESLint config turns off \`only-export-components\` for \`src/routes/**\` and \`src/components/ui/**\`; \`prefer-const\` fixed by hand. \`pnpm lint\` exits 0.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
