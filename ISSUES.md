@@ -74,23 +74,6 @@ reverting.
 
 ---
 
-### I-6 · Concurrent optimistic updates can undo each other on rollback · low · confirmed
-
-**Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`)
-
-**Problem:** Each mutation snapshots the whole list in `onMutate` and restores that
-snapshot in `onError`. If A and B are both in flight and A fails, A's snapshot (taken
-before B) overwrites B's optimistic change until the `onSettled` refetch lands. It
-corrects itself, but causes a visible flicker. The hooks it replaced had the same flaw.
-
-**Fix:** On error, restore only the failed entity: put `prevEntity` back into the list
-with `map`, rather than restoring the whole list snapshot.
-
-**Done when:** a failed update to one to-do doesn't flicker a concurrent change to
-another.
-
----
-
 ### I-7 · `TodoRow` subscribes to the whole entity list · low · confirmed
 
 **Where:** `calcifer/src/components/todo/TodoRow.tsx`, `TodoList.tsx`
@@ -163,6 +146,7 @@ updates one property row and runs relation link sync for just that property. Mov
 - **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes \`structure_type\`; a mismatch with the stored type returns \`InvalidArgument\`; covered by \`update_rejects_structure_type_change\`.
 - **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and \`entity.name\` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
 - **I-12 · Eight ESLint errors on `main`.** Fixed 2026-09-24. ESLint config turns off \`only-export-components\` for \`src/routes/**\` and \`src/components/ui/**\`; \`prefer-const\` fixed by hand. \`pnpm lint\` exits 0.
+- **I-6 · Concurrent optimistic updates can undo each other on rollback.** Fixed 2026-09-24. Rollback replaces only the failed entity (list row and detail cache), never the whole list snapshot. Verified by reasoning.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
