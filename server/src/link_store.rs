@@ -86,7 +86,7 @@ pub(crate) async fn sync_relation_links(
     entity: &Entity,
     now: i64,
 ) -> Result<(), AppError> {
-    let mut property_ids: Vec<&str> = relation_properties(&entity.structure_type).to_vec();
+    let mut property_ids: Vec<&str> = relation_properties(&entity.structure_type);
     for prop in &entity.properties {
         let is_relation = matches!(
             prop.value.as_ref().and_then(|v| v.value.as_ref()),

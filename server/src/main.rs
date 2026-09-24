@@ -16,9 +16,11 @@ mod watch;
 use crate::proto::entity_service_server::EntityServiceServer;
 use crate::proto::rich_text_service_server::RichTextServiceServer;
 use crate::proto::search_service_server::SearchServiceServer;
+use crate::proto::structure_service_server::StructureServiceServer;
 use crate::services::entity::EntityService;
 use crate::services::richtext::RichTextService;
 use crate::services::search::SearchService;
+use crate::services::structure::StructureService;
 use crate::watch::WatchHub;
 
 #[tokio::main]
@@ -52,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
             embed.clone(),
         )))
         .add_service(SearchServiceServer::new(SearchService::new(pool, embed)))
+        .add_service(StructureServiceServer::new(StructureService))
         .serve(addr)
         .await?;
 
