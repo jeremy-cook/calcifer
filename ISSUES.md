@@ -37,23 +37,6 @@ it.
 
 ---
 
-### I-9 · Select values aren't checked against the allowed options · medium · confirmed
-
-**Where:** `server/src/services/entity.rs` (`update`, `create`), `server/src/structures.rs`
-
-**Problem:** The server accepts any string for a `select` property, e.g.
-`status = "banana"`. The frontend quietly treats unknown values as the default, so the
-stored value and the displayed value disagree. The MCP agent is the likeliest source of
-bad values. Raised in the original review.
-
-**Fix:** Best done after I-10, so the options aren't copied a third time. As a stopgap,
-replace `select_defaults` with full option lists in `structures.rs` and reject values not
-in the list.
-
-**Done when:** an `Update` with an unknown select value is rejected.
-
----
-
 ### I-11 · Property edits send the whole entity (last write wins) · low now, medium once the agent edits to-dos · design debt
 
 **Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`), `EntityService.Update`
@@ -123,6 +106,7 @@ covers it.
 - **I-4 · To-do "today" doesn't roll over at midnight.** Fixed 2026-09-24. `useToday()` in `model/dates.ts` re-renders at local midnight and re-checks on focus/visibility; used by the to-do list, rows and calendar route. Midnight arithmetic exercised by script (incl. DST); clock change not observed in the browser.
 - **I-7 · `TodoRow` subscribes to the whole entity list.** Fixed 2026-09-24. `TodoList` resolves tags through one memoized `Map` and passes them in; `TodoRow` is memoized and no longer calls `useAllEntities()`.
 - **I-10 · The structure registry is defined three times.** Fixed 2026-09-24. Registry authored only in `server/src/structures.rs`, served by `StructureService.List` (ADR 7); frontend keeps icons/colors and fetches the rest; MCP `list_structures` reads the RPC. Verified by adding a priority option to `structures.rs` alone: server, frontend and MCP all build and test clean. Generated TS now carries `// @ts-nocheck` because proto enums aren't erasable syntax.
+- **I-9 · Select values aren't checked against the allowed options.** Fixed 2026-09-24. Create/Update check every property against the registry: a declared select must hold one of its options, and a select value is only allowed on a declared select. Covered by `update_rejects_unknown_select_value` and three more tests.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
