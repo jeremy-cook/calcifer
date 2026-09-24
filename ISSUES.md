@@ -54,24 +54,6 @@ in the list.
 
 ---
 
-### I-10 · The structure registry is defined three times · medium · design debt
-
-**Where:** `calcifer/src/model/structures.ts`, `server/src/structures.rs`, `mcp-server/src/tools.ts`
-
-**Problem:** Structure types, property ids, select options/defaults and relation
-properties are hand-copied into the frontend, the Rust server and the MCP server. Every
-new structure or property means three edits that can drift. I-2 and I-9 add more to the
-Rust copy. Raised in the original review.
-
-**Fix:** Make the server the source of truth and expose it over a `ListStructures` RPC.
-Could be defined in proto or in a Rust table; `list_structures` already exists as an MCP
-tool. The frontend keeps only presentation data (icons, colors) keyed by type and fetches
-the rest. The MCP server reads the RPC. Worth an ADR, since it changes where schema lives.
-
-**Done when:** adding a select option is a one-file change.
-
----
-
 ### I-11 · Property edits send the whole entity (last write wins) · low now, medium once the agent edits to-dos · design debt
 
 **Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`), `EntityService.Update`
@@ -98,6 +80,7 @@ updates one property row and runs relation link sync for just that property. Mov
 - **I-5 · A daily-note move the server rejects fails silently.** Fixed 2026-09-24. `useUpdateEntity` takes an `onError`; `DailyNoteDateField` shows an inline error on `AlreadyExists`. No shared toast (no toast library). Verified by reasoning.
 - **I-4 · To-do "today" doesn't roll over at midnight.** Fixed 2026-09-24. `useToday()` in `model/dates.ts` re-renders at local midnight and re-checks on focus/visibility; used by the to-do list, rows and calendar route. Midnight arithmetic exercised by script (incl. DST); clock change not observed in the browser.
 - **I-7 · `TodoRow` subscribes to the whole entity list.** Fixed 2026-09-24. `TodoList` resolves tags through one memoized `Map` and passes them in; `TodoRow` is memoized and no longer calls `useAllEntities()`.
+- **I-10 · The structure registry is defined three times.** Fixed 2026-09-24. Registry authored only in `server/src/structures.rs`, served by `StructureService.List` (ADR 7); frontend keeps icons/colors and fetches the rest; MCP `list_structures` reads the RPC. Verified by adding a priority option to `structures.rs` alone: server, frontend and MCP all build and test clean. Generated TS now carries `// @ts-nocheck` because proto enums aren't erasable syntax.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
