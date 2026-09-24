@@ -37,21 +37,6 @@ it.
 
 ---
 
-### I-7 · `TodoRow` subscribes to the whole entity list · low · confirmed
-
-**Where:** `calcifer/src/components/todo/TodoRow.tsx`, `TodoList.tsx`
-
-**Problem:** Every row calls `useAllEntities()` and resolves each tag with a linear
-`find`, which is O(rows × tags × entities). Every list change re-renders every row. This
-is fine at current data sizes.
-
-**Fix:** In `TodoList`, build one `Map<id, Entity>` (memoized on the entity list) and
-pass the resolved tags into each row. Wrap `TodoRow` in `memo`.
-
-**Done when:** `TodoRow` no longer calls `useAllEntities()`.
-
----
-
 ### I-9 · Select values aren't checked against the allowed options · medium · confirmed
 
 **Where:** `server/src/services/entity.rs` (`update`, `create`), `server/src/structures.rs`
@@ -112,6 +97,7 @@ updates one property row and runs relation link sync for just that property. Mov
 - **I-6 · Concurrent optimistic updates can undo each other on rollback.** Fixed 2026-09-24. Rollback replaces only the failed entity (list row and detail cache), never the whole list snapshot. Verified by reasoning.
 - **I-5 · A daily-note move the server rejects fails silently.** Fixed 2026-09-24. \`useUpdateEntity\` takes an \`onError\`; \`DailyNoteDateField\` shows an inline error on \`AlreadyExists\`. No shared toast (no toast library). Verified by reasoning.
 - **I-4 · To-do "today" doesn't roll over at midnight.** Fixed 2026-09-24. \`useToday()\` in \`model/dates.ts\` re-renders at local midnight and re-checks on focus/visibility; used by the to-do list, rows and calendar route. Midnight arithmetic exercised by script (incl. DST); clock change not observed in the browser.
+- **I-7 · `TodoRow` subscribes to the whole entity list.** Fixed 2026-09-24. \`TodoList\` resolves tags through one memoized \`Map\` and passes them in; \`TodoRow\` is memoized and no longer calls \`useAllEntities()\`.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
