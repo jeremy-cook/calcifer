@@ -58,6 +58,41 @@ covers it.
 
 ---
 
+### I-15 · Renames and daily-note moves still resend every property · low · confirmed
+
+**Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`), `EntityService.Update`
+
+**Problem:** I-11 moved single-property edits onto `SetProperty`, but renames
+(`EntityTitleInput`) and daily-note moves (`DailyNoteDateField`) still use `Update`,
+which replaces every property. An `Update` built from a stale copy undoes a concurrent
+`SetProperty` (e.g. the agent sets a to-do's status while the browser renames it). The
+server test `update_from_a_stale_snapshot_loses_a_concurrent_edit` shows it.
+
+**Fix:** Give renames their own path, e.g. a `Rename` RPC or a field mask on `Update`,
+and move daily notes with `SetProperty(date)` plus a rename.
+
+**Done when:** a rename concurrent with a `SetProperty` on the same entity keeps both.
+
+---
+
+### I-16 · Property values aren't checked against their declared kind (except select) · low · confirmed
+
+**Where:** `server/src/services/entity.rs` (`validate_select`), `server/src/link_store.rs`
+
+**Problem:** I-9 checks only select properties. Any other declared property accepts
+any value case, e.g. a `relations` value on `content` (declared `richtext`). Relation
+link sync would then scope-replace that property's links, which for `content` are the
+rich-text links owned by `RichTextService.Put`. No current client sends this. Found
+during I-11.
+
+**Fix:** Generalise the per-property check to require the value case to match the
+declared `PropertyKind` for every declared property.
+
+**Done when:** `Update`/`SetProperty` with a value of the wrong kind for a declared
+property is rejected, and a test covers it.
+
+---
+
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
