@@ -1,7 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 import type { Timestamp } from '@bufbuild/protobuf/wkt'
-import { useAllEntities, useUpdateEntity, withProperty } from '~/model/store'
+import { useAllEntities, useSetProperty } from '~/model/store'
 import { shiftIso, useToday } from '~/model/dates'
 import { getStructure, propertyDef, type StructureDef } from '~/model/structures'
 
@@ -177,11 +177,10 @@ export function todoDue(entity: Entity): string | undefined {
 }
 
 export function useSetTodoStatus() {
-  const updateEntity = useUpdateEntity()
+  const setProperty = useSetProperty()
   return useCallback(
-    (entity: Entity, status: TodoStatus) =>
-      updateEntity(withProperty(entity, 'status', { case: 'select', value: status })),
-    [updateEntity],
+    (entity: Entity, status: TodoStatus) => setProperty(entity, 'status', { case: 'select', value: status }),
+    [setProperty],
   )
 }
 

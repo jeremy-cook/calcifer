@@ -134,10 +134,10 @@ export interface UseUpdateEntityOptions {
   onError?: (err: ConnectError | Error, entity: Entity) => void
 }
 
-// Single write path for edits to an existing entity. Optimistic on both the
-// entity cache and the list cache (so checkboxes on /s/Todo and the calendar
-// flip immediately), rolled back on error. Sends the whole entity, so concurrent
-// writers are last-write-wins.
+// Whole-entity write, for renames and multi-field edits (e.g. moving a daily
+// note, which also renames it). Optimistic on both the entity cache and the list
+// cache, rolled back on error. Sends every property, so it can overwrite a
+// concurrent writer's edit; single-property edits go through useSetProperty.
 export function useUpdateEntity({ onError }: UseUpdateEntityOptions = {}) {
   const qc = useQueryClient()
   // Latest callback without re-creating the mutation on every render.
@@ -175,14 +175,88 @@ export function useUpdateEntity({ onError }: UseUpdateEntityOptions = {}) {
   return useCallback((entity: Entity) => mutate(entity), [mutate])
 }
 
-// --- Pure edit builders (pass the result to useUpdateEntity()) ---
+export type UseSetPropertyOptions = UseUpdateEntityOptions
+
+interface SetPropertyVars {
+  entity: Entity
+  propertyId: string
+  value: PropertyValue['value'] | null
+}
+
+// A property's current value on `entity`: `null` when it has no such property.
+function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['value'] | null {
+  const property = entity.properties.find((p) => p.id === propertyId)
+  return property ? (property.value?.value ?? { case: undefined }) : null
+}
+
+// Write one property (`null` clears it) through EntityService.SetProperty, so
+// edits to different properties of the same entity don't overwrite each other.
+// Optimistic on both caches, applied to the entity as currently cached (not the
+// caller's possibly stale copy) so quick successive edits all show. On error
+// only this property is restored, on the current cached entity: restoring a
+// whole-entity snapshot would undo a concurrent edit to another property.
+export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
+  const qc = useQueryClient()
+  // Latest callback without re-creating the mutation on every render.
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
+  const { mutate } = useMutation({
+    mutationFn: ({ entity, propertyId, value }: SetPropertyVars) =>
+      entityClient.setProperty({
+        entityId: entity.id,
+        propertyId,
+        value: value === null ? undefined : createMessage(PropertyValueSchema, { value }),
+      }),
+    onMutate: async ({ entity, propertyId, value }) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: qk.entity(entity.id) }),
+        qc.cancelQueries({ queryKey: qk.entities() }),
+      ])
+      const cachedEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
+      const cachedListEntity = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === entity.id)
+      const prevEntityValue = cachedEntity && propertyValueOf(cachedEntity, propertyId)
+      const prevListValue = cachedListEntity && propertyValueOf(cachedListEntity, propertyId)
+      qc.setQueryData<Entity>(qk.entity(entity.id), (e) => e && withProperty(e, propertyId, value))
+      qc.setQueryData<Entity[]>(qk.entities(), (list) =>
+        list?.map((e) => (e.id === entity.id ? withProperty(e, propertyId, value) : e)),
+      )
+      return { prevEntityValue, prevListValue }
+    },
+    onError: (err, { entity, propertyId }, ctx) => {
+      if (ctx?.prevEntityValue !== undefined) {
+        const prev = ctx.prevEntityValue
+        qc.setQueryData<Entity>(qk.entity(entity.id), (e) => e && withProperty(e, propertyId, prev))
+      }
+      if (ctx?.prevListValue !== undefined) {
+        const prev = ctx.prevListValue
+        qc.setQueryData<Entity[]>(qk.entities(), (list) =>
+          list?.map((e) => (e.id === entity.id ? withProperty(e, propertyId, prev) : e)),
+        )
+      }
+      onErrorRef.current?.(err, entity)
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['entities'] })
+    },
+  })
+  return useCallback(
+    (entity: Entity, propertyId: string, value: PropertyValue['value'] | null) => mutate({ entity, propertyId, value }),
+    [mutate],
+  )
+}
+
+// --- Pure edit builders (pass the result to useUpdateEntity(); withProperty is
+// also useSetProperty()'s optimistic apply) ---
 
 export function withName(entity: Entity, name: string): Entity {
   return createMessage(EntitySchema, { ...entity, name })
 }
 
 // `null` removes the property. The server still clears links for declared
-// relation properties that are absent, so removing the last ref is safe.
+// relation properties that are absent (SetProperty also for ad-hoc ones), so
+// removing the last ref is safe.
 export function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
   if (value === null) {
     return createMessage(EntitySchema, { ...entity, properties: entity.properties.filter((p) => p.id !== propertyId) })

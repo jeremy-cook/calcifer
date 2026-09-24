@@ -22,7 +22,7 @@ import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
-import { useDeleteEntity, useEntity, useUpdateEntity, withName, withProperty, type Entity } from '~/model/store'
+import { useDeleteEntity, useEntity, useSetProperty, useUpdateEntity, withName, type Entity } from '~/model/store'
 import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/model/structures'
 import { EntityRefListSchema, type PropertyValue } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -184,12 +184,12 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
-  const updateEntity = useUpdateEntity()
+  const setEntityProperty = useSetProperty()
   const structure = useStructure(entity.structureType)
   if (!structure || structure.properties.length === 0) return null
 
   const setProperty = (propertyId: string, value: PropertyValue['value'] | null) =>
-    updateEntity(withProperty(entity, propertyId, value))
+    setEntityProperty(entity, propertyId, value)
 
   // Properties whose editor isn't the generic one for their type, keyed "Structure.propertyId".
   const overrides: Record<string, () => React.ReactNode> = {
