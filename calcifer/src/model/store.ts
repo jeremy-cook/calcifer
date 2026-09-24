@@ -145,14 +145,17 @@ export function useUpdateEntity() {
         qc.cancelQueries({ queryKey: qk.entities() }),
       ])
       const prevEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
-      const prevList = qc.getQueryData<Entity[]>(qk.entities())
+      const prevListEntity = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === entity.id)
       qc.setQueryData(qk.entity(entity.id), entity)
       qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? entity : e)))
-      return { prevEntity, prevList }
+      return { prevEntity, prevListEntity }
     },
+    // Roll back only the failed entity's row: restoring a whole-list snapshot
+    // would also undo other updates that were in flight concurrently.
     onError: (_e, entity, ctx) => {
       if (ctx?.prevEntity) qc.setQueryData(qk.entity(entity.id), ctx.prevEntity)
-      if (ctx?.prevList) qc.setQueryData(qk.entities(), ctx.prevList)
+      const prev = ctx?.prevEntity ?? ctx?.prevListEntity
+      if (prev) qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? prev : e)))
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['entities'] })
