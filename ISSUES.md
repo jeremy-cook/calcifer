@@ -70,6 +70,26 @@ updates one property row and runs relation link sync for just that property. Mov
 
 ---
 
+### I-13 · `buf lint` reports RPC naming errors in `services.proto` · low · confirmed
+
+**Where:** `proto/calcifer/v1/services.proto`
+
+**Problem:** `buf lint` (`pnpm proto:lint` in `calcifer/`) fails with 32 findings, all
+from the default RPC rules: request/response types not named `<Rpc>Request` /
+`<Rpc>Response` (e.g. `ListEntitiesRequest`, `ListStructuresRequest`), and messages such
+as `RichText`, `SearchResponse` and `EntityRef` reused as the request or response of
+several RPCs. 30 predate I-10; I-10 added two by following the file's existing naming.
+Nothing runs `buf lint` today, so this is invisible.
+
+**Fix:** Either rename to the buf convention (a wire-compatible but source-breaking
+change for all three consumers), or configure `buf.yaml` to except
+`RPC_REQUEST_STANDARD_NAME`, `RPC_RESPONSE_STANDARD_NAME` and
+`RPC_REQUEST_RESPONSE_UNIQUE`, documenting the chosen naming convention instead.
+
+**Done when:** `pnpm proto:lint` exits 0.
+
+---
+
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
