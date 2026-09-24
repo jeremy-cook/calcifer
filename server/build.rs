@@ -6,6 +6,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &[
                 "../proto/calcifer/v1/entities.proto",
                 "../proto/calcifer/v1/services.proto",
+                "../proto/calcifer/v1/structures.proto",
             ],
             &["../proto"],
         )?;

@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package calcifer.v1;
+
+// The shape of the structure registry. The data itself is authored only in
+// server/src/structures.rs and served by StructureService.List (ADR 7).
+
+enum PropertyKind {
+  PROPERTY_KIND_UNSPECIFIED = 0;
+  PROPERTY_KIND_RICHTEXT = 1;
+  PROPERTY_KIND_TEXT = 2;
+  PROPERTY_KIND_NUMBER = 3;
+  PROPERTY_KIND_DATE = 4;
+  PROPERTY_KIND_SELECT = 5;
+  PROPERTY_KIND_RELATION = 6;
+  PROPERTY_KIND_RELATIONS = 7;
+}
+
+message SelectOption {
+  string key = 1;    // stored in PropertyValue.select
+  string label = 2;  // display text
+}
+
+message PropertyDef {
+  string id = 1;
+  PropertyKind kind = 2;
+  string label = 3;                      // empty = none; clients fall back to the id
+  repeated SelectOption options = 4;     // select only, in display (and rank) order
+  string default_option = 5;             // select only; empty = none
+  string target_structure = 6;           // relation/relations only; empty = any
+}
+
+message StructureDef {
+  string type = 1;                       // 'Note' | 'Tag' | 'DailyNote' | ...
+  string name = 2;                       // singular display name
+  string plural = 3;
+  string description = 4;                // one line, for the agent
+  repeated PropertyDef properties = 5;   // in display order
+  bool creatable = 6;                    // offered by the zero-arg create path ("+ New")
+  bool mentionable = 7;                  // included in bare `@` autocomplete
+  bool unique_names = 8;                 // case-insensitive name is the identity
+  bool name_editable = 9;
+}

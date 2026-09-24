@@ -3,6 +3,7 @@ syntax = "proto3";
 package calcifer.v1;
 
 import "calcifer/v1/entities.proto";
+import "calcifer/v1/structures.proto";
 import "google/protobuf/empty.proto";
 
 service EntityService {
@@ -37,6 +38,13 @@ service SearchService {
   rpc Retrieve(RetrieveRequest) returns (SearchResponse);
 }
 
+// The structure registry (ADR 7). Authored in server/src/structures.rs; clients
+// fetch it instead of keeping their own copy. No filters: every structure, in
+// the server's table order.
+service StructureService {
+  rpc List(ListStructuresRequest) returns (ListStructuresResponse);
+}
+
 message SearchRequest  { string query = 1; uint32 limit = 2; }
 message RetrieveRequest {
   string query = 1;
@@ -57,6 +65,9 @@ message CreateEntityRequest   { Entity entity = 1; }
 message UpdateEntityRequest   { Entity entity = 1; }
 message DeleteEntityRequest   { string id = 1; }
 message WatchRequest          {}
+
+message ListStructuresRequest  {}
+message ListStructuresResponse { repeated StructureDef structures = 1; }
 
 message CreateDailyNoteRequest { string date = 1; }  // ISO calendar day, e.g. "2026-06-13"
 
