@@ -473,9 +473,26 @@ impl EntityServiceTrait for EntityService {
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
 
+        // An entity's type is fixed at creation: changing it would break property
+        // and link assumptions (e.g. a DailyNote without a `date`). Reject rather
+        // than silently ignore, so the caller learns its request was wrong.
+        let stored_type = sqlx::query_scalar!(
+            "SELECT structure_type FROM entities WHERE id = ?",
+            entity.id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| Status::not_found(format!("entity {}", entity.id)))?;
+        if stored_type != entity.structure_type {
+            return Err(Status::invalid_argument(format!(
+                "cannot change structure_type of entity {} from {} to {}",
+                entity.id, stored_type, entity.structure_type
+            )));
+        }
+
         let updated = sqlx::query!(
-            "UPDATE entities SET structure_type = ?, name = ?, date_key = ?, updated_at = ? WHERE id = ?",
-            entity.structure_type,
+            "UPDATE entities SET name = ?, date_key = ?, updated_at = ? WHERE id = ?",
             entity.name,
             date_key,
             now,
@@ -722,5 +739,25 @@ mod tests {
             .await
             .expect("count fts");
         assert_eq!(fts_rows, 0);
+    }
+
+    #[tokio::test]
+    async fn update_rejects_structure_type_change() {
+        let svc = entity_service(memory_pool().await);
+        let mut entity = create(&svc, note("Typed")).await;
+
+        entity.structure_type = "Tag".to_string();
+        entity.name = "Renamed".to_string();
+        let err = svc
+            .update(Request::new(UpdateEntityRequest {
+                entity: Some(entity.clone()),
+            }))
+            .await
+            .expect_err("changing structure_type should be rejected");
+
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored.structure_type, "Note");
+        assert_eq!(stored.name, "Typed");
     }
 }
