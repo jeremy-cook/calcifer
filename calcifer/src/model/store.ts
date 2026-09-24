@@ -164,9 +164,11 @@ export function useUpdateEntity({ onError }: UseUpdateEntityOptions = {}) {
     // Roll back only the failed entity's row: restoring a whole-list snapshot
     // would also undo other updates that were in flight concurrently.
     onError: (err, entity, ctx) => {
-      if (ctx?.prevEntity) qc.setQueryData(qk.entity(entity.id), ctx.prevEntity)
       const prev = ctx?.prevEntity ?? ctx?.prevListEntity
-      if (prev) qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? prev : e)))
+      if (prev) {
+        qc.setQueryData(qk.entity(entity.id), prev)
+        qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? prev : e)))
+      }
       onErrorRef.current?.(err, entity)
     },
     onSettled: () => {
