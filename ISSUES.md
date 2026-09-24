@@ -16,29 +16,6 @@ running app. Nothing below has been reproduced yet.
 
 ## Open
 
-### I-1 · Title input can revert mid-typing · high · confirmed
-
-**Where:** `calcifer/src/App.tsx` (`useWatchSync`), `calcifer/src/routes/e.$id.tsx` (`EntityTitleInput`)
-
-**Problem:** Renaming sends one `Update` per keystroke. The watch-stream handler writes
-every `upserted` event straight into `qk.entity(id)`. If the server echo of keystroke *n*
-arrives after keystroke *n+2* was applied optimistically, the cache goes back to the
-older name. `EntityTitleInput`'s effect then syncs `entity.name` into local state, so the
-field visibly reverts to a shorter prefix. The component's comment claims this can't
-happen; it only considers the optimistic path, not watch echoes.
-
-**Fix:**
-- Debounce the rename (~300 ms) so a typing burst sends one write.
-- Don't sync `entity.name` into the input while it has focus.
-- Optionally, in `useWatchSync`, skip an upsert whose `updatedAt` is older than the
-  cached entity's.
-
-**Done when:** typing quickly into a title with added network latency never reverts
-characters, and a rename from another client still shows up when the field isn't
-focused.
-
----
-
 ### I-2 · Relation targets aren't checked against `targetStructure` · medium · confirmed
 
 **Where:** `server/src/link_store.rs` (`sync_relation_links`), `server/src/structures.rs`
@@ -210,6 +187,7 @@ updates one property row and runs relation link sync for just that property. Mov
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks \`rows_affected()\` and returns \`NotFound\` for an unknown id; covered by \`update_missing_entity_is_not_found\`.
 - **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes \`structure_type\`; a mismatch with the stored type returns \`InvalidArgument\`; covered by \`update_rejects_structure_type_change\`.
+- **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and \`entity.name\` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
