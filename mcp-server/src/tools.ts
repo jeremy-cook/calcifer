@@ -144,5 +144,6 @@ export function listStructures(): string {
     '- Note: a concept/topic note (the main building block; reference with [[Name]])',
     '- Tag: a label, written #tag in note content',
     '- DailyNote: a journal entry for a calendar day',
+    '- Todo: an actionable item with status, priority, due date, and tags (reference with [[Name]])',
   ].join('\n')
 }
