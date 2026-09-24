@@ -56,24 +56,6 @@ update without a reload.
 
 ---
 
-### I-5 · A daily-note move the server rejects fails silently · low · confirmed
-
-**Where:** `calcifer/src/components/calendar/DailyNoteDateField.tsx`, `calcifer/src/model/store.ts` (`useUpdateEntity`)
-
-**Problem:** `validate` checks whether the target day is taken using the client's cached
-list. If the cache is stale, the server's `date_key` unique index rejects the update.
-`useUpdateEntity` rolls back and the date snaps back with no message. This predates the
-`useUpdateEntity` refactor.
-
-**Fix:** Let `useUpdateEntity` take an `onError` callback, or return `mutateAsync`, so
-callers can react to failures. `DailyNoteDateField` should show the server's "already
-exists" error. A shared toast for failed writes would cover every caller.
-
-**Done when:** a move that collides on the server shows an error instead of silently
-reverting.
-
----
-
 ### I-7 · `TodoRow` subscribes to the whole entity list · low · confirmed
 
 **Where:** `calcifer/src/components/todo/TodoRow.tsx`, `TodoList.tsx`
@@ -147,6 +129,7 @@ updates one property row and runs relation link sync for just that property. Mov
 - **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and \`entity.name\` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
 - **I-12 · Eight ESLint errors on `main`.** Fixed 2026-09-24. ESLint config turns off \`only-export-components\` for \`src/routes/**\` and \`src/components/ui/**\`; \`prefer-const\` fixed by hand. \`pnpm lint\` exits 0.
 - **I-6 · Concurrent optimistic updates can undo each other on rollback.** Fixed 2026-09-24. Rollback replaces only the failed entity (list row and detail cache), never the whole list snapshot. Verified by reasoning.
+- **I-5 · A daily-note move the server rejects fails silently.** Fixed 2026-09-24. \`useUpdateEntity\` takes an \`onError\`; \`DailyNoteDateField\` shows an inline error on \`AlreadyExists\`. No shared toast (no toast library). Verified by reasoning.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
