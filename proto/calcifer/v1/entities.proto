@@ -9,6 +9,10 @@ message EntityRef {
   string structure_type = 2;
 }
 
+message EntityRefList {
+  repeated EntityRef refs = 1;
+}
+
 message PropertyValue {
   oneof value {
     string text = 1;
@@ -17,6 +21,7 @@ message PropertyValue {
     string select = 4;
     EntityRef relation = 5;
     RichTextRef richtext = 6;
+    EntityRefList relations = 7;   // multi-target relation; server derives links from it
   }
 }
 
