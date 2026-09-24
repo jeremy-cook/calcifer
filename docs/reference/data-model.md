@@ -60,32 +60,76 @@ reads never pull document bodies.
 
 ## Structures
 
-Defined in `calcifer/src/model/structures.ts` (FE) and `server/src/structures.rs`.
-Today: `Note`, `Tag`, `DailyNote`, `Todo`.
+The registry is authored in exactly one place, the static `STRUCTURES` table in
+`server/src/structures.rs` ([ADR 7](../adr/0007-server-owned-structure-registry.md)),
+and served by `StructureService.List`. Today: `Note`, `Tag`, `DailyNote`, `Todo`.
+Proto defines only its shape, in `proto/calcifer/v1/structures.proto`:
 
-| Flag | Default | Meaning |
-|---|---|---|
-| `mentionable` | `true` | Whether `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
-| `creatable` | `true` | Whether the sidebar "+ New" menu offers it. `false` means no zero-arg create path; e.g. `createDailyNote(iso)` requires a date. |
-| `uniqueNames` | `false` | Whether two entities may share a case-insensitive name. `true` for `Tag`, where the name *is* the identity. Softly enforced. |
-| `editable` (per property) | `true` | Renders an input vs a read-only display. |
-| `nameMeta.editable` | `true` | Same, for the entity title. `false` for `DailyNote`. |
+```proto
+enum PropertyKind {
+  PROPERTY_KIND_UNSPECIFIED = 0;
+  PROPERTY_KIND_RICHTEXT = 1;  PROPERTY_KIND_TEXT = 2;     PROPERTY_KIND_NUMBER = 3;
+  PROPERTY_KIND_DATE = 4;      PROPERTY_KIND_SELECT = 5;   PROPERTY_KIND_RELATION = 6;
+  PROPERTY_KIND_RELATIONS = 7;
+}
+
+message SelectOption { string key = 1; string label = 2; }
+
+message PropertyDef {
+  string id = 1;
+  PropertyKind kind = 2;
+  string label = 3;                    // empty = none; clients fall back to the id
+  repeated SelectOption options = 4;   // select only, in display (and rank) order
+  string default_option = 5;           // select only; empty = none
+  string target_structure = 6;         // relation/relations only; empty = any
+}
+
+message StructureDef {
+  string type = 1;  string name = 2;  string plural = 3;
+  string description = 4;              // one line, for the agent
+  repeated PropertyDef properties = 5; // in display order
+  bool creatable = 6;  bool mentionable = 7;  bool unique_names = 8;  bool name_editable = 9;
+}
+```
+
+| Flag | Meaning |
+|---|---|
+| `mentionable` | Whether bare `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
+| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. `false` means no zero-arg create path; e.g. `createDailyNote(iso)` requires a date. |
+| `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Softly enforced (plus the `one_tag_per_name` index). |
+| `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. |
+
+The server derives what its write paths need from the same table: `richtext_properties`
+and `select_defaults` (what `ResolveByName` puts on a new entity), `relation_properties`
+(what link sync clears), and `property(type, id)` for single-definition lookups.
+
+The frontend fetches the registry once (TanStack Query, `staleTime: Infinity`) and
+doesn't render the router until it has loaded, so synchronous code reads it from the
+cache via `getStructures()`; components use `useStructures()`/`useStructure()`
+(`calcifer/src/model/structures.ts`). The frontend keeps only presentation keyed by
+type (icon and color, with a fallback for unknown types) and per-option presentation
+such as `PriorityBadge`'s variants (with a fallback variant). Option keys the UI
+branches on (status `done`/`open`, priority `none`) stay literal in the code that uses
+them. The MCP `list_structures` tool formats the same RPC response.
 
 Current shape:
 
 - **`Note`** — properties: `content` (richtext).
-- **`Tag`** — no properties; `mentionable: false` (reached via `#`), `uniqueNames: true`.
-- **`DailyNote`** — properties: `date` (date, read-only), `content` (richtext);
-  `creatable: false`, `mentionable: false`, `nameMeta.editable: false`. Name is set to
-  the long-form date at creation. Uniqueness per day is enforced by the `date_key`
-  column and the `one_daily_note_per_day` index.
+- **`Tag`** — no properties; `mentionable: false` (reached via `#`), `unique_names: true`.
+- **`DailyNote`** — properties: `date` (date), `content` (richtext); `creatable: false`,
+  `mentionable: false`, `name_editable: false`. Name is set to the long-form date at
+  creation; the entity page edits `date` through `DailyNoteDateField`, which moves the
+  note and renames it. Uniqueness per day is enforced by the `date_key` column and the
+  `one_daily_note_per_day` index.
 - **`Todo`** — properties: `status` (select: `open`/`done`, default `open`), `priority`
   (select: `none`/`low`/`medium`/`high`, default `none`), `due` (date), `tags`
-  (relations → `Tag`), `content` (richtext). No overrides — `creatable: true` and
-  `mentionable: true` by default, unlike `Tag`/`DailyNote`.
+  (relations → `Tag`), `content` (richtext). `creatable` and `mentionable`, unlike
+  `Tag`/`DailyNote`.
 
-Adding a Structure means editing those two files plus any custom rendering. No DB
-migration.
+Adding a select option, or changing a label or default, is a change to
+`structures.rs` alone. Adding a Structure is `structures.rs` plus, optionally, an
+icon/color entry in the frontend and any custom rendering. No DB migration; the server
+must be restarted and clients pick the change up on next load.
 
 ---
 
@@ -129,6 +173,11 @@ service EntityService {
 service RichTextService { rpc Get / Put }
 
 service SearchService   { rpc Search / Retrieve }   // FTS5 lexical / hybrid RRF
+
+// The structure registry (see Structures). No filters; every structure in table order.
+service StructureService {
+  rpc List(ListStructuresRequest) returns (ListStructuresResponse);  // repeated StructureDef
+}
 ```
 
 Transport is gRPC-Web from the browser (`tonic-web` bridges; Vite proxies `/api` →
@@ -161,6 +210,9 @@ Both paths exist as the RAG substrate; neither is surfaced in the UI yet.
 
 `search_notes` · `get_note` · `create_note` · `append_to_note` · `link_notes` ·
 `get_backlinks` · `create_daily_note` · `append_to_daily_note` · `list_structures`
+
+`list_structures` calls `StructureService.List` and formats each structure's type,
+description and properties (kinds, select options and defaults, relation targets).
 
 Writes go through the same RPCs the browser uses. Markdown is converted to TipTap JSON
 in `mcp-server/src/markdown/`, resolving `[[wikilink]]` and `#tag` through
