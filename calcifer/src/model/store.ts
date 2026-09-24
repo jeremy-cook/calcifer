@@ -1,4 +1,5 @@
-import { useCallback } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
+import type { ConnectError } from '@connectrpc/connect'
 import { create as createMessage } from '@bufbuild/protobuf'
 import { timestampNow } from '@bufbuild/protobuf/wkt'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -131,12 +132,22 @@ export function useCreateDailyNote() {
   return useCallback((iso: string) => m.mutateAsync(buildDailyNoteMessage(iso)), [m])
 }
 
+export interface UseUpdateEntityOptions {
+  // Called after the optimistic change has been rolled back.
+  onError?: (err: ConnectError | Error, entity: Entity) => void
+}
+
 // Single write path for edits to an existing entity. Optimistic on both the
 // entity cache and the list cache (so checkboxes on /s/Todo and the calendar
 // flip immediately), rolled back on error. Sends the whole entity, so concurrent
 // writers are last-write-wins.
-export function useUpdateEntity() {
+export function useUpdateEntity({ onError }: UseUpdateEntityOptions = {}) {
   const qc = useQueryClient()
+  // Latest callback without re-creating the mutation on every render.
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
   const { mutate } = useMutation({
     mutationFn: (entity: Entity) => entityClient.update({ entity }),
     onMutate: async (entity) => {
@@ -152,10 +163,11 @@ export function useUpdateEntity() {
     },
     // Roll back only the failed entity's row: restoring a whole-list snapshot
     // would also undo other updates that were in flight concurrently.
-    onError: (_e, entity, ctx) => {
+    onError: (err, entity, ctx) => {
       if (ctx?.prevEntity) qc.setQueryData(qk.entity(entity.id), ctx.prevEntity)
       const prev = ctx?.prevEntity ?? ctx?.prevListEntity
       if (prev) qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? prev : e)))
+      onErrorRef.current?.(err, entity)
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['entities'] })

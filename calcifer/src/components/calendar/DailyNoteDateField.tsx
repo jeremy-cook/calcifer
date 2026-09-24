@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { Code, ConnectError } from '@connectrpc/connect'
 import { EntityDateField } from '~/components/entity/EntityDateField'
 import { dailyNoteByDate, dailyNoteDate, useAllEntities, useUpdateEntity, withDailyNoteDate, type Entity } from '~/model/store'
 
@@ -8,7 +10,19 @@ export interface DailyNoteDateFieldProps {
 // Moving a daily note renames it, and a day can hold only one daily note.
 export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
   const entities = useAllEntities()
-  const updateEntity = useUpdateEntity()
+  // Keyed by entity id so an error doesn't follow the field to another note.
+  const [serverError, setServerError] = useState<{ id: string; message: string } | null>(null)
+  // validate uses the cached list, which can be stale; the server's unique
+  // date index is the real check and answers AlreadyExists on a collision.
+  const updateEntity = useUpdateEntity({
+    onError: (err, failed) => {
+      const collided = err instanceof ConnectError && err.code === Code.AlreadyExists
+      const message = collided
+        ? 'A daily note already exists for that day.'
+        : "Couldn't move the daily note. Try again."
+      setServerError({ id: failed.id, message })
+    },
+  })
   const iso = dailyNoteDate(entity)
   if (!iso) return null
 
@@ -17,12 +31,12 @@ export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
     return occupant && occupant.id !== entity.id ? 'A daily note already exists for that day.' : null
   }
 
-  return (
-    <EntityDateField
-      label="Date"
-      iso={iso}
-      validate={validate}
-      onChange={(next) => updateEntity(withDailyNoteDate(entity, next))}
-    />
-  )
+  const handleChange = (next: string) => {
+    setServerError(null)
+    updateEntity(withDailyNoteDate(entity, next))
+  }
+
+  const error = serverError?.id === entity.id ? serverError.message : null
+
+  return <EntityDateField label="Date" iso={iso} validate={validate} error={error} onChange={handleChange} />
 }

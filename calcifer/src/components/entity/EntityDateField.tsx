@@ -12,9 +12,18 @@ export interface EntityDateFieldProps {
   onClear?: () => void
   // Returns an error message to keep the picker open and show it, or null to accept.
   validate?: (newIso: string) => string | null
+  // An error from outside the picker (e.g. the server rejected the change), shown beside the date.
+  error?: string | null
 }
 
-export function EntityDateField({ label, iso, onChange, onClear, validate }: EntityDateFieldProps) {
+export function EntityDateField({
+  label,
+  iso,
+  onChange,
+  onClear,
+  validate,
+  error: externalError,
+}: EntityDateFieldProps) {
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selected = iso ? dateFromIso(iso) : undefined
@@ -72,6 +81,7 @@ export function EntityDateField({ label, iso, onChange, onClear, validate }: Ent
           <XIcon className="size-3.5 text-muted-foreground" />
         </Button>
       )}
+      {externalError && <div className="text-sm text-destructive">{externalError}</div>}
     </div>
   )
 }
