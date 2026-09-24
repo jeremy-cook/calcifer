@@ -473,7 +473,7 @@ impl EntityServiceTrait for EntityService {
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
 
-        sqlx::query!(
+        let updated = sqlx::query!(
             "UPDATE entities SET structure_type = ?, name = ?, date_key = ?, updated_at = ? WHERE id = ?",
             entity.structure_type,
             entity.name,
@@ -484,6 +484,10 @@ impl EntityServiceTrait for EntityService {
         .execute(&mut *tx)
         .await
         .map_err(|e| map_unique_violation(AppError::from(e), "a DailyNote for this date already exists"))?;
+        // Unknown id: bail before the properties insert trips the foreign key.
+        if updated.rows_affected() == 0 {
+            return Err(Status::not_found(format!("entity {}", entity.id)));
+        }
 
         self.replace_properties(&mut tx, &entity)
             .await
@@ -694,5 +698,29 @@ mod tests {
         assert_eq!(updated.properties, entity.properties);
         let stored = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(stored.name, "After");
+    }
+
+    #[tokio::test]
+    async fn update_missing_entity_is_not_found() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        // Carries a property, so without the guard the properties insert would
+        // hit the foreign key instead.
+        let entity = note("Ghost");
+
+        let err = svc
+            .update(Request::new(UpdateEntityRequest {
+                entity: Some(entity.clone()),
+            }))
+            .await
+            .expect_err("update of a missing id should fail");
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        let fts_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entity_fts WHERE entity_id = ?")
+            .bind(&entity.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count fts");
+        assert_eq!(fts_rows, 0);
     }
 }
