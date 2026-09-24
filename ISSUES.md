@@ -90,14 +90,14 @@ updates one property row and runs relation link sync for just that property. Mov
 
 ## Resolved
 
-- **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks \`rows_affected()\` and returns \`NotFound\` for an unknown id; covered by \`update_missing_entity_is_not_found\`.
-- **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes \`structure_type\`; a mismatch with the stored type returns \`InvalidArgument\`; covered by \`update_rejects_structure_type_change\`.
-- **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and \`entity.name\` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
-- **I-12 · Eight ESLint errors on `main`.** Fixed 2026-09-24. ESLint config turns off \`only-export-components\` for \`src/routes/**\` and \`src/components/ui/**\`; \`prefer-const\` fixed by hand. \`pnpm lint\` exits 0.
+- **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
+- **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes `structure_type`; a mismatch with the stored type returns `InvalidArgument`; covered by `update_rejects_structure_type_change`.
+- **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and `entity.name` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
+- **I-12 · Eight ESLint errors on `main`.** Fixed 2026-09-24. ESLint config turns off `only-export-components` for `src/routes/**` and `src/components/ui/**`; `prefer-const` fixed by hand. `pnpm lint` exits 0.
 - **I-6 · Concurrent optimistic updates can undo each other on rollback.** Fixed 2026-09-24. Rollback replaces only the failed entity (list row and detail cache), never the whole list snapshot. Verified by reasoning.
-- **I-5 · A daily-note move the server rejects fails silently.** Fixed 2026-09-24. \`useUpdateEntity\` takes an \`onError\`; \`DailyNoteDateField\` shows an inline error on \`AlreadyExists\`. No shared toast (no toast library). Verified by reasoning.
-- **I-4 · To-do "today" doesn't roll over at midnight.** Fixed 2026-09-24. \`useToday()\` in \`model/dates.ts\` re-renders at local midnight and re-checks on focus/visibility; used by the to-do list, rows and calendar route. Midnight arithmetic exercised by script (incl. DST); clock change not observed in the browser.
-- **I-7 · `TodoRow` subscribes to the whole entity list.** Fixed 2026-09-24. \`TodoList\` resolves tags through one memoized \`Map\` and passes them in; \`TodoRow\` is memoized and no longer calls \`useAllEntities()\`.
+- **I-5 · A daily-note move the server rejects fails silently.** Fixed 2026-09-24. `useUpdateEntity` takes an `onError`; `DailyNoteDateField` shows an inline error on `AlreadyExists`. No shared toast (no toast library). Verified by reasoning.
+- **I-4 · To-do "today" doesn't roll over at midnight.** Fixed 2026-09-24. `useToday()` in `model/dates.ts` re-renders at local midnight and re-checks on focus/visibility; used by the to-do list, rows and calendar route. Midnight arithmetic exercised by script (incl. DST); clock change not observed in the browser.
+- **I-7 · `TodoRow` subscribes to the whole entity list.** Fixed 2026-09-24. `TodoList` resolves tags through one memoized `Map` and passes them in; `TodoRow` is memoized and no longer calls `useAllEntities()`.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
