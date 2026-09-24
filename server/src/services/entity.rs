@@ -5,13 +5,13 @@ use tonic::{Request, Response, Status};
 
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
-use crate::link_store::sync_relation_links;
+use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
     CreateDailyNoteRequest, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
     EntityRef, GetEntityRequest, LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property,
-    PropertyValue, RichTextRef, ResolveByNameRequest, ResolveByNameResponse, UpdateEntityRequest,
-    WatchRequest,
+    PropertyValue, RichTextRef, ResolveByNameRequest, ResolveByNameResponse, SetPropertyRequest,
+    UpdateEntityRequest, WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
 use crate::watch::WatchHub;
@@ -311,61 +311,76 @@ pub(crate) fn ts_from_millis(millis: i64) -> prost_types::Timestamp {
 /// `one_daily_note_per_day` unique index. Returning None for non-DailyNote types
 /// keeps the partial index inert for everything else.
 fn date_key_for(entity: &Entity) -> Option<String> {
-    if entity.structure_type != "DailyNote" {
-        return None;
-    }
-    entity.properties.iter().find_map(|p| match &p.value {
-        Some(PropertyValue {
-            value: Some(property_value::Value::Date(d)),
-        }) if p.id == "date" && !d.is_empty() => Some(d.clone()),
-        _ => None,
-    })
+    entity
+        .properties
+        .iter()
+        .find_map(|p| date_key_from(&entity.structure_type, p))
 }
 
-/// Reject select values the structure doesn't allow (I-9): a property declared as
+/// The `date_key` a single property contributes: its value when it's a
+/// DailyNote's non-empty `date`, else None. Shared by `date_key_for` and
+/// SetProperty, which only sees the one property.
+fn date_key_from(structure_type: &str, prop: &Property) -> Option<String> {
+    if structure_type != "DailyNote" || prop.id != "date" {
+        return None;
+    }
+    match &prop.value {
+        Some(PropertyValue {
+            value: Some(property_value::Value::Date(d)),
+        }) if !d.is_empty() => Some(d.clone()),
+        _ => None,
+    }
+}
+
+/// Reject select values the structure doesn't allow (I-9), for every property
+/// of an entity. See `validate_select`.
+fn validate_selects(entity: &Entity) -> Result<(), AppError> {
+    for prop in &entity.properties {
+        validate_select(&entity.structure_type, prop)?;
+    }
+    Ok(())
+}
+
+/// Reject a select value the structure doesn't allow (I-9): a property declared as
 /// a select must hold a `select` value naming one of its options, and a `select`
 /// value is only allowed on a declared select. Structures missing from the
 /// registry have no schema and pass unchecked; other kinds aren't checked.
-fn validate_selects(entity: &Entity) -> Result<(), AppError> {
-    let structure_type = &entity.structure_type;
+/// Shared by Create/Update (via `validate_selects`) and SetProperty.
+fn validate_select(structure_type: &str, prop: &Property) -> Result<(), AppError> {
     if structures::structure(structure_type).is_none() {
         return Ok(());
     }
-    for prop in &entity.properties {
-        let def = structures::property(structure_type, &prop.id)
-            .filter(|d| d.kind == PropertyKind::Select);
-        let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
-        match (def, value) {
-            (None, Some(property_value::Value::Select(key))) => {
-                return Err(AppError::Invalid(format!(
-                    "{structure_type}.{} is not a select property (got select {key:?})",
-                    prop.id
-                )));
-            }
-            (None, _) => {}
-            (Some(def), value) => {
-                let allowed: Vec<&str> = def.options.iter().map(|o| o.key).collect();
-                let key = match value {
-                    Some(property_value::Value::Select(key)) => key.as_str(),
-                    _ => {
-                        return Err(AppError::Invalid(format!(
-                            "{structure_type}.{} must be a select value, one of: {}",
-                            prop.id,
-                            allowed.join(", ")
-                        )));
-                    }
-                };
-                if !allowed.contains(&key) {
+    let def = structures::property(structure_type, &prop.id)
+        .filter(|d| d.kind == PropertyKind::Select);
+    let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
+    match (def, value) {
+        (None, Some(property_value::Value::Select(key))) => Err(AppError::Invalid(format!(
+            "{structure_type}.{} is not a select property (got select {key:?})",
+            prop.id
+        ))),
+        (None, _) => Ok(()),
+        (Some(def), value) => {
+            let allowed: Vec<&str> = def.options.iter().map(|o| o.key).collect();
+            let key = match value {
+                Some(property_value::Value::Select(key)) => key.as_str(),
+                _ => {
                     return Err(AppError::Invalid(format!(
-                        "invalid value {key:?} for {structure_type}.{}; allowed: {}",
+                        "{structure_type}.{} must be a select value, one of: {}",
                         prop.id,
                         allowed.join(", ")
                     )));
                 }
+            };
+            if !allowed.contains(&key) {
+                return Err(AppError::Invalid(format!(
+                    "invalid value {key:?} for {structure_type}.{}; allowed: {}",
+                    prop.id,
+                    allowed.join(", ")
+                )));
             }
+            Ok(())
         }
     }
-    Ok(())
 }
 
 /// Format an ISO calendar day ("2026-06-13") as a long human date
@@ -571,6 +586,130 @@ impl EntityServiceTrait for EntityService {
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(&entity.id).await.map_err(Status::from)?;
+        self.hub.publish(EntityEvent {
+            event: Some(entity_event::Event::Upserted(saved.clone())),
+        });
+        Ok(Response::new(saved))
+    }
+
+    // One property row, not the whole entity, so writers editing different
+    // properties of the same entity don't undo each other (I-11). Validates the
+    // property with the same checks Create/Update use: `validate_select` (I-9)
+    // and, through `sync_relation_property`, `check_relation_targets` (I-2).
+    // The name never changes here, so the FTS row (name + body) needs no sync.
+    async fn set_property(
+        &self,
+        req: Request<SetPropertyRequest>,
+    ) -> Result<Response<Entity>, Status> {
+        let SetPropertyRequest {
+            entity_id,
+            property_id,
+            value,
+        } = req.into_inner();
+        if property_id.is_empty() {
+            return Err(Status::invalid_argument("property_id is required"));
+        }
+        // An unset value, or one with no case, clears the property.
+        let prop = Property {
+            id: property_id,
+            value: value.filter(|v| v.value.is_some()),
+        };
+        let now = chrono::Utc::now().timestamp_millis();
+
+        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+
+        let structure_type = sqlx::query_scalar!(
+            "SELECT structure_type FROM entities WHERE id = ?",
+            entity_id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AppError::from)?
+        .ok_or_else(|| Status::not_found(format!("entity {}", entity_id)))?;
+
+        // Clearing is allowed on any property, as omitting it from an Update is.
+        if prop.value.is_some() {
+            validate_select(&structure_type, &prop).map_err(Status::from)?;
+        }
+
+        let previous = sqlx::query_scalar!(
+            "SELECT value_blob FROM properties WHERE entity_id = ? AND property_id = ?",
+            entity_id,
+            prop.id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AppError::from)?
+        .map(|blob| <PropertyValue as prost::Message>::decode(&*blob))
+        .transpose()
+        .map_err(AppError::from)?;
+
+        match &prop.value {
+            Some(value) => {
+                let blob = prost::Message::encode_to_vec(value);
+                sqlx::query!(
+                    "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
+                     ON CONFLICT (entity_id, property_id) DO UPDATE SET value_blob = excluded.value_blob",
+                    entity_id,
+                    prop.id,
+                    blob,
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+            }
+            None => {
+                sqlx::query!(
+                    "DELETE FROM properties WHERE entity_id = ? AND property_id = ?",
+                    entity_id,
+                    prop.id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+            }
+        }
+
+        // Only this property's links. The old value counts too, so replacing or
+        // clearing an ad-hoc relation property drops its links. Richtext-derived
+        // links live under their own source_property_id and aren't touched.
+        let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
+        let was_relation = is_relation_value(previous.as_ref().and_then(|v| v.value.as_ref()));
+        if structures::relation_properties(&structure_type).contains(&prop.id.as_str())
+            || is_relation_value(value)
+            || was_relation
+        {
+            sync_relation_property(&mut tx, &entity_id, &structure_type, &prop.id, value, now)
+                .await
+                .map_err(Status::from)?;
+        }
+
+        // A DailyNote's `date` drives date_key; every other property leaves it be.
+        if structure_type == "DailyNote" && prop.id == "date" {
+            let date_key = date_key_from(&structure_type, &prop);
+            sqlx::query!(
+                "UPDATE entities SET date_key = ?, updated_at = ? WHERE id = ?",
+                date_key,
+                now,
+                entity_id,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| map_unique_violation(AppError::from(e), "a DailyNote for this date already exists"))?;
+        } else {
+            sqlx::query!(
+                "UPDATE entities SET updated_at = ? WHERE id = ?",
+                now,
+                entity_id,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        }
+
+        tx.commit().await.map_err(AppError::from)?;
+
+        let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
         self.hub.publish(EntityEvent {
             event: Some(entity_event::Event::Upserted(saved.clone())),
         });
@@ -1089,5 +1228,211 @@ mod tests {
             link_targets(&updated, "tags"),
             [(kept.id.clone(), "Tag".to_string())]
         );
+    }
+
+    async fn set_property(
+        svc: &EntityService,
+        entity_id: &str,
+        property_id: &str,
+        value: Option<property_value::Value>,
+    ) -> Result<Entity, Status> {
+        svc.set_property(Request::new(SetPropertyRequest {
+            entity_id: entity_id.to_string(),
+            property_id: property_id.to_string(),
+            value: value.map(|value| PropertyValue { value: Some(value) }),
+        }))
+        .await
+        .map(Response::into_inner)
+    }
+
+    fn select(key: &str) -> Option<property_value::Value> {
+        Some(property_value::Value::Select(key.to_string()))
+    }
+
+    fn tags_value(refs: &[(&str, &str)]) -> Option<property_value::Value> {
+        Some(property_value::Value::Relations(EntityRefList {
+            refs: refs
+                .iter()
+                .map(|(id, structure_type)| EntityRef {
+                    id: id.to_string(),
+                    structure_type: structure_type.to_string(),
+                })
+                .collect(),
+        }))
+    }
+
+    // I-11's done-when: two writers start from the same snapshot and each edit a
+    // different property; both edits survive.
+    #[tokio::test]
+    async fn concurrent_set_property_edits_both_survive() {
+        let svc = entity_service(memory_pool().await);
+        let snapshot = create(&svc, todo("Water plants")).await;
+
+        set_property(&svc, &snapshot.id, "status", select("done"))
+            .await
+            .expect("writer A");
+        set_property(&svc, &snapshot.id, "priority", select("high"))
+            .await
+            .expect("writer B");
+
+        let stored = svc.load_entity(&snapshot.id).await.expect("load");
+        assert_eq!(select_value(&stored, "status").as_deref(), Some("done"));
+        assert_eq!(select_value(&stored, "priority").as_deref(), Some("high"));
+    }
+
+    // The contrast: Update resends every property, so a writer holding a stale
+    // snapshot silently reverts the other writer's edit. Kept for renames and
+    // multi-field edits only.
+    #[tokio::test]
+    async fn update_from_a_stale_snapshot_loses_a_concurrent_edit() {
+        let svc = entity_service(memory_pool().await);
+        let snapshot = create(&svc, todo("Water plants")).await;
+
+        set_property(&svc, &snapshot.id, "status", select("done"))
+            .await
+            .expect("writer A");
+        update(&svc, with_select(snapshot.clone(), "priority", "high"))
+            .await
+            .expect("writer B");
+
+        let stored = svc.load_entity(&snapshot.id).await.expect("load");
+        assert_eq!(select_value(&stored, "priority").as_deref(), Some("high"));
+        assert_eq!(select_value(&stored, "status").as_deref(), Some("open"));
+    }
+
+    #[tokio::test]
+    async fn set_property_rejects_unknown_select_value() {
+        let svc = entity_service(memory_pool().await);
+        let entity = create(&svc, todo("Water plants")).await;
+
+        let err = set_property(&svc, &entity.id, "status", select("banana"))
+            .await
+            .expect_err("unknown status should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("banana"), "{}", err.message());
+
+        // A select on a property not declared as one is rejected too.
+        let err = set_property(&svc, &entity.id, "due", select("open"))
+            .await
+            .expect_err("select on a non-select property should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored.properties, entity.properties);
+        assert_eq!(stored.updated_at, entity.updated_at);
+    }
+
+    #[tokio::test]
+    async fn set_property_checks_relation_targets() {
+        let svc = entity_service(memory_pool().await);
+        let urgent = create(&svc, tag("urgent")).await;
+        let other = create(&svc, note("Not a tag")).await;
+        let entity = create(&svc, todo("Water plants")).await;
+
+        let err = set_property(
+            &svc,
+            &entity.id,
+            "tags",
+            tags_value(&[(&urgent.id, "Tag"), (&other.id, "Note")]),
+        )
+        .await
+        .expect_err("a Note in tags should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("tags"), "{}", err.message());
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored.properties, entity.properties);
+        assert!(link_targets(&stored, "tags").is_empty());
+
+        // An empty claimed type is allowed; the link records the real one.
+        let updated = set_property(&svc, &entity.id, "tags", tags_value(&[(&urgent.id, "")]))
+            .await
+            .expect("a Tag in tags");
+        assert_eq!(
+            link_targets(&updated, "tags"),
+            [(urgent.id.clone(), "Tag".to_string())]
+        );
+    }
+
+    #[tokio::test]
+    async fn set_property_clear_removes_only_that_property_and_its_links() {
+        let svc = entity_service(memory_pool().await);
+        let urgent = create(&svc, tag("urgent")).await;
+        let mentioned = create(&svc, note("Mentioned")).await;
+        // Create persists `links` as given, standing in for RichTextService.Put's
+        // content-derived links.
+        let mut entity = with_relations(todo("Water plants"), "tags", &[(&urgent.id, "Tag")]);
+        entity.links.push(LinkRef {
+            id: uuid::Uuid::new_v4().to_string(),
+            target: Some(EntityRef {
+                id: mentioned.id.clone(),
+                structure_type: "Note".to_string(),
+            }),
+            source_property_id: "content".to_string(),
+            created_at: None,
+        });
+        let entity = create(&svc, entity).await;
+        assert_eq!(link_targets(&entity, "tags").len(), 1);
+
+        let cleared = set_property(&svc, &entity.id, "tags", None)
+            .await
+            .expect("clear tags");
+
+        assert!(cleared.properties.iter().all(|p| p.id != "tags"));
+        assert!(link_targets(&cleared, "tags").is_empty());
+        let mut expected: Vec<_> = entity
+            .properties
+            .iter()
+            .filter(|p| p.id != "tags")
+            .cloned()
+            .collect();
+        let mut remaining = cleared.properties.clone();
+        expected.sort_by(|a, b| a.id.cmp(&b.id));
+        remaining.sort_by(|a, b| a.id.cmp(&b.id));
+        assert_eq!(remaining, expected);
+        assert_eq!(
+            link_targets(&cleared, "content"),
+            [(mentioned.id.clone(), "Note".to_string())]
+        );
+
+        // A value with no case clears too.
+        set_property(&svc, &entity.id, "status", None)
+            .await
+            .expect("clear status");
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(select_value(&stored, "status"), None);
+        assert_eq!(select_value(&stored, "priority").as_deref(), Some("none"));
+    }
+
+    #[tokio::test]
+    async fn set_property_missing_entity_is_not_found() {
+        let svc = entity_service(memory_pool().await);
+
+        let err = set_property(&svc, "no-such-entity", "status", select("done"))
+            .await
+            .expect_err("missing entity");
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn set_property_moves_a_daily_note_date_key() {
+        let svc = entity_service(memory_pool().await);
+        let first = create(&svc, build_daily_note("2026-06-13")).await;
+        let second = create(&svc, build_daily_note("2026-06-14")).await;
+        let date = |d: &str| Some(property_value::Value::Date(d.to_string()));
+
+        set_property(&svc, &first.id, "date", date("2026-06-15"))
+            .await
+            .expect("move to a free day");
+        // The old day is free again; the new one is taken.
+        svc.create_daily_note(Request::new(CreateDailyNoteRequest {
+            date: "2026-06-13".to_string(),
+        }))
+        .await
+        .expect("old day is free");
+        let err = set_property(&svc, &second.id, "date", date("2026-06-15"))
+            .await
+            .expect_err("day already has a note");
+        assert_eq!(err.code(), tonic::Code::AlreadyExists);
     }
 }

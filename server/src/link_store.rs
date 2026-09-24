@@ -12,7 +12,7 @@ use crate::structures::{self, relation_properties};
 /// target, reusing the prior link_id/created_at when a target repeats (preserves
 /// backlink recency across an edit) and skipping targets with no `entities` row.
 /// Runs inside an already-open transaction. Shared by `RichTextService.Put`
-/// (content-derived links) and `sync_relation_links` (relation-property links).
+/// (content-derived links) and `sync_relation_property` (relation-property links).
 pub(crate) async fn replace_scoped_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     entity_id: &str,
@@ -90,10 +90,7 @@ pub(crate) async fn sync_relation_links(
 ) -> Result<(), AppError> {
     let mut property_ids: Vec<&str> = relation_properties(&entity.structure_type);
     for prop in &entity.properties {
-        let is_relation = matches!(
-            prop.value.as_ref().and_then(|v| v.value.as_ref()),
-            Some(property_value::Value::Relation(_) | property_value::Value::Relations(_))
-        );
+        let is_relation = is_relation_value(prop.value.as_ref().and_then(|v| v.value.as_ref()));
         if is_relation && !property_ids.contains(&prop.id.as_str()) {
             property_ids.push(&prop.id);
         }
@@ -106,15 +103,39 @@ pub(crate) async fn sync_relation_links(
             .find(|p| p.id == property_id)
             .and_then(|p| p.value.as_ref())
             .and_then(|v| v.value.as_ref());
-        let refs: Vec<&EntityRef> = match value {
-            Some(property_value::Value::Relation(r)) => vec![r],
-            Some(property_value::Value::Relations(list)) => list.refs.iter().collect(),
-            _ => Vec::new(),
-        };
-        let targets = check_relation_targets(tx, entity, property_id, &refs).await?;
-        replace_scoped_links(tx, &entity.id, property_id, &targets, now).await?;
+        sync_relation_property(tx, &entity.id, &entity.structure_type, property_id, value, now)
+            .await?;
     }
     Ok(())
+}
+
+/// Whether a property value is a `relation`/`relations` value (and so owns link rows).
+pub(crate) fn is_relation_value(value: Option<&property_value::Value>) -> bool {
+    matches!(
+        value,
+        Some(property_value::Value::Relation(_) | property_value::Value::Relations(_))
+    )
+}
+
+/// Scoped-replace the links of one relation property from its new `value`
+/// (`None`, or a non-relation value, clears them). The per-property step of
+/// `sync_relation_links`, also called on its own by `EntityService.SetProperty`.
+/// Callers decide which properties are relation properties; this doesn't check.
+pub(crate) async fn sync_relation_property(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity_id: &str,
+    structure_type: &str,
+    property_id: &str,
+    value: Option<&property_value::Value>,
+    now: i64,
+) -> Result<(), AppError> {
+    let refs: Vec<&EntityRef> = match value {
+        Some(property_value::Value::Relation(r)) => vec![r],
+        Some(property_value::Value::Relations(list)) => list.refs.iter().collect(),
+        _ => Vec::new(),
+    };
+    let targets = check_relation_targets(tx, structure_type, property_id, &refs).await?;
+    replace_scoped_links(tx, entity_id, property_id, &targets, now).await
 }
 
 /// Check a relation property's refs against the targets' real `structure_type`
@@ -127,11 +148,11 @@ pub(crate) async fn sync_relation_links(
 /// every later Update of those entities.
 async fn check_relation_targets(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    entity: &Entity,
+    structure_type: &str,
     property_id: &str,
     refs: &[&EntityRef],
 ) -> Result<Vec<MentionRef>, AppError> {
-    let expected = structures::property(&entity.structure_type, property_id)
+    let expected = structures::property(structure_type, property_id)
         .and_then(|def| def.target_structure);
     let mut targets = Vec::with_capacity(refs.len());
     for r in refs {
@@ -143,15 +164,15 @@ async fn check_relation_targets(
         };
         if !r.structure_type.is_empty() && r.structure_type != actual {
             return Err(AppError::Invalid(format!(
-                "{}.{property_id}: relation target {} is a {actual}, not a {}",
-                entity.structure_type, r.id, r.structure_type
+                "{structure_type}.{property_id}: relation target {} is a {actual}, not a {}",
+                r.id, r.structure_type
             )));
         }
         if let Some(expected) = expected {
             if actual != expected {
                 return Err(AppError::Invalid(format!(
-                    "{}.{property_id} must reference a {expected}; {} is a {actual}",
-                    entity.structure_type, r.id
+                    "{structure_type}.{property_id} must reference a {expected}; {} is a {actual}",
+                    r.id
                 )));
             }
         }
