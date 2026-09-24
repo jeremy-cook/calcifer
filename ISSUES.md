@@ -16,27 +16,6 @@ running app. Nothing below has been reproduced yet.
 
 ## Open
 
-### I-2 · Relation targets aren't checked against `targetStructure` · medium · confirmed
-
-**Where:** `server/src/link_store.rs` (`sync_relation_links`), `server/src/structures.rs`
-
-**Problem:** The server stores whatever `structure_type` the client puts on each
-`EntityRef` and never checks it against the property's declared target. Any writer
-(including the MCP agent) can put a Note or a Todo in a Todo's `tags`. The stored
-`target_structure` can also disagree with the target's real type.
-
-**Fix:** Declare each relation property's target in `structures.rs` (e.g.
-`relation_properties: &[("tags", "Tag")]`). In `sync_relation_links`, load each target's
-real `structure_type` from `entities` and return `InvalidArgument` on a mismatch. Write
-the real type, not the client's, to `links.target_structure`.
-
-**Done when:** an `Update` with a Note in a Todo's `tags` is rejected, and a test covers
-it.
-
-**Related:** I-9 and I-10. All three are "the server doesn't enforce the schema".
-
----
-
 ### I-11 · Property edits send the whole entity (last write wins) · low now, medium once the agent edits to-dos · design debt
 
 **Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`), `EntityService.Update`
@@ -107,6 +86,7 @@ covers it.
 - **I-7 · `TodoRow` subscribes to the whole entity list.** Fixed 2026-09-24. `TodoList` resolves tags through one memoized `Map` and passes them in; `TodoRow` is memoized and no longer calls `useAllEntities()`.
 - **I-10 · The structure registry is defined three times.** Fixed 2026-09-24. Registry authored only in `server/src/structures.rs`, served by `StructureService.List` (ADR 7); frontend keeps icons/colors and fetches the rest; MCP `list_structures` reads the RPC. Verified by adding a priority option to `structures.rs` alone: server, frontend and MCP all build and test clean. Generated TS now carries `// @ts-nocheck` because proto enums aren't erasable syntax.
 - **I-9 · Select values aren't checked against the allowed options.** Fixed 2026-09-24. Create/Update check every property against the registry: a declared select must hold one of its options, and a select value is only allowed on a declared select. Covered by `update_rejects_unknown_select_value` and three more tests.
+- **I-2 · Relation targets aren't checked against `targetStructure`.** Fixed 2026-09-24. Relation link sync loads each target's real type and rejects a mismatch with the declared `target_structure` or with the ref's claimed type; links store the real type. Refs to deleted targets are still accepted (see I-14). Covered by `update_rejects_note_in_todo_tags` and three more tests.
 
 Fixed on 2026-09-24 from the to-do / calendar review.
 
