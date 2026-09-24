@@ -166,7 +166,6 @@ pub fn structure(structure_type: &str) -> Option<&'static StructureDef> {
 
 /// A structure's declared property by id. Write validation of select values and
 /// relation targets (I-2, I-9) looks definitions up here.
-#[allow(dead_code)]
 pub fn property(structure_type: &str, id: &str) -> Option<&'static PropertyDef> {
     structure(structure_type)?
         .properties

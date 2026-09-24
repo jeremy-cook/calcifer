@@ -102,6 +102,10 @@ message StructureDef {
 The server derives what its write paths need from the same table: `richtext_properties`
 and `select_defaults` (what `ResolveByName` puts on a new entity), `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups.
+`Create` and `Update` check select values against it and return `InvalidArgument` for
+a key that isn't one of the property's options, a `select` value on a property not
+declared as a select, or a non-select value on a declared select. Structures missing
+from the table have no schema and aren't checked; other kinds aren't checked either.
 
 The frontend fetches the registry once (TanStack Query, `staleTime: Infinity`) and
 doesn't render the router until it has loaded, so synchronous code reads it from the

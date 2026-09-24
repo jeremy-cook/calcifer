@@ -63,3 +63,19 @@ pub(crate) fn note(name: &str) -> Entity {
         updated_at: None,
     }
 }
+
+/// A new Todo entity as the FE builds it: `content` plus the table's select
+/// defaults (`status = open`, `priority = none`), no tags.
+pub(crate) fn todo(name: &str) -> Entity {
+    let mut entity = note(name);
+    entity.structure_type = "Todo".to_string();
+    for (id, default) in crate::structures::select_defaults("Todo") {
+        entity.properties.push(Property {
+            id: id.to_string(),
+            value: Some(PropertyValue {
+                value: Some(property_value::Value::Select(default.to_string())),
+            }),
+        });
+    }
+    entity
+}

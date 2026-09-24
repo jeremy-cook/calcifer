@@ -13,6 +13,7 @@ use crate::proto::{
     PropertyValue, RichTextRef, ResolveByNameRequest, ResolveByNameResponse, UpdateEntityRequest,
     WatchRequest,
 };
+use crate::structures::{self, PropertyKind};
 use crate::watch::WatchHub;
 
 pub struct EntityService {
@@ -81,12 +82,14 @@ impl EntityService {
         load_entity(&self.pool, id).await
     }
 
-    /// Replace an entity's properties wholesale inside a transaction.
+    /// Replace an entity's properties wholesale inside a transaction, after
+    /// checking select values against the structure (see `validate_selects`).
     async fn replace_properties(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         entity: &Entity,
     ) -> Result<(), AppError> {
+        validate_selects(entity)?;
         sqlx::query!("DELETE FROM properties WHERE entity_id = ?", entity.id)
             .execute(&mut **tx)
             .await?;
@@ -317,6 +320,52 @@ fn date_key_for(entity: &Entity) -> Option<String> {
         }) if p.id == "date" && !d.is_empty() => Some(d.clone()),
         _ => None,
     })
+}
+
+/// Reject select values the structure doesn't allow (I-9): a property declared as
+/// a select must hold a `select` value naming one of its options, and a `select`
+/// value is only allowed on a declared select. Structures missing from the
+/// registry have no schema and pass unchecked; other kinds aren't checked.
+fn validate_selects(entity: &Entity) -> Result<(), AppError> {
+    let structure_type = &entity.structure_type;
+    if structures::structure(structure_type).is_none() {
+        return Ok(());
+    }
+    for prop in &entity.properties {
+        let def = structures::property(structure_type, &prop.id)
+            .filter(|d| d.kind == PropertyKind::Select);
+        let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
+        match (def, value) {
+            (None, Some(property_value::Value::Select(key))) => {
+                return Err(AppError::Invalid(format!(
+                    "{structure_type}.{} is not a select property (got select {key:?})",
+                    prop.id
+                )));
+            }
+            (None, _) => {}
+            (Some(def), value) => {
+                let allowed: Vec<&str> = def.options.iter().map(|o| o.key).collect();
+                let key = match value {
+                    Some(property_value::Value::Select(key)) => key.as_str(),
+                    _ => {
+                        return Err(AppError::Invalid(format!(
+                            "{structure_type}.{} must be a select value, one of: {}",
+                            prop.id,
+                            allowed.join(", ")
+                        )));
+                    }
+                };
+                if !allowed.contains(&key) {
+                    return Err(AppError::Invalid(format!(
+                        "invalid value {key:?} for {structure_type}.{}; allowed: {}",
+                        prop.id,
+                        allowed.join(", ")
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Format an ISO calendar day ("2026-06-13") as a long human date
@@ -685,7 +734,7 @@ impl EntityServiceTrait for EntityService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{entity_service, memory_pool, note};
+    use crate::test_support::{entity_service, memory_pool, note, todo};
 
     async fn create(svc: &EntityService, entity: Entity) -> Entity {
         svc.create(Request::new(CreateEntityRequest {
@@ -759,5 +808,128 @@ mod tests {
         let stored = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(stored.structure_type, "Note");
         assert_eq!(stored.name, "Typed");
+    }
+
+    fn select_value(entity: &Entity, property_id: &str) -> Option<String> {
+        entity
+            .properties
+            .iter()
+            .find(|p| p.id == property_id)
+            .and_then(|p| p.value.as_ref())
+            .and_then(|v| match &v.value {
+                Some(property_value::Value::Select(key)) => Some(key.clone()),
+                _ => None,
+            })
+    }
+
+    fn with_select(mut entity: Entity, property_id: &str, key: &str) -> Entity {
+        let value = Some(PropertyValue {
+            value: Some(property_value::Value::Select(key.to_string())),
+        });
+        match entity.properties.iter_mut().find(|p| p.id == property_id) {
+            Some(p) => p.value = value,
+            None => entity.properties.push(Property {
+                id: property_id.to_string(),
+                value,
+            }),
+        }
+        entity
+    }
+
+    #[tokio::test]
+    async fn update_rejects_unknown_select_value() {
+        let svc = entity_service(memory_pool().await);
+        let entity = create(&svc, todo("Water plants")).await;
+
+        let err = svc
+            .update(Request::new(UpdateEntityRequest {
+                entity: Some(with_select(entity.clone(), "status", "banana")),
+            }))
+            .await
+            .expect_err("unknown status should be rejected");
+
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("banana"), "{}", err.message());
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(select_value(&stored, "status").as_deref(), Some("open"));
+    }
+
+    #[tokio::test]
+    async fn update_accepts_declared_select_value() {
+        let svc = entity_service(memory_pool().await);
+        let entity = create(&svc, todo("Water plants")).await;
+
+        let updated = svc
+            .update(Request::new(UpdateEntityRequest {
+                entity: Some(with_select(entity, "status", "done")),
+            }))
+            .await
+            .expect("update")
+            .into_inner();
+
+        assert_eq!(select_value(&updated, "status").as_deref(), Some("done"));
+    }
+
+    #[tokio::test]
+    async fn create_rejects_unknown_select_value() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let entity = with_select(todo("Water plants"), "priority", "urgent");
+
+        let err = svc
+            .create(Request::new(CreateEntityRequest {
+                entity: Some(entity.clone()),
+            }))
+            .await
+            .expect_err("unknown priority should be rejected");
+
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entities WHERE id = ?")
+            .bind(&entity.id)
+            .fetch_one(&pool)
+            .await
+            .expect("count entities");
+        assert_eq!(rows, 0);
+    }
+
+    #[tokio::test]
+    async fn select_values_are_checked_against_the_declared_kind() {
+        let svc = entity_service(memory_pool().await);
+
+        // A select on a property the structure doesn't declare as one.
+        let err = svc
+            .create(Request::new(CreateEntityRequest {
+                entity: Some(with_select(note("Stray"), "status", "open")),
+            }))
+            .await
+            .expect_err("select on a non-select property should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        // A declared select holding some other kind of value.
+        let mut entity = todo("Mistyped");
+        let status = entity
+            .properties
+            .iter_mut()
+            .find(|p| p.id == "status")
+            .expect("status");
+        status.value = Some(PropertyValue {
+            value: Some(property_value::Value::Text("open".to_string())),
+        });
+        let err = svc
+            .create(Request::new(CreateEntityRequest {
+                entity: Some(entity),
+            }))
+            .await
+            .expect_err("text on a select property should be rejected");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        // Structures outside the registry have no schema to check against.
+        let mut custom = with_select(note("Custom"), "mood", "whatever");
+        custom.structure_type = "Custom".to_string();
+        svc.create(Request::new(CreateEntityRequest {
+            entity: Some(custom),
+        }))
+        .await
+        .expect("unknown structure is unchecked");
     }
 }
