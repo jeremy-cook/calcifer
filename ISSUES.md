@@ -90,6 +90,28 @@ change for all three consumers), or configure `buf.yaml` to except
 
 ---
 
+### I-14 · Deleting an entity leaves dead refs in other entities' relation values · medium · confirmed
+
+**Where:** `server/src/services/entity.rs` (`delete`), `calcifer/src/components/entity/EntityRelationsField.tsx`
+
+**Problem:** `Delete` removes `links WHERE target_id = ?` but never strips the deleted id
+from other entities' `relation`/`relations` property values. The live database already
+has one: a Todo whose `tags` still holds a ref to a Tag that no longer exists.
+`EntityRelationsField` hides unresolved refs, but `addRef`/`removeRef` build from the raw
+list, so the dead ref is resent on every edit and can't be removed from the UI. It is
+harmless today only because relation link sync silently skips missing targets; any
+stricter check (e.g. rejecting unknown targets, considered for I-2) would lock such
+entities out of every `Update`. Found while doing I-2.
+
+**Fix:** In `delete`, remove the deleted id from other entities' relation property values
+in the same transaction (and publish upserts for the entities it changed). Clean up
+existing dead refs once; that changes stored data, so confirm with the user first.
+
+**Done when:** after deleting a Tag, no Todo's `tags` value still refers to it, and a test
+covers it.
+
+---
+
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
