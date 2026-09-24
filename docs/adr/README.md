@@ -12,6 +12,7 @@ supersedes the old one rather than editing history.
 | [4](0004-dates-without-a-dateref-entity.md) | Dates are a calendar surface, not an entity | Accepted (supersedes the `DateRef` sketch) |
 | [5](0005-single-user.md) | Single-user, no auth, no sync | Accepted |
 | [6](0006-drop-the-lexical-comparison.md) | Drop the TipTap-vs-Lexical comparison; standardise on TipTap | Accepted (supersedes the editor comparison plan) |
+| [7](0007-server-owned-structure-registry.md) | The server owns the structure registry; clients fetch it | Accepted |
 
 Related: [`../reference/data-model.md`](../reference/data-model.md) for the shapes
 themselves, [`../specs/`](../specs/) for how built features work, and
