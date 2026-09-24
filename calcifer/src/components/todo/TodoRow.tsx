@@ -2,21 +2,22 @@ import { Link } from '@tanstack/react-router'
 import { Checkbox } from '~/components/ui/checkbox'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
-import { todayIso, formatLongDate } from '~/model/dates'
+import { formatLongDate } from '~/model/dates'
 import { useAllEntities, type Entity } from '~/model/store'
 import { todoFields, useSetTodoStatus } from '~/model/todos'
 import { PriorityBadge } from './PriorityBadge'
 
 export interface TodoRowProps {
   entity: Entity
+  today: string
 }
 
-export function TodoRow({ entity }: TodoRowProps) {
+export function TodoRow({ entity, today }: TodoRowProps) {
   const setTodoStatus = useSetTodoStatus()
   const entities = useAllEntities()
   const { status, priority, due, tagIds } = todoFields(entity)
   const done = status === 'done'
-  const overdue = !done && due !== undefined && due < todayIso()
+  const overdue = !done && due !== undefined && due < today
   const tags = tagIds.map((id) => entities.find((e) => e.id === id)).filter((e): e is Entity => e !== undefined)
 
   const handleCheckedChange = (checked: boolean | 'indeterminate') => {

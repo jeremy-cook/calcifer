@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react'
 import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 import type { Timestamp } from '@bufbuild/protobuf/wkt'
 import { useAllEntities, useUpdateEntity, withProperty } from '~/model/store'
-import { shiftIso, todayIso } from '~/model/dates'
+import { shiftIso, useToday } from '~/model/dates'
 import { propertyDef } from '~/model/structures'
 
 const STATUS_DEF = propertyDef('Todo', 'status')
@@ -175,5 +175,6 @@ export function useSetTodoStatus() {
 
 export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
   const entities = useAllEntities()
-  return useMemo(() => selectTodos(entities, filter, sort, todayIso()), [entities, filter, sort])
+  const today = useToday()
+  return useMemo(() => selectTodos(entities, filter, sort, today), [entities, filter, sort, today])
 }

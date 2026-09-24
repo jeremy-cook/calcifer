@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { CalendarPage } from '~/components/calendar/CalendarPage'
-import { todayIso } from '~/model/dates'
+import { useToday } from '~/model/dates'
 
 interface CalendarSearch {
   date?: string
@@ -12,6 +12,7 @@ export const Route = createFileRoute('/calendar')({
   }),
   component: function CalendarRoute() {
     const { date } = Route.useSearch()
-    return <CalendarPage iso={date ?? todayIso()} />
+    const today = useToday()
+    return <CalendarPage iso={date ?? today} />
   },
 })
