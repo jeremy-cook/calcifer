@@ -147,21 +147,6 @@ pass the resolved tags into each row. Wrap `TodoRow` in `memo`.
 
 ---
 
-### I-8 · Updating a missing entity returns a foreign-key error · low · confirmed
-
-**Where:** `server/src/services/entity.rs` (`update`)
-
-**Problem:** The `UPDATE` doesn't check `rows_affected()`. For an unknown id it affects
-0 rows, and the next properties insert fails on the foreign key. The caller gets an
-opaque database error instead of `NotFound`.
-
-**Fix:** After the `UPDATE`, if `rows_affected() == 0`, return `Status::not_found`
-before touching properties.
-
-**Done when:** `Update` for a missing id returns `NotFound`.
-
----
-
 ### I-9 · Select values aren't checked against the allowed options · medium · confirmed
 
 **Where:** `server/src/services/entity.rs` (`update`, `create`), `server/src/structures.rs`
@@ -241,7 +226,9 @@ updates one property row and runs relation link sync for just that property. Mov
 
 ## Resolved
 
-Fixed on 2026-09-24 from the to-do / calendar review; not yet committed.
+- **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks \`rows_affected()\` and returns \`NotFound\` for an unknown id; covered by \`update_missing_entity_is_not_found\`.
+
+Fixed on 2026-09-24 from the to-do / calendar review.
 
 - **R-1 · Removing the last tag left a stale backlink.** `sync_relation_links` now goes
   through the structure's declared relation properties (`structures.rs`
