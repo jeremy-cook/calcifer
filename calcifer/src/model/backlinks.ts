@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useAllEntities } from '~/model/store'
-import { STRUCTURE_LIST } from '~/model/structures'
+import { getStructures } from '~/model/structures'
 import type { Entity, LinkRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import type { Timestamp } from '@bufbuild/protobuf/wkt'
 
@@ -10,10 +10,6 @@ export interface Backlink {
   name: string
   mostRecentAt: Date
 }
-
-const STRUCTURE_INDEX: Record<string, number> = Object.fromEntries(
-  STRUCTURE_LIST.map((s, i) => [s.type, i]),
-)
 
 function timestampMillis(ts: Timestamp | undefined): number {
   if (!ts) return 0
@@ -30,9 +26,10 @@ function mostRecentLinkMillis(links: readonly LinkRef[], targetId: string): numb
   return max
 }
 
-function compareBacklinks(a: Backlink, b: Backlink): number {
-  const ai = STRUCTURE_INDEX[a.structureType] ?? Number.MAX_SAFE_INTEGER
-  const bi = STRUCTURE_INDEX[b.structureType] ?? Number.MAX_SAFE_INTEGER
+// Groups follow registry order; unknown structures sort last.
+function compareBacklinks(a: Backlink, b: Backlink, structureIndex: Record<string, number>): number {
+  const ai = structureIndex[a.structureType] ?? Number.MAX_SAFE_INTEGER
+  const bi = structureIndex[b.structureType] ?? Number.MAX_SAFE_INTEGER
   if (ai !== bi) return ai - bi
   return b.mostRecentAt.getTime() - a.mostRecentAt.getTime()
 }
@@ -50,7 +47,8 @@ export function selectBacklinks(entities: Entity[], targetEntityId: string): Bac
       mostRecentAt: new Date(ms),
     })
   }
-  results.sort(compareBacklinks)
+  const structureIndex = Object.fromEntries(getStructures().map((s, i) => [s.type, i]))
+  results.sort((a, b) => compareBacklinks(a, b, structureIndex))
   return results
 }
 

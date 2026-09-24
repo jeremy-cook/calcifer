@@ -12,27 +12,24 @@ import {
   type Property,
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { STRUCTURES, type StructureType } from '~/model/structures'
+import { PropertyKind, getStructure } from '~/model/structures'
 import { formatLongDate } from '~/model/dates'
 import { entityClient, qk, queryClient } from '~/model/api'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
-export type CreatableStructureType = Exclude<StructureType, 'DailyNote'>
-
-function defaultNameFor(structureType: CreatableStructureType): string {
-  return `Untitled ${STRUCTURES[structureType].name}`
+function defaultNameFor(structureType: string): string {
+  return `Untitled ${getStructure(structureType)?.name ?? structureType}`
 }
 
 // Entities are still constructed client-side (id minted here) so the editor has
 // its richtext refs immediately; the server persists via Create.
-function buildEntityMessage(structureType: CreatableStructureType, name?: string): Entity {
+function buildEntityMessage(structureType: string, name?: string): Entity {
   const id = crypto.randomUUID()
   const now = timestampNow()
-  const structure = STRUCTURES[structureType]
   const properties: Property[] = []
-  for (const def of structure.properties) {
-    if (def.type === 'richtext') {
+  for (const def of getStructure(structureType)?.properties ?? []) {
+    if (def.kind === PropertyKind.RICHTEXT) {
       const ref = createMessage(RichTextRefSchema, { entityId: id, propertyId: def.id })
       properties.push(
         createMessage(PropertySchema, {
@@ -40,11 +37,11 @@ function buildEntityMessage(structureType: CreatableStructureType, name?: string
           value: createMessage(PropertyValueSchema, { value: { case: 'richtext', value: ref } }),
         }),
       )
-    } else if (def.type === 'select' && def.default !== undefined) {
+    } else if (def.kind === PropertyKind.SELECT && def.defaultOption !== '') {
       properties.push(
         createMessage(PropertySchema, {
           id: def.id,
-          value: createMessage(PropertyValueSchema, { value: { case: 'select', value: def.default } }),
+          value: createMessage(PropertyValueSchema, { value: { case: 'select', value: def.defaultOption } }),
         }),
       )
     }
@@ -118,7 +115,7 @@ export function useCreateEntity() {
     onSuccess: onEntityWritten,
   })
   return useCallback(
-    (structureType: CreatableStructureType, name?: string) =>
+    (structureType: string, name?: string) =>
       m.mutateAsync(buildEntityMessage(structureType, name)),
     [m],
   )
@@ -219,7 +216,7 @@ export function getEntitiesSnapshot(): Entity[] {
 }
 
 export async function getOrCreateEntityForMention(
-  structureType: CreatableStructureType,
+  structureType: string,
   name: string,
 ): Promise<{ id: string; name: string; structureType: string }> {
   // Server-authoritative get-or-create so the browser and the MCP agent share
@@ -248,7 +245,7 @@ function updatedAtMillis(entity: Entity): number {
   return Number(ts.seconds) * 1000 + ts.nanos / 1_000_000
 }
 
-export function listByStructure(entities: Entity[], structureType: StructureType): Entity[] {
+export function listByStructure(entities: Entity[], structureType: string): Entity[] {
   const matches = entities.filter((e) => e.structureType === structureType)
   if (structureType === 'DailyNote') {
     return matches.sort((a, b) => b.name.localeCompare(a.name))

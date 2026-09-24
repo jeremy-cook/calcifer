@@ -23,7 +23,7 @@ import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
 import { useDeleteEntity, useEntity, useUpdateEntity, withName, withProperty, type Entity } from '~/model/store'
-import { STRUCTURES, type StructureType, type PropertyDef, isNameEditable } from '~/model/structures'
+import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/model/structures'
 import { EntityRefListSchema, type PropertyValue } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
@@ -63,8 +63,9 @@ interface EntityHeaderProps {
 function EntityHeader({ entity }: EntityHeaderProps) {
   const deleteEntity = useDeleteEntity()
   const navigate = useNavigate()
+  const structure = useStructure(entity.structureType)
 
-  const structureName = STRUCTURES[entity.structureType as StructureType]?.name ?? entity.structureType
+  const structureName = structure?.name ?? entity.structureType
   const nameEditable = isNameEditable(entity.structureType)
 
   const handleDelete = () => {
@@ -184,7 +185,7 @@ interface EntityPropertiesProps {
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
   const updateEntity = useUpdateEntity()
-  const structure = STRUCTURES[entity.structureType as StructureType]
+  const structure = useStructure(entity.structureType)
   if (!structure || structure.properties.length === 0) return null
 
   const setProperty = (propertyId: string, value: PropertyValue['value'] | null) =>
@@ -203,43 +204,43 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     const property = entity.properties.find((p) => p.id === def.id)
     const value = property?.value?.value
 
-    switch (def.type) {
-      case 'richtext': {
+    switch (def.kind) {
+      case PropertyKind.RICHTEXT: {
         if (value?.case !== 'richtext') return null
         return <EntityRichTextField key={def.id} propertyId={def.id} propertyRef={value.value} />
       }
-      case 'date': {
+      case PropertyKind.DATE: {
         const iso = value?.case === 'date' ? value.value : undefined
         return (
           <EntityDateField
             key={def.id}
-            label={def.label ?? 'Date'}
+            label={def.label || 'Date'}
             iso={iso}
             onChange={(next) => setProperty(def.id, { case: 'date', value: next })}
             onClear={iso ? () => setProperty(def.id, null) : undefined}
           />
         )
       }
-      case 'select': {
-        if (!def.options) return null
-        const current = value?.case === 'select' ? value.value : (def.default ?? '')
+      case PropertyKind.SELECT: {
+        if (def.options.length === 0) return null
+        const current = value?.case === 'select' ? value.value : def.defaultOption
         return (
           <EntitySelectField
             key={def.id}
-            label={def.label ?? def.id}
+            label={def.label || def.id}
             value={current}
             options={def.options}
             onChange={(next) => setProperty(def.id, { case: 'select', value: next })}
           />
         )
       }
-      case 'relations': {
+      case PropertyKind.RELATIONS: {
         if (!def.targetStructure) return null
         const refs = value?.case === 'relations' ? value.value.refs : []
         return (
           <EntityRelationsField
             key={def.id}
-            label={def.label ?? def.id}
+            label={def.label || def.id}
             targetStructure={def.targetStructure}
             refs={refs}
             onChange={(nextRefs) =>

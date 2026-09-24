@@ -6,7 +6,7 @@ import { EntityRefSchema, type EntityRef } from '@calcifer/proto/calcifer/v1/ent
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
-import { useAllEntities, getOrCreateEntityForMention, type CreatableStructureType } from '~/model/store'
+import { useAllEntities, getOrCreateEntityForMention } from '~/model/store'
 import { hasUniqueNames } from '~/model/structures'
 
 export interface EntityRelationsFieldProps {
@@ -44,7 +44,7 @@ export function EntityRelationsField({ label, targetStructure, refs, onChange }:
   const handleCreate = async () => {
     const name = query.trim()
     if (!name) return
-    const entity = await getOrCreateEntityForMention(targetStructure as CreatableStructureType, name)
+    const entity = await getOrCreateEntityForMention(targetStructure, name)
     addRef(entity.id, entity.structureType)
   }
 

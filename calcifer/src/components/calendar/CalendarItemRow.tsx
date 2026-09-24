@@ -3,7 +3,7 @@ import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
 import type { CalendarItem } from '~/model/calendar'
 import type { Entity } from '~/model/store'
-import { STRUCTURES, type StructureType } from '~/model/structures'
+import { structurePresentation } from '~/model/structures'
 import { todoFields, useSetTodoStatus } from '~/model/todos'
 
 interface CalendarItemRowProps {
@@ -52,9 +52,7 @@ interface EntityItemRowProps {
 }
 
 function EntityItemRow({ entity }: EntityItemRowProps) {
-  const meta = STRUCTURES[entity.structureType as StructureType]
-  const Icon = meta?.icon
-  const color = meta?.color ?? 'var(--muted-foreground)'
+  const { icon: Icon, color } = structurePresentation(entity.structureType)
 
   return (
     <li>
@@ -63,7 +61,7 @@ function EntityItemRow({ entity }: EntityItemRowProps) {
         params={{ id: entity.id }}
         className="flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted"
       >
-        {Icon && <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />}
+        <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
         <span className="truncate">{entity.name}</span>
       </Link>
     </li>

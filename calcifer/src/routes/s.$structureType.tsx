@@ -1,15 +1,15 @@
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import { entityUpdatedAtDate, listByStructure, useAllEntities } from '~/model/store'
-import type { StructureType } from '~/model/structures'
-import { STRUCTURES } from '~/model/structures'
+import { useStructure } from '~/model/structures'
 
 export const Route = createFileRoute('/s/$structureType')({
   component: function StructureListRoute() {
     const { structureType } = Route.useParams()
     const entities = useAllEntities()
+    const structure = useStructure(structureType)
 
-    if (!(structureType in STRUCTURES)) {
+    if (!structure) {
       return (
         <div className="flex flex-col gap-2 px-16 py-10">
           <h1 className="text-2xl font-semibold">Unknown structure</h1>
@@ -18,8 +18,7 @@ export const Route = createFileRoute('/s/$structureType')({
       )
     }
 
-    const structure = STRUCTURES[structureType as StructureType]
-    const items = listByStructure(entities, structureType as StructureType)
+    const items = listByStructure(entities, structureType)
 
     const renderEmpty = () => <p className="text-sm text-muted-foreground">No {structure.plural} yet.</p>
 

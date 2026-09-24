@@ -1,136 +1,84 @@
 import type { Icon } from '@phosphor-icons/react'
-import { CheckSquareIcon, HashIcon, NoteIcon, NotebookIcon } from '@phosphor-icons/react'
-import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { CheckSquareIcon, FileIcon, HashIcon, NoteIcon, NotebookIcon } from '@phosphor-icons/react'
+import { queryOptions, useQuery } from '@tanstack/react-query'
+import type { PropertyDef, StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
+import { queryClient, qk, structureClient } from '~/model/api'
 
-export interface SelectOption {
-  key: string
-  label: string
+export { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
+export type { PropertyDef, SelectOption, StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
+
+// The registry itself (types, names, properties, options, flags) is authored in
+// server/src/structures.rs and fetched once over StructureService.List (ADR 7).
+// It never changes while the server runs. App doesn't render the router until
+// it has loaded, so everything below the router may read it synchronously.
+export const structuresQuery = queryOptions({
+  queryKey: qk.structures(),
+  queryFn: async () => (await structureClient.list({})).structures,
+  staleTime: Infinity,
+  gcTime: Infinity,
+})
+
+// Sync read for non-React code (editor suggestions, route validation, pure
+// selectors). Empty only before the registry has loaded.
+export function getStructures(): readonly StructureDef[] {
+  return queryClient.getQueryData(structuresQuery.queryKey) ?? []
 }
 
-export interface PropertyDef {
-  id: string
-  type: 'richtext' | 'text' | 'number' | 'date' | 'select' | 'relation' | 'relations'
-  label?: string
-  editable?: boolean
-  options?: readonly SelectOption[]
-  default?: string
-  targetStructure?: string
+export function useStructures(): readonly StructureDef[] {
+  return useQuery(structuresQuery).data ?? []
 }
 
-export interface NameMeta {
-  editable: boolean
-  derive?: (entity: Entity) => string
+export function findStructure(structures: readonly StructureDef[], structureType: string): StructureDef | undefined {
+  return structures.find((s) => s.type === structureType)
 }
 
-export interface StructureMeta {
-  type: string
-  name: string
-  plural: string
-  icon: Icon
-  color: string
-  properties: readonly PropertyDef[]
-  creatable?: boolean
-  mentionable?: boolean
-  uniqueNames?: boolean
-  nameMeta?: NameMeta
+export function getStructure(structureType: string): StructureDef | undefined {
+  return findStructure(getStructures(), structureType)
 }
 
-const TODO_STATUS_OPTIONS = [
-  { key: 'open', label: 'Open' },
-  { key: 'done', label: 'Done' },
-] as const satisfies readonly SelectOption[]
-
-const TODO_PRIORITY_OPTIONS = [
-  { key: 'none', label: 'None' },
-  { key: 'low', label: 'Low' },
-  { key: 'medium', label: 'Medium' },
-  { key: 'high', label: 'High' },
-] as const satisfies readonly SelectOption[]
-
-export const STRUCTURES = {
-  Note: {
-    type: 'Note',
-    name: 'Note',
-    plural: 'Notes',
-    icon: NoteIcon,
-    color: 'var(--chart-1)',
-    properties: [{ id: 'content', type: 'richtext' }],
-  },
-  Tag: {
-    type: 'Tag',
-    name: 'Tag',
-    plural: 'Tags',
-    icon: HashIcon,
-    color: 'var(--chart-2)',
-    properties: [],
-    mentionable: false,
-    uniqueNames: true,
-  },
-  DailyNote: {
-    type: 'DailyNote',
-    name: 'Daily Note',
-    plural: 'Daily Notes',
-    icon: NotebookIcon,
-    color: 'var(--chart-3)',
-    properties: [
-      { id: 'date', type: 'date' },
-      { id: 'content', type: 'richtext' },
-    ],
-    nameMeta: { editable: false },
-    creatable: false,
-    mentionable: false,
-  },
-  Todo: {
-    type: 'Todo',
-    name: 'To-do',
-    plural: 'To-dos',
-    icon: CheckSquareIcon,
-    color: 'var(--chart-4)',
-    properties: [
-      { id: 'status', type: 'select', label: 'Status', options: TODO_STATUS_OPTIONS, default: 'open' },
-      { id: 'priority', type: 'select', label: 'Priority', options: TODO_PRIORITY_OPTIONS, default: 'none' },
-      { id: 'due', type: 'date', label: 'Due' },
-      { id: 'tags', type: 'relations', label: 'Tags', targetStructure: 'Tag' },
-      { id: 'content', type: 'richtext' },
-    ],
-  },
-} as const satisfies Record<string, StructureMeta>
-
-export type StructureType = keyof typeof STRUCTURES
-
-type PropertyDefOf<S extends StructureType> = (typeof STRUCTURES)[S]['properties'][number]
-
-// Typed lookup of a declared property, so callers derive option keys/labels and
-// defaults from STRUCTURES instead of restating them.
-export function propertyDef<S extends StructureType, Id extends PropertyDefOf<S>['id']>(
-  structureType: S,
-  id: Id,
-): Extract<PropertyDefOf<S>, { id: Id }> {
-  const def = (STRUCTURES[structureType].properties as readonly PropertyDef[]).find((p) => p.id === id)
-  return def as Extract<PropertyDefOf<S>, { id: Id }>
+export function useStructure(structureType: string): StructureDef | undefined {
+  return findStructure(useStructures(), structureType)
 }
 
-export function optionLabel<K extends string>(options: readonly { key: K; label: string }[], key: K): string {
-  return options.find((o) => o.key === key)?.label ?? key
+export function propertyDef(structure: StructureDef | undefined, id: string): PropertyDef | undefined {
+  return structure?.properties.find((p) => p.id === id)
 }
 
-export const STRUCTURE_LIST: readonly StructureMeta[] = Object.values(STRUCTURES)
+export function optionLabel(def: PropertyDef | undefined, key: string): string {
+  return def?.options.find((o) => o.key === key)?.label ?? key
+}
 
-export const CREATABLE_STRUCTURES: readonly StructureMeta[] = STRUCTURE_LIST.filter((s) => s.creatable !== false)
-
-export const MENTIONABLE_STRUCTURES: readonly StructureMeta[] = STRUCTURE_LIST.filter((s) => s.mentionable !== false)
-
+// Unknown types default to the permissive side, as when these were optional flags.
 export function isMentionable(structureType: string): boolean {
-  const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
-  return meta?.mentionable !== false
+  return getStructure(structureType)?.mentionable ?? true
 }
 
 export function isNameEditable(structureType: string): boolean {
-  const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
-  return meta?.nameMeta?.editable !== false
+  return getStructure(structureType)?.nameEditable ?? true
 }
 
 export function hasUniqueNames(structureType: string): boolean {
-  const meta = (STRUCTURES as Record<string, StructureMeta>)[structureType]
-  return meta?.uniqueNames === true
+  return getStructure(structureType)?.uniqueNames ?? false
+}
+
+// --- Presentation (client-only) ---
+
+export interface StructurePresentation {
+  icon: Icon
+  color: string
+}
+
+// Keyed by structure type. A type the server adds without an entry here still
+// renders, with the fallback.
+const PRESENTATION: Record<string, StructurePresentation> = {
+  Note: { icon: NoteIcon, color: 'var(--chart-1)' },
+  Tag: { icon: HashIcon, color: 'var(--chart-2)' },
+  DailyNote: { icon: NotebookIcon, color: 'var(--chart-3)' },
+  Todo: { icon: CheckSquareIcon, color: 'var(--chart-4)' },
+}
+
+const FALLBACK_PRESENTATION: StructurePresentation = { icon: FileIcon, color: 'var(--muted-foreground)' }
+
+export function structurePresentation(structureType: string): StructurePresentation {
+  return PRESENTATION[structureType] ?? FALLBACK_PRESENTATION
 }

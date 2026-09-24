@@ -1,7 +1,7 @@
-import { STRUCTURE_LIST, type StructureType } from '~/model/structures'
+import { getStructures } from '~/model/structures'
 
 export interface ParsedQuery {
-  structureType: StructureType | null
+  structureType: string | null
   term: string
 }
 
@@ -11,7 +11,7 @@ export function parseQuery(query: string): ParsedQuery {
 
   const prefix = query.slice(0, slash).toLowerCase()
   const term = query.slice(slash + 1)
-  const match = STRUCTURE_LIST.find((s) => s.name.toLowerCase() === prefix)
+  const match = getStructures().find((s) => s.name.toLowerCase() === prefix)
   if (!match) return { structureType: null, term: query }
-  return { structureType: match.type as StructureType, term }
+  return { structureType: match.type, term }
 }

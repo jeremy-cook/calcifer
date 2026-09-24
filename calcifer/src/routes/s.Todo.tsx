@@ -4,26 +4,32 @@ import {
   DEFAULT_TODO_FILTER,
   DEFAULT_TODO_SORT,
   TODO_DUE_FILTER_OPTIONS,
-  TODO_PRIORITY_OPTIONS,
   TODO_SORT_DIR_OPTIONS,
   TODO_SORT_OPTIONS,
-  TODO_STATUS_FILTER_OPTIONS,
   isOptionKey,
+  todoPriorityOptions,
+  todoStatusFilterOptions,
   type TodoFilter,
   type TodoSearch,
   type TodoSort,
 } from '~/model/todos'
+import { getStructure } from '~/model/structures'
 
 // Static segment: this route takes precedence over /s/$structureType for Todo.
 export const Route = createFileRoute('/s/Todo')({
-  validateSearch: (search: Record<string, unknown>): TodoSearch => ({
-    status: isOptionKey(TODO_STATUS_FILTER_OPTIONS, search.status) ? search.status : undefined,
-    priority: isOptionKey(TODO_PRIORITY_OPTIONS, search.priority) ? search.priority : undefined,
-    tag: typeof search.tag === 'string' ? search.tag : undefined,
-    due: isOptionKey(TODO_DUE_FILTER_OPTIONS, search.due) ? search.due : undefined,
-    sort: isOptionKey(TODO_SORT_OPTIONS, search.sort) ? search.sort : undefined,
-    dir: isOptionKey(TODO_SORT_DIR_OPTIONS, search.dir) ? search.dir : undefined,
-  }),
+  // Status/priority keys come from the registry, read per call (it has loaded
+  // before the router renders), never captured at import.
+  validateSearch: (search: Record<string, unknown>): TodoSearch => {
+    const todo = getStructure('Todo')
+    return {
+      status: isOptionKey(todoStatusFilterOptions(todo), search.status) ? search.status : undefined,
+      priority: isOptionKey(todoPriorityOptions(todo), search.priority) ? search.priority : undefined,
+      tag: typeof search.tag === 'string' ? search.tag : undefined,
+      due: isOptionKey(TODO_DUE_FILTER_OPTIONS, search.due) ? search.due : undefined,
+      sort: isOptionKey(TODO_SORT_OPTIONS, search.sort) ? search.sort : undefined,
+      dir: isOptionKey(TODO_SORT_DIR_OPTIONS, search.dir) ? search.dir : undefined,
+    }
+  },
   component: function TodoRoute() {
     const search = Route.useSearch()
     const filter: TodoFilter = {

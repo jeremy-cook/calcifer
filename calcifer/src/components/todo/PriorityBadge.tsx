@@ -1,18 +1,22 @@
 import { Badge } from '~/components/ui/badge'
-import { optionLabel } from '~/model/structures'
-import { TODO_PRIORITY_OPTIONS, type TodoPriority } from '~/model/todos'
+import { optionLabel, propertyDef, useStructure } from '~/model/structures'
+import type { TodoPriority } from '~/model/todos'
 
 export interface PriorityBadgeProps {
   priority: TodoPriority
 }
 
-const VARIANT: Record<Exclude<TodoPriority, 'none'>, 'secondary' | 'outline' | 'destructive'> = {
-  low: 'outline',
-  medium: 'secondary',
-  high: 'destructive',
-}
-
 export function PriorityBadge({ priority }: PriorityBadgeProps) {
+  const priorityDef = propertyDef(useStructure('Todo'), 'priority')
   if (priority === 'none') return null
-  return <Badge variant={VARIANT[priority]}>{optionLabel(TODO_PRIORITY_OPTIONS, priority)}</Badge>
+
+  // Presentation only: options without an entry (e.g. newly added on the
+  // server) get the neutral outline badge.
+  const variants: Record<string, 'secondary' | 'outline' | 'destructive'> = {
+    low: 'outline',
+    medium: 'secondary',
+    high: 'destructive',
+  }
+
+  return <Badge variant={variants[priority] ?? 'outline'}>{optionLabel(priorityDef, priority)}</Badge>
 }

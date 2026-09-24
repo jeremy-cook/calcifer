@@ -3,17 +3,27 @@ import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 import type { Timestamp } from '@bufbuild/protobuf/wkt'
 import { useAllEntities, useUpdateEntity, withProperty } from '~/model/store'
 import { shiftIso, useToday } from '~/model/dates'
-import { propertyDef } from '~/model/structures'
+import { getStructure, propertyDef, type StructureDef } from '~/model/structures'
 
-const STATUS_DEF = propertyDef('Todo', 'status')
-const PRIORITY_DEF = propertyDef('Todo', 'priority')
+// Option keys, labels and defaults come from the fetched registry. Keys the UI
+// branches on (status 'done'/'open', priority 'none') are behaviour, not schema,
+// and stay literal where they're used.
+export type TodoStatus = string
+export type TodoPriority = string
 
-export const TODO_STATUS_OPTIONS = STATUS_DEF.options
-export type TodoStatus = (typeof TODO_STATUS_OPTIONS)[number]['key']
+export interface OptionItem {
+  key: string
+  label: string
+}
 
-// Rank order low -> high.
-export const TODO_PRIORITY_OPTIONS = PRIORITY_DEF.options
-export type TodoPriority = (typeof TODO_PRIORITY_OPTIONS)[number]['key']
+function todoStatusOptions(todo: StructureDef | undefined): readonly OptionItem[] {
+  return propertyDef(todo, 'status')?.options ?? []
+}
+
+// In rank order, low -> high.
+export function todoPriorityOptions(todo: StructureDef | undefined): readonly OptionItem[] {
+  return propertyDef(todo, 'priority')?.options ?? []
+}
 
 export interface TodoFields {
   status: TodoStatus
@@ -26,20 +36,21 @@ export function isOptionKey<K extends string>(options: readonly { key: K }[], v:
   return options.some((o) => o.key === v)
 }
 
+// A select value that isn't a declared option reads as the declared default.
+function selectValue(entity: Entity, todo: StructureDef | undefined, id: string): string {
+  const def = propertyDef(todo, id)
+  const value = entity.properties.find((p) => p.id === id)?.value?.value
+  return value?.case === 'select' && def && isOptionKey(def.options, value.value)
+    ? value.value
+    : (def?.defaultOption ?? '')
+}
+
 export function todoFields(entity: Entity): TodoFields {
   const valueOf = (id: string) => entity.properties.find((p) => p.id === id)?.value?.value
+  const todo = getStructure('Todo')
 
-  const statusVal = valueOf('status')
-  const status: TodoStatus =
-    statusVal?.case === 'select' && isOptionKey(TODO_STATUS_OPTIONS, statusVal.value)
-      ? statusVal.value
-      : STATUS_DEF.default
-
-  const priorityVal = valueOf('priority')
-  const priority: TodoPriority =
-    priorityVal?.case === 'select' && isOptionKey(TODO_PRIORITY_OPTIONS, priorityVal.value)
-      ? priorityVal.value
-      : PRIORITY_DEF.default
+  const status = selectValue(entity, todo, 'status')
+  const priority = selectValue(entity, todo, 'priority')
 
   const dueVal = valueOf('due')
   const due = dueVal?.case === 'date' ? dueVal.value : undefined
@@ -52,7 +63,9 @@ export function todoFields(entity: Entity): TodoFields {
 
 // Filter/sort choices, defined once: route search validation, the toolbar and
 // the TodoFilter/TodoSort types all derive from these.
-export const TODO_STATUS_FILTER_OPTIONS = [...TODO_STATUS_OPTIONS, { key: 'all', label: 'All' }] as const
+export function todoStatusFilterOptions(todo: StructureDef | undefined): readonly OptionItem[] {
+  return [...todoStatusOptions(todo), { key: 'all', label: 'All' }]
+}
 
 // An unset due filter means "any due date".
 export const TODO_DUE_FILTER_OPTIONS = [
@@ -76,7 +89,8 @@ export const TODO_SORT_DIR_OPTIONS = [
 ] as const
 
 export interface TodoFilter {
-  status: (typeof TODO_STATUS_FILTER_OPTIONS)[number]['key']
+  // A status option key, or 'all'.
+  status: string
   priority?: TodoPriority
   tag?: string
   due?: (typeof TODO_DUE_FILTER_OPTIONS)[number]['key']
@@ -114,11 +128,8 @@ function matchesDue(due: string | undefined, filter: NonNullable<TodoFilter['due
   return due >= todayIsoValue && due <= shiftIso(todayIsoValue, 6)
 }
 
-function priorityRank(priority: TodoPriority): number {
-  return TODO_PRIORITY_OPTIONS.findIndex((o) => o.key === priority)
-}
-
-function compareTodos(a: Entity, b: Entity, sort: TodoSort): number {
+// `priorityOrder` is the priority option keys in registry order, which is rank order.
+function compareTodos(a: Entity, b: Entity, sort: TodoSort, priorityOrder: readonly string[]): number {
   const af = todoFields(a)
   const bf = todoFields(b)
   let cmp = 0
@@ -131,7 +142,7 @@ function compareTodos(a: Entity, b: Entity, sort: TodoSort): number {
       break
     }
     case 'priority':
-      cmp = priorityRank(af.priority) - priorityRank(bf.priority)
+      cmp = priorityOrder.indexOf(af.priority) - priorityOrder.indexOf(bf.priority)
       break
     case 'created':
       cmp = timestampMillis(a.createdAt) - timestampMillis(b.createdAt)
@@ -156,7 +167,8 @@ export function selectTodos(entities: Entity[], filter: TodoFilter, sort: TodoSo
     if (filter.due !== undefined && !matchesDue(fields.due, filter.due, todayIsoValue)) return false
     return true
   })
-  return matches.sort((a, b) => compareTodos(a, b, sort))
+  const priorityOrder = todoPriorityOptions(getStructure('Todo')).map((o) => o.key)
+  return matches.sort((a, b) => compareTodos(a, b, sort, priorityOrder))
 }
 
 export function todoDue(entity: Entity): string | undefined {

@@ -11,7 +11,7 @@ import {
   CollapsibleTrigger,
 } from '~/components/ui/collapsible'
 import { useBacklinks, type Backlink } from '~/model/backlinks'
-import { STRUCTURES, type StructureType } from '~/model/structures'
+import { structurePresentation, useStructure } from '~/model/structures'
 import { cn } from '~/lib/utils'
 
 interface BacklinksPanelProps {
@@ -157,8 +157,8 @@ interface BacklinkSectionProps {
 }
 
 function BacklinkSection({ group }: BacklinkSectionProps) {
-  const meta = STRUCTURES[group.structureType as StructureType]
-  const heading = meta ? `${meta.plural} (${group.items.length})` : `${group.structureType} (${group.items.length})`
+  const plural = useStructure(group.structureType)?.plural ?? group.structureType
+  const heading = `${plural} (${group.items.length})`
 
   return (
     <section className="flex flex-col gap-1">
@@ -179,9 +179,7 @@ interface BacklinkRowProps {
 }
 
 function BacklinkRow({ backlink }: BacklinkRowProps) {
-  const meta = STRUCTURES[backlink.structureType as StructureType]
-  const Icon = meta?.icon
-  const color = meta?.color ?? 'var(--muted-foreground)'
+  const { icon: Icon, color } = structurePresentation(backlink.structureType)
 
   return (
     <li>
@@ -192,7 +190,7 @@ function BacklinkRow({ backlink }: BacklinkRowProps) {
           'flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted',
         )}
       >
-        {Icon && <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />}
+        <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
         <span className="truncate">{backlink.name}</span>
       </Link>
     </li>

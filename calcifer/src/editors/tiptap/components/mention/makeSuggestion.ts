@@ -1,10 +1,6 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
-import {
-  getEntitiesSnapshot,
-  getOrCreateEntityForMention,
-  type CreatableStructureType,
-} from '~/model/store'
-import { STRUCTURES, isMentionable, type StructureType } from '~/model/structures'
+import { getEntitiesSnapshot, getOrCreateEntityForMention } from '~/model/store'
+import { getStructure, isMentionable, structurePresentation } from '~/model/structures'
 import { createSuggestionPopup } from '~/editors/tiptap/components/suggestionPopup'
 import { MentionMenu } from './MentionMenu'
 import { parseQuery } from './parseQuery'
@@ -12,7 +8,7 @@ import { CREATE_ITEM_ID, type EntitySuggestionItem } from './types'
 
 interface SuggestionConfig {
   char: '@' | '#'
-  structureFilter?: StructureType
+  structureFilter?: string
 }
 
 const MAX_RESULTS = 8
@@ -37,12 +33,11 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
         if (q && !entity.name.toLowerCase().includes(q)) continue
         if (entity.name.toLowerCase() === q) exactMatch = true
         if (results.length < MAX_RESULTS) {
-          const meta = STRUCTURES[entity.structureType as StructureType]
           results.push({
             id: entity.id,
             label: entity.name,
             structureType: entity.structureType,
-            color: meta?.color ?? 'var(--muted-foreground)',
+            color: structurePresentation(entity.structureType).color,
           })
         }
         // Keep scanning past the cap only to settle exactMatch (it gates the
@@ -52,14 +47,14 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
 
       const createStructureType = resolveCreateStructureType(structureType)
       if (createStructureType && term.length > 0 && !exactMatch) {
-        const createMeta = STRUCTURES[createStructureType]
+        const createName = getStructure(createStructureType)?.name ?? createStructureType
         results.push({
           id: CREATE_ITEM_ID,
           label: term,
           structureType: createStructureType,
-          color: createMeta.color,
+          color: structurePresentation(createStructureType).color,
           isCreate: true,
-          createLabel: `Create new ${createMeta.name}: ${term}`,
+          createLabel: `Create new ${createName}: ${term}`,
         })
       }
       return results
@@ -82,7 +77,7 @@ interface MentionItem {
 async function resolveMentionItem(props: EntitySuggestionItem): Promise<MentionItem> {
   if (props.isCreate) {
     // Server-authoritative get-or-create: browser and MCP agent resolve to one id.
-    const created = await getOrCreateEntityForMention(props.structureType as CreatableStructureType, props.label)
+    const created = await getOrCreateEntityForMention(props.structureType, props.label)
     return { id: created.id, label: created.name, structureType: created.structureType }
   }
   return { id: props.id, label: props.label, structureType: props.structureType }
@@ -113,8 +108,7 @@ function insertMention(
     .run()
 }
 
-function resolveCreateStructureType(narrowedStructureType: StructureType | null): StructureType | undefined {
+function resolveCreateStructureType(narrowedStructureType: string | null): string | undefined {
   if (!narrowedStructureType) return undefined
-  const meta = STRUCTURES[narrowedStructureType] as { creatable?: boolean }
-  return meta.creatable === false ? undefined : narrowedStructureType
+  return getStructure(narrowedStructureType)?.creatable === false ? undefined : narrowedStructureType
 }

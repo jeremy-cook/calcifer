@@ -3,11 +3,12 @@ import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group'
 import { Toggle } from '~/components/ui/toggle'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { useAllEntities } from '~/model/store'
+import { useStructure } from '~/model/structures'
 import {
   TODO_DUE_FILTER_OPTIONS,
-  TODO_PRIORITY_OPTIONS,
   TODO_SORT_OPTIONS,
-  TODO_STATUS_FILTER_OPTIONS,
+  todoPriorityOptions,
+  todoStatusFilterOptions,
   type TodoFilter,
   type TodoSearch,
   type TodoSort,
@@ -23,7 +24,10 @@ const NONE = '__none__'
 
 export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
   const entities = useAllEntities()
+  const todo = useStructure('Todo')
   const tags = entities.filter((e) => e.structureType === 'Tag')
+  const statusFilterOptions = todoStatusFilterOptions(todo)
+  const priorityOptions = todoPriorityOptions(todo)
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -33,10 +37,10 @@ export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
         value={filter.status}
         onValueChange={(v) => {
           // Radix emits '' when the pressed item is clicked again — ignore so the filter can't be cleared.
-          if (v) onChange({ status: v as TodoFilter['status'] })
+          if (v) onChange({ status: v })
         }}
       >
-        {TODO_STATUS_FILTER_OPTIONS.map((item) => (
+        {statusFilterOptions.map((item) => (
           <ToggleGroupItem key={item.key} value={item.key} className="px-3">
             {item.label}
           </ToggleGroupItem>
@@ -45,14 +49,14 @@ export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
 
       <Select
         value={filter.priority ?? NONE}
-        onValueChange={(v) => onChange({ priority: v === NONE ? undefined : (v as TodoFilter['priority']) })}
+        onValueChange={(v) => onChange({ priority: v === NONE ? undefined : v })}
       >
         <SelectTrigger size="sm" className="h-8">
           <SelectValue placeholder="Priority" />
         </SelectTrigger>
         <SelectContent>
           <SelectItem value={NONE}>Any priority</SelectItem>
-          {TODO_PRIORITY_OPTIONS.map((option) => (
+          {priorityOptions.map((option) => (
             <SelectItem key={option.key} value={option.key}>
               {option.key === 'none' ? 'No priority' : option.label}
             </SelectItem>
