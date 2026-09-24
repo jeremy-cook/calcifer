@@ -31,6 +31,14 @@ export default defineConfig([
     },
   },
   {
+    // TanStack route files always export `Route` alongside their components,
+    // and shadcn ui files export their `*Variants` helpers.
+    files: ['src/routes/**/*.{ts,tsx}', 'src/components/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+    },
+  },
+  {
     ignores: ['eslint.config.js', 'prettier.config.js'],
   },
 ])

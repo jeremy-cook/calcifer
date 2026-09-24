@@ -11,7 +11,6 @@ interface ShowDatePickerOptions {
 
 export function showDatePicker(editor: Editor, options: ShowDatePickerOptions = {}) {
   const { initialDate, onConfirm, referenceEl } = options
-  let component: ReactRenderer
 
   function destroy() {
     component.destroy()
@@ -19,7 +18,7 @@ export function showDatePicker(editor: Editor, options: ShowDatePickerOptions = 
     document.removeEventListener('mousedown', onOutsideClick, true)
   }
 
-  component = new ReactRenderer(DatePickerPopup, {
+  const component = new ReactRenderer(DatePickerPopup, {
     props: {
       initialDate,
       onSelect(date: string) {
