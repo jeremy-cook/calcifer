@@ -1,24 +1,35 @@
+import { memo } from 'react'
 import { Link } from '@tanstack/react-router'
 import { Checkbox } from '~/components/ui/checkbox'
 import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
 import { formatLongDate } from '~/model/dates'
-import { useAllEntities, type Entity } from '~/model/store'
+import type { Entity } from '~/model/store'
 import { todoFields, useSetTodoStatus } from '~/model/todos'
 import { PriorityBadge } from './PriorityBadge'
 
 export interface TodoRowProps {
   entity: Entity
   today: string
+  tags: Entity[]
 }
 
-export function TodoRow({ entity, today }: TodoRowProps) {
+// TodoList resolves tags into a fresh array on every render, so compare them
+// element-wise; rows re-render only when their own entity, tags or the date change.
+function arePropsEqual(prev: TodoRowProps, next: TodoRowProps) {
+  return (
+    prev.entity === next.entity &&
+    prev.today === next.today &&
+    prev.tags.length === next.tags.length &&
+    prev.tags.every((tag, i) => tag === next.tags[i])
+  )
+}
+
+export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowProps) {
   const setTodoStatus = useSetTodoStatus()
-  const entities = useAllEntities()
-  const { status, priority, due, tagIds } = todoFields(entity)
+  const { status, priority, due } = todoFields(entity)
   const done = status === 'done'
   const overdue = !done && due !== undefined && due < today
-  const tags = tagIds.map((id) => entities.find((e) => e.id === id)).filter((e): e is Entity => e !== undefined)
 
   const handleCheckedChange = (checked: boolean | 'indeterminate') => {
     setTodoStatus(entity, checked === true ? 'done' : 'open')
@@ -51,4 +62,4 @@ export function TodoRow({ entity, today }: TodoRowProps) {
       )}
     </li>
   )
-}
+}, arePropsEqual)
