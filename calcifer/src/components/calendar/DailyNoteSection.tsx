@@ -19,11 +19,11 @@ import {
   dailyNoteByDate,
   deleteEntityImperative,
   getEntitiesSnapshot,
-  useAllEntities,
   useCreateDailyNote,
   useDeleteEntity,
   type Entity,
 } from '~/model/store'
+import { itemsOn, useCalendarIndex } from '~/model/calendar'
 import { getRichTextSnapshot, isRichTextEmpty } from '~/model/richtext'
 import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -32,8 +32,7 @@ interface DailyNoteSectionProps {
 }
 
 export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
-  const entities = useAllEntities()
-  const dailyNote = dailyNoteByDate(entities, iso)
+  const dailyNote = itemsOn(useCalendarIndex(), iso, 'dailyNote')[0]?.entity
   const createDailyNote = useCreateDailyNote()
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null)
   if (autoFocusKey !== null && autoFocusKey !== iso) setAutoFocusKey(null)

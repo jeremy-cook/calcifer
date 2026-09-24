@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { TrashIcon } from '@phosphor-icons/react'
+import { create as createMessage } from '@bufbuild/protobuf'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,16 +17,14 @@ import { Button } from '~/components/ui/button'
 import { Input } from '~/components/ui/input'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityDateField } from '~/components/entity/EntityDateField'
+import { EntitySelectField } from '~/components/entity/EntitySelectField'
+import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
+import { TodoStatusField } from '~/components/todo/TodoStatusField'
+import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
-import {
-  useDeleteEntity,
-  useEntity,
-  useMoveDailyNote,
-  useRenameEntity,
-  type Entity,
-} from '~/model/store'
-import { STRUCTURES, type StructureType, isNameEditable } from '~/model/structures'
-import type { Property } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { useDeleteEntity, useEntity, useUpdateEntity, withName, withProperty, type Entity } from '~/model/store'
+import { STRUCTURES, type StructureType, type PropertyDef, isNameEditable } from '~/model/structures'
+import { EntityRefListSchema, type PropertyValue } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
@@ -116,7 +115,7 @@ interface EntityTitleInputProps {
 // revert the field mid-typing: keystrokes update local state synchronously, and
 // the effect below only re-syncs when entity.name actually changes.
 function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
-  const rename = useRenameEntity()
+  const updateEntity = useUpdateEntity()
   const [value, setValue] = useState(entity.name)
 
   const isDefaultName = entity.name === `Untitled ${structureName}`
@@ -131,7 +130,7 @@ function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
 
   const handleChange = (next: string) => {
     setValue(next)
-    rename(entity, next)
+    updateEntity(withName(entity, next))
   }
 
   return (
@@ -150,29 +149,80 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
-  const moveDailyNote = useMoveDailyNote()
-  if (entity.properties.length === 0) return null
+  const updateEntity = useUpdateEntity()
+  const structure = STRUCTURES[entity.structureType as StructureType]
+  if (!structure || structure.properties.length === 0) return null
 
-  const renderProperty = (property: Property) => {
-    const value = property.value?.value
-    if (!value) return null
-    switch (value.case) {
-      case 'richtext':
-        return <EntityRichTextField key={property.id} propertyId={property.id} propertyRef={value.value} />
-      case 'date':
-        if (entity.structureType !== 'DailyNote') return null
+  const setProperty = (propertyId: string, value: PropertyValue['value'] | null) =>
+    updateEntity(withProperty(entity, propertyId, value))
+
+  // Properties whose editor isn't the generic one for their type, keyed "Structure.propertyId".
+  const overrides: Record<string, () => React.ReactNode> = {
+    'DailyNote.date': () => <DailyNoteDateField key="date" entity={entity} />,
+    'Todo.status': () => <TodoStatusField key="status" entity={entity} />,
+  }
+
+  const renderProperty = (def: PropertyDef) => {
+    const override = overrides[`${entity.structureType}.${def.id}`]
+    if (override) return override()
+
+    const property = entity.properties.find((p) => p.id === def.id)
+    const value = property?.value?.value
+
+    switch (def.type) {
+      case 'richtext': {
+        if (value?.case !== 'richtext') return null
+        return <EntityRichTextField key={def.id} propertyId={def.id} propertyRef={value.value} />
+      }
+      case 'date': {
+        const iso = value?.case === 'date' ? value.value : undefined
         return (
           <EntityDateField
-            key={property.id}
-            label="Date"
-            iso={value.value}
-            onChange={(iso) => moveDailyNote(entity, iso)}
+            key={def.id}
+            label={def.label ?? 'Date'}
+            iso={iso}
+            onChange={(next) => setProperty(def.id, { case: 'date', value: next })}
+            onClear={iso ? () => setProperty(def.id, null) : undefined}
           />
         )
+      }
+      case 'select': {
+        if (!def.options) return null
+        const current = value?.case === 'select' ? value.value : (def.default ?? '')
+        return (
+          <EntitySelectField
+            key={def.id}
+            label={def.label ?? def.id}
+            value={current}
+            options={def.options}
+            onChange={(next) => setProperty(def.id, { case: 'select', value: next })}
+          />
+        )
+      }
+      case 'relations': {
+        if (!def.targetStructure) return null
+        const refs = value?.case === 'relations' ? value.value.refs : []
+        return (
+          <EntityRelationsField
+            key={def.id}
+            label={def.label ?? def.id}
+            targetStructure={def.targetStructure}
+            refs={refs}
+            onChange={(nextRefs) =>
+              setProperty(
+                def.id,
+                nextRefs.length === 0
+                  ? null
+                  : { case: 'relations', value: createMessage(EntityRefListSchema, { refs: nextRefs }) },
+              )
+            }
+          />
+        )
+      }
       default:
         return null
     }
   }
 
-  return <>{entity.properties.map(renderProperty)}</>
+  return <>{structure.properties.map(renderProperty)}</>
 }

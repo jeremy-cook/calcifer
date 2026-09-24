@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as CalendarRouteImport } from './routes/calendar'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as STodoRouteImport } from './routes/s.Todo'
 import { Route as SStructureTypeRouteImport } from './routes/s.$structureType'
 import { Route as EIdRouteImport } from './routes/e.$id'
 
@@ -22,6 +23,11 @@ const CalendarRoute = CalendarRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const STodoRoute = STodoRouteImport.update({
+  id: '/s/Todo',
+  path: '/s/Todo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SStructureTypeRoute = SStructureTypeRouteImport.update({
@@ -40,12 +46,14 @@ export interface FileRoutesByFullPath {
   '/calendar': typeof CalendarRoute
   '/e/$id': typeof EIdRoute
   '/s/$structureType': typeof SStructureTypeRoute
+  '/s/Todo': typeof STodoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/calendar': typeof CalendarRoute
   '/e/$id': typeof EIdRoute
   '/s/$structureType': typeof SStructureTypeRoute
+  '/s/Todo': typeof STodoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +61,20 @@ export interface FileRoutesById {
   '/calendar': typeof CalendarRoute
   '/e/$id': typeof EIdRoute
   '/s/$structureType': typeof SStructureTypeRoute
+  '/s/Todo': typeof STodoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/calendar' | '/e/$id' | '/s/$structureType'
+  fullPaths: '/' | '/calendar' | '/e/$id' | '/s/$structureType' | '/s/Todo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/calendar' | '/e/$id' | '/s/$structureType'
-  id: '__root__' | '/' | '/calendar' | '/e/$id' | '/s/$structureType'
+  to: '/' | '/calendar' | '/e/$id' | '/s/$structureType' | '/s/Todo'
+  id:
+    | '__root__'
+    | '/'
+    | '/calendar'
+    | '/e/$id'
+    | '/s/$structureType'
+    | '/s/Todo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +82,7 @@ export interface RootRouteChildren {
   CalendarRoute: typeof CalendarRoute
   EIdRoute: typeof EIdRoute
   SStructureTypeRoute: typeof SStructureTypeRoute
+  STodoRoute: typeof STodoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -83,6 +99,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/s/Todo': {
+      id: '/s/Todo'
+      path: '/s/Todo'
+      fullPath: '/s/Todo'
+      preLoaderRoute: typeof STodoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/s/$structureType': {
@@ -107,6 +130,7 @@ const rootRouteChildren: RootRouteChildren = {
   CalendarRoute: CalendarRoute,
   EIdRoute: EIdRoute,
   SStructureTypeRoute: SStructureTypeRoute,
+  STodoRoute: STodoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -9,6 +9,7 @@ import {
   RichTextRefSchema,
   type Entity,
   type Property,
+  type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { STRUCTURES, type StructureType } from '~/model/structures'
 import { formatLongDate } from '~/model/dates'
@@ -36,6 +37,13 @@ function buildEntityMessage(structureType: CreatableStructureType, name?: string
         createMessage(PropertySchema, {
           id: def.id,
           value: createMessage(PropertyValueSchema, { value: { case: 'richtext', value: ref } }),
+        }),
+      )
+    } else if (def.type === 'select' && def.default !== undefined) {
+      properties.push(
+        createMessage(PropertySchema, {
+          id: def.id,
+          value: createMessage(PropertyValueSchema, { value: { case: 'select', value: def.default } }),
         }),
       )
     }
@@ -123,29 +131,57 @@ export function useCreateDailyNote() {
   return useCallback((iso: string) => m.mutateAsync(buildDailyNoteMessage(iso)), [m])
 }
 
-export function useRenameEntity() {
+// Single write path for edits to an existing entity. Optimistic on both the
+// entity cache and the list cache (so checkboxes on /s/Todo and the calendar
+// flip immediately), rolled back on error. Sends the whole entity, so concurrent
+// writers are last-write-wins.
+export function useUpdateEntity() {
   const qc = useQueryClient()
-  const m = useMutation({
+  const { mutate } = useMutation({
     mutationFn: (entity: Entity) => entityClient.update({ entity }),
     onMutate: async (entity) => {
-      await qc.cancelQueries({ queryKey: qk.entity(entity.id) })
-      const prev = qc.getQueryData<Entity>(qk.entity(entity.id))
+      await Promise.all([
+        qc.cancelQueries({ queryKey: qk.entity(entity.id) }),
+        qc.cancelQueries({ queryKey: qk.entities() }),
+      ])
+      const prevEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
+      const prevList = qc.getQueryData<Entity[]>(qk.entities())
       qc.setQueryData(qk.entity(entity.id), entity)
-      return { prev }
+      qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? entity : e)))
+      return { prevEntity, prevList }
     },
     onError: (_e, entity, ctx) => {
-      if (ctx?.prev) qc.setQueryData(qk.entity(entity.id), ctx.prev)
+      if (ctx?.prevEntity) qc.setQueryData(qk.entity(entity.id), ctx.prevEntity)
+      if (ctx?.prevList) qc.setQueryData(qk.entities(), ctx.prevList)
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['entities'] })
     },
   })
-  return useCallback(
-    (current: Entity, name: string) => {
-      m.mutate(createMessage(EntitySchema, { ...current, name }))
-    },
-    [m],
-  )
+  return useCallback((entity: Entity) => mutate(entity), [mutate])
+}
+
+// --- Pure edit builders (pass the result to useUpdateEntity()) ---
+
+export function withName(entity: Entity, name: string): Entity {
+  return createMessage(EntitySchema, { ...entity, name })
+}
+
+// `null` removes the property. The server still clears links for declared
+// relation properties that are absent, so removing the last ref is safe.
+export function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
+  if (value === null) {
+    return createMessage(EntitySchema, { ...entity, properties: entity.properties.filter((p) => p.id !== propertyId) })
+  }
+  const next = createMessage(PropertySchema, { id: propertyId, value: createMessage(PropertyValueSchema, { value }) })
+  const exists = entity.properties.some((p) => p.id === propertyId)
+  const properties = exists ? entity.properties.map((p) => (p.id === propertyId ? next : p)) : [...entity.properties, next]
+  return createMessage(EntitySchema, { ...entity, properties })
+}
+
+// A daily note's name is derived from its date, so moving it renames it too.
+export function withDailyNoteDate(entity: Entity, iso: string): Entity {
+  return withName(withProperty(entity, 'date', { case: 'date', value: iso }), formatLongDate(iso))
 }
 
 export function useDeleteEntity() {
@@ -157,33 +193,6 @@ export function useDeleteEntity() {
     },
   })
   return useCallback((id: string) => void m.mutateAsync(id), [m])
-}
-
-export function useMoveDailyNote() {
-  const m = useMutation({
-    mutationFn: (entity: Entity) => entityClient.update({ entity }),
-    onSuccess: onEntityWritten,
-  })
-  return useCallback(
-    (entity: Entity, newIso: string): boolean => {
-      const dateProp = entity.properties.find((p) => p.id === 'date')
-      const v = dateProp?.value?.value
-      if (v?.case === 'date' && v.value === newIso) return true
-      const occupant = dailyNoteByDate(getEntitiesSnapshot(), newIso)
-      if (occupant && occupant.id !== entity.id) return false
-      const properties = entity.properties.map((p) =>
-        p.id === 'date'
-          ? createMessage(PropertySchema, {
-              id: 'date',
-              value: createMessage(PropertyValueSchema, { value: { case: 'date', value: newIso } }),
-            })
-          : p,
-      )
-      m.mutate(createMessage(EntitySchema, { ...entity, name: formatLongDate(newIso), properties }))
-      return true
-    },
-    [m],
-  )
 }
 
 // --- Imperative (non-hook) helpers for the editor mention flow + cleanup ---
@@ -230,31 +239,14 @@ export function listByStructure(entities: Entity[], structureType: StructureType
   return matches.sort((a, b) => updatedAtMillis(b) - updatedAtMillis(a))
 }
 
+export function dailyNoteDate(entity: Entity): string | undefined {
+  if (entity.structureType !== 'DailyNote') return undefined
+  const value = entity.properties.find((p) => p.id === 'date')?.value?.value
+  return value?.case === 'date' ? value.value : undefined
+}
+
 export function dailyNoteByDate(entities: Entity[], iso: string): Entity | undefined {
-  for (const entity of entities) {
-    if (entity.structureType !== 'DailyNote') continue
-    const dateProp = entity.properties.find((p) => p.id === 'date')
-    const value = dateProp?.value?.value
-    if (value?.case === 'date' && value.value === iso) return entity
-  }
-  return undefined
-}
-
-export function entitiesByDate(entities: Entity[], iso: string): Entity[] {
-  return entities.filter((e) => e.referencedDates.includes(iso))
-}
-
-export function daysWithContent(entities: Entity[]): Set<string> {
-  const set = new Set<string>()
-  for (const e of entities) {
-    if (e.structureType === 'DailyNote') {
-      const dateProp = e.properties.find((p) => p.id === 'date')
-      const v = dateProp?.value?.value
-      if (v?.case === 'date') set.add(v.value)
-    }
-    for (const iso of e.referencedDates) set.add(iso)
-  }
-  return set
+  return entities.find((e) => dailyNoteDate(e) === iso)
 }
 
 export function entityUpdatedAtDate(entity: Entity): Date {
