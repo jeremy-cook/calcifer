@@ -15,7 +15,7 @@ static VEC_INIT: Once = Once::new();
 /// sqlite3 that sqlx-sqlite links), and `sqlite3_vec_init` by the sqlite-vec
 /// crate; we hand the latter to the former as an entry-point callback. Guarded by
 /// a `Once` so re-entry (e.g. tests) doesn't register it twice.
-fn register_sqlite_vec() {
+pub(crate) fn register_sqlite_vec() {
     VEC_INIT.call_once(|| {
         // SAFETY: transmuting the C entry-point fn pointer into the auto-extension
         // callback shape is the documented registration path for sqlite-vec; both

@@ -660,3 +660,39 @@ impl EntityServiceTrait for EntityService {
         Ok(Response::new(Box::pin(stream)))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{entity_service, memory_pool, note};
+
+    async fn create(svc: &EntityService, entity: Entity) -> Entity {
+        svc.create(Request::new(CreateEntityRequest {
+            entity: Some(entity),
+        }))
+        .await
+        .expect("create")
+        .into_inner()
+    }
+
+    #[tokio::test]
+    async fn update_renames_existing_entity() {
+        let svc = entity_service(memory_pool().await);
+        let mut entity = create(&svc, note("Before")).await;
+
+        entity.name = "After".to_string();
+        let updated = svc
+            .update(Request::new(UpdateEntityRequest {
+                entity: Some(entity.clone()),
+            }))
+            .await
+            .expect("update")
+            .into_inner();
+
+        assert_eq!(updated.name, "After");
+        assert_eq!(updated.structure_type, "Note");
+        assert_eq!(updated.properties, entity.properties);
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored.name, "After");
+    }
+}

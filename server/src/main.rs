@@ -9,6 +9,8 @@ mod links;
 mod proto;
 mod services;
 mod structures;
+#[cfg(test)]
+mod test_support;
 mod watch;
 
 use crate::proto::entity_service_server::EntityServiceServer;
