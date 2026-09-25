@@ -322,7 +322,14 @@ function updatedAtMillis(entity: Entity): number {
 export function listByStructure(entities: Entity[], structureType: string): Entity[] {
   const matches = entities.filter((e) => e.structureType === structureType)
   if (structureType === 'DailyNote') {
-    return matches.sort((a, b) => b.name.localeCompare(a.name))
+    // ISO yyyy-MM-dd compares chronologically as a string. A missing date maps
+    // to '', which is smallest, so undated notes sort last. Ties break by id.
+    return matches.sort((a, b) => {
+      const da = dailyNoteDate(a) ?? ''
+      const db = dailyNoteDate(b) ?? ''
+      if (da !== db) return da < db ? 1 : -1
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    })
   }
   return matches.sort((a, b) => updatedAtMillis(b) - updatedAtMillis(a))
 }
