@@ -133,21 +133,6 @@ entity, and keep `NotFound` for an entity or property that doesn't exist.
 
 ---
 
-### I-19 · Daily notes are sorted by name, not date · medium · confirmed
-
-**Where:** `calcifer/src/model/store.ts:322-326` (`listByStructure`)
-
-**Problem:** `listByStructure` sorts DailyNotes by name descending (line 325). Names look
-like "June 13, 2026", so the list comes out alphabetical by month name, and "June 9"
-sorts above "June 13".
-
-**Fix:** Sort DailyNotes by their `date` property (ISO strings sort correctly as text).
-
-**Done when:** the DailyNote list is ordered newest date first across months and
-single/double-digit days.
-
----
-
 ### I-20 · `Entity` is both the write input and the read output · high · confirmed
 
 **Where:** `proto/calcifer/v1/services.proto:68-69` (`CreateEntityRequest`, `UpdateEntityRequest`), `server/src/services/entity.rs:49-51` (`persist_new_entity`), `server/src/services/entity.rs:576` (`update`)
@@ -462,6 +447,7 @@ test covers it.
 
 ## Resolved
 
+- **I-19 · Daily notes are sorted by name, not date.** Fixed 2026-09-25. `listByStructure` sorts DailyNotes by their ISO `date` property, newest first; undated notes sort last and ties break by `id`. Verified by reasoning and a script check of the comparator; not observed in the browser.
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
 - **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes `structure_type`; a mismatch with the stored type returns `InvalidArgument`; covered by `update_rejects_structure_type_change`.
 - **I-1 · Title input can revert mid-typing.** Fixed 2026-09-24. Renames are debounced (300 ms) and flushed on blur/unmount, and `entity.name` is not synced into the input while it is focused. Verified by reasoning; not reproduced in the browser.
