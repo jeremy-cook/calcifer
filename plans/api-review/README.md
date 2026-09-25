@@ -113,13 +113,13 @@ answer and the date.
 
 | # | Question | Recommendation | Answer |
 |---|---|---|---|
-| D1 | How should the frontend stay in sync (B3)? | Keep the full copy. Watch sends a snapshot on every (re)connect, then revisioned events. On lag, send a fresh snapshot. No `since` resume; that's overkill for a single user. | *pending* |
-| D2 | Should name lookup require unique names, or be deterministic (A7)? | Deterministic: the oldest `created_at` wins (id breaks ties), documented in the proto. Only Tag stays unique. | *pending* |
-| D3 | What happens when a browser save loses to an agent write? | Reload the server's version into the editor and show an inline "changed elsewhere" note. Up to ~300 ms of typing can be lost. No merge. | *pending* |
-| D4 | How should the proto change? | Source-breaking changes are fine (all consumers are in this repo). Go additive first, migrate consumers, then remove, so every task leaves the branch green. New messages use buf naming. Everything else is renamed in T17. | *pending* |
+| D1 | How should the frontend stay in sync (B3)? | Keep the full copy. Watch sends a snapshot on every (re)connect, then revisioned events. On lag, send a fresh snapshot. No `since` resume; that's overkill for a single user. | Keep the full copy; snapshot on every (re)connect, revisioned events, fresh snapshot on lag (as recommended). 2026-09-25 |
+| D2 | Should name lookup require unique names, or be deterministic (A7)? | Deterministic: the oldest `created_at` wins (id breaks ties), documented in the proto. Only Tag stays unique. | Deterministic: oldest `created_at` wins, id breaks ties (as recommended). 2026-09-25 |
+| D3 | What happens when a browser save loses to an agent write? | Reload the server's version into the editor and show an inline "changed elsewhere" note. Up to ~300 ms of typing can be lost. No merge. | Reload the server version with an inline "changed elsewhere" note; no merge (as recommended). 2026-09-25 |
+| D4 | How should the proto change? | Source-breaking changes are fine (all consumers are in this repo). Go additive first, migrate consumers, then remove, so every task leaves the branch green. New messages use buf naming. Everything else is renamed in T17. | **Break in place** (not the recommendation): change the proto and every consumer together in each task, instead of additive → migrate → remove. 2026-09-25 |
 | D5 | May T12 delete the stored `richtext` property rows (data change)? | Yes, via migration, after backing up `calcifer.db`. I-14's dead-ref cleanup stays with I-14. | *pending* |
-| D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | *pending* |
-| D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | *pending* |
+| D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | **Render them** (not the recommendation): keep `text`, `number`, `relation` and add FE rendering. 2026-09-25 |
+| D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | Adopt buf naming, T19 variant A (as recommended). 2026-09-25 |
 
 ---
 
