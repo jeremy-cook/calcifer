@@ -1,6 +1,7 @@
 // Knowledge operations the MCP tools delegate to. Everything goes through the
 // tonic core: agents author markdown, the server derives the link graph.
 import { Code, ConnectError } from '@connectrpc/connect'
+import { timestampFromMs, type Timestamp } from '@bufbuild/protobuf/wkt'
 import { entityClient, richTextClient, searchClient, structureClient } from './calciferClient.js'
 import { PropertyKind, type PropertyDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { toTipTap } from './markdown/parse.js'
@@ -20,14 +21,33 @@ function isNotFound(e: unknown): boolean {
   return e instanceof ConnectError && e.code === Code.NotFound
 }
 
-async function getDoc(entityId: string): Promise<TTNode> {
-  try {
-    const rt = await richTextClient.get(contentRef(entityId))
-    return rt.doc ? (JSON.parse(rt.doc) as TTNode) : emptyDoc()
-  } catch (e) {
-    if (isNotFound(e)) return emptyDoc()
-    throw e
+// A declared-but-unsaved doc comes back empty at the epoch (see RichTextService.Get),
+// so `updatedAt` is always something a conditional Put can echo back.
+async function getDoc(entityId: string): Promise<{ doc: TTNode; updatedAt: Timestamp }> {
+  const rt = await richTextClient.get(contentRef(entityId))
+  return {
+    doc: rt.doc ? (JSON.parse(rt.doc) as TTNode) : emptyDoc(),
+    updatedAt: rt.updatedAt ?? timestampFromMs(0),
   }
+}
+
+const APPEND_ATTEMPTS = 3
+
+// Read, merge, and Put conditioned on the updated_at we read. A concurrent save
+// (e.g. the browser) makes the Put fail with FAILED_PRECONDITION; re-read and retry.
+async function appendDoc(entityId: string, label: string, markdown: string): Promise<void> {
+  const addition = await toTipTap(markdown, resolver)
+  for (let attempt = 1; attempt <= APPEND_ATTEMPTS; attempt++) {
+    const { doc, updatedAt } = await getDoc(entityId)
+    const merged: TTNode = { type: 'doc', content: [...(doc.content ?? []), ...(addition.content ?? [])] }
+    try {
+      await richTextClient.put({ ref: contentRef(entityId), doc: JSON.stringify(merged), expectedUpdatedAt: updatedAt })
+      return
+    } catch (e) {
+      if (!(e instanceof ConnectError && e.code === Code.FailedPrecondition)) throw e
+    }
+  }
+  throw new Error(`${label} kept changing while appending (${APPEND_ATTEMPTS} attempts); nothing was appended. Try again.`)
 }
 
 async function backlinkNames(targetId: string): Promise<string[]> {
@@ -39,6 +59,7 @@ async function backlinkNames(targetId: string): Promise<string[]> {
 export async function createNote(name: string, markdown: string): Promise<string> {
   const { id } = await resolver('Note', name)
   const doc = await toTipTap(markdown, resolver)
+  // Unconditional on purpose: create_note overwrites whatever the note held.
   await richTextClient.put({ ref: contentRef(id), doc: JSON.stringify(doc) })
   const ent = await entityClient.get({ id })
   const linked = ent.links.map((l) => l.target?.structureType).join(', ') || 'none'
@@ -47,10 +68,7 @@ export async function createNote(name: string, markdown: string): Promise<string
 
 export async function appendToNote(name: string, markdown: string): Promise<string> {
   const { id } = await resolver('Note', name)
-  const existing = await getDoc(id)
-  const addition = await toTipTap(markdown, resolver)
-  const merged: TTNode = { type: 'doc', content: [...(existing.content ?? []), ...(addition.content ?? [])] }
-  await richTextClient.put({ ref: contentRef(id), doc: JSON.stringify(merged) })
+  await appendDoc(id, `Note "${name}"`, markdown)
   const ent = await entityClient.get({ id })
   return `Appended to "${ent.name}" (${id}); now ${ent.links.length} link(s).`
 }
@@ -66,7 +84,7 @@ export async function getNote(name: string): Promise<string> {
     if (isNotFound(e)) return `No note named "${name}". Use search_notes or create_note.`
     throw e
   }
-  const md = fromTipTap(await getDoc(entityId)).trim()
+  const md = fromTipTap((await getDoc(entityId)).doc).trim()
   const back = await backlinkNames(entityId)
   return `# ${entityName}\n\n${md || '(empty)'}\n\n---\nLinked from: ${back.join(', ') || '(nothing)'}`
 }
@@ -132,10 +150,7 @@ export async function createDailyNote(date: string): Promise<string> {
 
 export async function appendToDailyNote(date: string, markdown: string): Promise<string> {
   const { id, name } = await resolveDailyNote(date)
-  const existing = await getDoc(id)
-  const addition = await toTipTap(markdown, resolver)
-  const merged: TTNode = { type: 'doc', content: [...(existing.content ?? []), ...(addition.content ?? [])] }
-  await richTextClient.put({ ref: contentRef(id), doc: JSON.stringify(merged) })
+  await appendDoc(id, `Daily note "${name}"`, markdown)
   const ent = await entityClient.get({ id })
   return `Appended to daily note "${name}" (${id}); now ${ent.links.length} link(s).`
 }
