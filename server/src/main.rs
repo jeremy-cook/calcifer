@@ -46,11 +46,12 @@ async fn main() -> anyhow::Result<()> {
         .layer(tonic_web::GrpcWebLayer::new())
         .add_service(EntityServiceServer::new(EntityService::new(
             pool.clone(),
-            hub,
+            hub.clone(),
             embed.clone(),
         )))
         .add_service(RichTextServiceServer::new(RichTextService::new(
             pool.clone(),
+            hub,
             embed.clone(),
         )))
         .add_service(SearchServiceServer::new(SearchService::new(pool, embed)))

@@ -9,6 +9,7 @@ use sqlx::SqlitePool;
 use crate::embed::EmbedHandle;
 use crate::proto::{property_value, Entity, Property, PropertyValue, RichTextRef};
 use crate::services::entity::EntityService;
+use crate::services::richtext::RichTextService;
 use crate::watch::WatchHub;
 
 /// A fresh in-memory database with every migration applied. Each `:memory:`
@@ -39,6 +40,12 @@ pub(crate) async fn memory_pool() -> SqlitePool {
 /// disabled (the lightest legitimate handle: no model load or download).
 pub(crate) fn entity_service(pool: SqlitePool) -> EntityService {
     EntityService::new(pool, WatchHub::new(), EmbedHandle::disabled())
+}
+
+/// A `RichTextService` on `pool` publishing to `hub`, wired as in `main.rs`
+/// but with embeddings disabled. Pass the hub a test subscribes to.
+pub(crate) fn richtext_service(pool: SqlitePool, hub: WatchHub) -> RichTextService {
+    RichTextService::new(pool, hub, EmbedHandle::disabled())
 }
 
 /// A new Note entity carrying its `content` richtext pointer, as the FE builds it.
