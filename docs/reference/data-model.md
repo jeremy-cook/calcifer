@@ -33,6 +33,10 @@ message RichText {
   RichTextRef ref = 1;
   string doc = 2;               // TipTap JSON, inspected as text
   google.protobuf.Timestamp updated_at = 3;
+  // Put only; ignored on output. Unset = unconditional write; set = the write fails
+  // with FAILED_PRECONDITION unless the stored updated_at equals it exactly; the
+  // epoch (0s, 0ns) = "expect nothing saved yet".
+  google.protobuf.Timestamp expected_updated_at = 4;
 }
 
 message LinkRef {
@@ -182,6 +186,14 @@ service EntityService {
 // the whole entity on every keystroke.
 service RichTextService { rpc Get / Put }
 
+message EntityEvent {
+  oneof event {
+    Entity upserted = 1;
+    string deleted_id = 2;
+    RichText rich_text_changed = 3;   // the saved doc (ref, doc, updated_at)
+  }
+}
+
 service SearchService   { rpc Search / Retrieve }   // FTS5 lexical / hybrid RRF
 
 // The structure registry (see Structures). No filters; every structure in table order.
@@ -196,6 +208,20 @@ different properties of one entity don't overwrite each other. `Update` replaces
 of an entity's properties and stays for renames and multi-field edits (moving a
 DailyNote, which also renames it, uses `Update`); it can still overwrite a concurrent
 `SetProperty` from a stale copy.
+
+`RichTextService` only addresses declared rich-text properties. Both `Get` and `Put`
+return `NOT_FOUND` if the entity doesn't exist and `INVALID_ARGUMENT` if the property
+isn't in its structure's rich-text properties. `Get` of a declared property with
+nothing saved returns an empty `doc` and the epoch as `updated_at`.
+
+`Put` is conditional when `expected_updated_at` is set: clients echo back the
+`updated_at` they last read (the epoch if nothing was saved), and a stale expectation
+fails with `FAILED_PRECONDITION` and writes nothing. Leaving it unset writes
+unconditionally. Each save's `updated_at` is `max(now, previous + 1)` in milliseconds,
+so two saves never share a timestamp, and the entity's `updated_at` is set to the same
+value in the same transaction. After commit, `Put` publishes `rich_text_changed` with
+the saved doc and then `upserted` with the reloaded entity, since its links,
+`referenced_dates` and `updated_at` changed.
 
 Transport is gRPC-Web from the browser (`tonic-web` bridges; Vite proxies `/api` →
 `:8080`). `Watch` is a server-streaming fan-out that keeps open tabs live.
