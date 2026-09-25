@@ -24,7 +24,7 @@ Additive only. Existing consumers must keep compiling.
    - The epoch (0 seconds, 0 nanos) means "expect nothing saved yet".
    - Clients echo back the `updated_at` they last read.
 
-   (Keeping `RichText` as Put's request type is deliberate; T17 renames the messages.)
+   (Keeping `RichText` as Put's request type is deliberate; T19 renames the messages.)
 2. `EntityEvent.event` gains the case `RichText rich_text_changed = 3;`. It carries the
    saved document (ref, doc, updated_at).
 3. Comment on `RichTextService.Get`:
