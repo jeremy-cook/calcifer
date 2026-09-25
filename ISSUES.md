@@ -445,6 +445,43 @@ test covers it.
 
 ---
 
+### I-37 · A racing `RichText.Put` fails with `Internal`, not `FailedPrecondition` · medium · confirmed
+
+**Where:** `server/src/services/richtext.rs` (`put`, `self.pool.begin()`), `server/src/db.rs:35-43`
+
+**Problem:** `Put` reads the stored `updated_at` and then writes, inside a DEFERRED
+transaction. The pool runs WAL with a `busy_timeout`, but a deferred transaction that
+has read can't upgrade to a writer once another connection has committed since its read
+began. SQLite returns `SQLITE_BUSY` at once, and the timeout doesn't help. So when two
+`Put`s race, the loser gets `Internal` instead of `FailedPrecondition`. No write is lost,
+but clients that react to a conflict (the MCP append retry, the editor's "changed
+elsewhere" reload) don't see one. Found during T04 of the API review; confirmed by
+reading, not reproduced.
+
+**Fix:** Start `Put`'s transaction with `BEGIN IMMEDIATE` so the write lock is taken
+before the read, or map a busy error on this path to `FailedPrecondition`.
+
+**Done when:** two concurrent conditional `Put`s on the same doc give one success and
+one `FailedPrecondition`, and a test covers it.
+
+---
+
+### I-38 · Stale comments about which writes publish events and how unsaved docs read · low · confirmed
+
+**Where:** `server/src/watch.rs:2`, `calcifer/src/model/richtext.ts:30`
+
+**Problem:** `watch.rs` says only Create/Update/Delete publish events; `RichText.Put`
+now publishes too. `richtext.ts` says an unsaved doc reads as '' via `NOT_FOUND`; the
+server now returns an empty doc, and `NOT_FOUND` means the entity is missing. Found
+during T04 of the API review.
+
+**Fix:** Update both comments. Both files are rewritten by later API-review tasks (T14,
+T06), which can pick this up.
+
+**Done when:** neither comment contradicts the code.
+
+---
+
 ## Resolved
 
 - **I-19 · Daily notes are sorted by name, not date.** Fixed 2026-09-25. `listByStructure` sorts DailyNotes by their ISO `date` property, newest first; undated notes sort last and ties break by `id`. Verified by reasoning and a script check of the comparator; not observed in the browser.
