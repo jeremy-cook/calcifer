@@ -93,6 +93,355 @@ property is rejected, and a test covers it.
 
 ---
 
+### I-17 · `RichText.Put` sends no Watch event and has no conflict check · high · confirmed
+
+**Where:** `server/src/services/richtext.rs:53` (`put`), `server/src/services/entity.rs` (the only caller of `hub.publish`), `mcp-server/src/tools.ts:48-56` (`appendToNote`)
+
+**Problem:** Only `EntityService` publishes to the watch hub; `RichTextService` doesn't
+hold it. A `Put` changes the entity's links, referenced_dates and search index, but no
+other tab hears about it, and there's no event for the document itself. So when the
+agent appends to a note that's open in the browser, the editor never sees the new text,
+and its next debounced save replaces the whole document, wiping out the append. `Put`
+also doesn't check that the entity exists or that the property is a declared rich-text
+property, and the `richtext` table has no foreign key, so orphaned documents are
+possible.
+
+**Fix:** `Put` publishes an `Upserted` event for the entity and bumps its `updated_at`.
+Add a rich-text-changed event. Add `expected_updated_at` to `Put` and return
+`FailedPrecondition` on a mismatch; the MCP append (read, edit, write back) gets the same
+protection. Reject a `Put` for a missing entity or an undeclared property.
+
+**Done when:** a `Put` publishes an event other subscribers receive, a `Put` with a stale
+`expected_updated_at` fails with `FailedPrecondition`, a `Put` on a missing entity or
+undeclared property is rejected, and tests cover each.
+
+---
+
+### I-18 · `RichText.Get` uses `NotFound` for "nothing saved yet" · low · confirmed
+
+**Where:** `server/src/services/richtext.rs:26-38` (`get`), `calcifer/src/model/richtext.ts:41`, `mcp-server/src/tools.ts:28`
+
+**Problem:** `Get` returns `NotFound` when no document row exists, whether or not the
+entity and property exist. Both clients turn `NotFound` into an empty document, so a real
+"no such entity" error looks the same as a fresh note.
+
+**Fix:** Return an empty document for a declared rich-text property of an existing
+entity, and keep `NotFound` for an entity or property that doesn't exist.
+
+**Done when:** `Get` on a new entity's declared rich-text property returns an empty doc,
+`Get` on a missing entity or undeclared property returns `NotFound`, and tests cover both.
+
+---
+
+### I-19 · Daily notes are sorted by name, not date · medium · confirmed
+
+**Where:** `calcifer/src/model/store.ts:322-326` (`listByStructure`)
+
+**Problem:** `listByStructure` sorts DailyNotes by name descending (line 325). Names look
+like "June 13, 2026", so the list comes out alphabetical by month name, and "June 9"
+sorts above "June 13".
+
+**Fix:** Sort DailyNotes by their `date` property (ISO strings sort correctly as text).
+
+**Done when:** the DailyNote list is ordered newest date first across months and
+single/double-digit days.
+
+---
+
+### I-20 · `Entity` is both the write input and the read output · high · confirmed
+
+**Where:** `proto/calcifer/v1/services.proto:68-69` (`CreateEntityRequest`, `UpdateEntityRequest`), `server/src/services/entity.rs:49-51` (`persist_new_entity`), `server/src/services/entity.rs:576` (`update`)
+
+**Problem:** `Create` and `Update` take a full `Entity`, including fields the server
+should own: id, links, referenced_dates, created_at and updated_at. `Create` saves the
+client-supplied links and referenced_dates (`replace_links` / `replace_referenced_dates`),
+which contradicts ADR 3's rule that no client writes links. `Update` silently ignores the
+same fields.
+
+**Fix:** Make `Entity` output-only. `CreateEntityRequest { structure_type, optional name,
+initial properties }`, with the server minting the id, timestamps and default properties.
+Replace `Update` with a `Rename` RPC plus the existing `SetProperty`; this also fixes I-15.
+
+**Done when:** no write RPC accepts an `Entity`, the server mints ids and defaults, and a
+test shows a client can't set links or referenced_dates through `Create`.
+
+---
+
+### I-21 · Default entities are built in four places · medium · confirmed
+
+**Where:** `calcifer/src/model/store.ts:21-85` (`defaultNameFor`, `buildEntityMessage`, `buildDailyNoteMessage`), `server/src/services/entity.rs:406-474` (`build_resolved_entity`, `build_daily_note`), `calcifer/src/routes/e.$id.tsx:166`
+
+**Problem:** The frontend and the server each build new entities (rich-text refs, select
+defaults, the DailyNote date and name) with separate code; the server's
+`build_resolved_entity` says it "mirrors the FE's buildEntityMessage". The default name
+`Untitled X` is set in `store.ts:22` and compared again in `e.$id.tsx:166`. The frontend
+mints the id itself "so the editor has its richtext refs immediately", but `NewButton`
+(`calcifer/src/layouts/sidebar/NewButton.tsx:27-28`) waits for the server's response
+before navigating anyway, so this gains nothing.
+
+**Fix:** Fixed by I-20: the server is the only place that builds a new entity, and the
+frontend builders go away.
+
+**Done when:** `buildEntityMessage` and `buildDailyNoteMessage` are gone, and the default
+name is defined only on the server.
+
+---
+
+### I-22 · A rich-text ref stored as a property value adds nothing · medium · confirmed
+
+**Where:** `proto/calcifer/v1/entities.proto:23` (`PropertyValue.richtext`), `calcifer/src/routes/e.$id.tsx:209`, `calcifer/src/components/calendar/DailyNoteSection.tsx:91,148-152`
+
+**Problem:** A `RichTextRef` is just (entity.id, property.id), both already known from
+context, and the registry already says which properties are rich text. Because the value
+is stored anyway, it has to be created on every new entity (I-21), the server never
+checks that its `entity_id` matches the owning entity, and if the row is missing the
+editor renders nothing.
+
+**Fix:** Drop the `richtext` case from `PropertyValue` and address a document by
+(entity_id, declared property_id).
+
+**Done when:** no `richtext` property value is stored or sent, and the editor renders for
+every declared rich-text property.
+
+---
+
+### I-23 · Daily notes are created and moved differently by each client · medium · confirmed
+
+**Where:** `calcifer/src/model/store.ts:124-130,271-273` (`useCreateDailyNote`, `withDailyNoteDate`), `mcp-server/src/tools.ts:113-126` (`resolveDailyNote`), `server/src/services/entity.rs:687-698` (`set_property`), `server/src/structures.rs:126`
+
+**Problem:** The frontend creates daily notes with `Create`, naming them with
+`formatLongDate` on the client, and moves them with `Update` plus a client-side rename.
+The MCP server calls `CreateDailyNote` and, on `AlreadyExists`, lists every DailyNote and
+scans their properties. `SetProperty(date)` updates `date_key` but not the name, so a
+client using the single-property path ends up with a name that no longer matches the
+date. The server doesn't enforce `name_editable = false` either.
+
+**Fix:** The server derives a DailyNote's name from its date on every write. Merge
+`ResolveByName` and `CreateDailyNote` into one get-or-create RPC:
+`Resolve { oneof key { name, date }, create_if_missing } → { entity, created }`. Moving a
+daily note then becomes a plain `SetProperty(date)`.
+
+**Done when:** `SetProperty(date)` on a DailyNote also renames it, both clients get-or-create
+daily notes through `Resolve`, and tests cover both.
+
+---
+
+### I-24 · Looking up an entity by name isn't reliable for most structures · medium · confirmed
+
+**Where:** `server/src/services/entity.rs:61-77` (`find_by_name`), `server/src/services/entity.rs:349-352` (`validate_select`), `server/src/structures.rs:110`
+
+**Problem:** Only Tag has `unique_names`, but `[[wikilinks]]`, @ mentions and the MCP
+`get_note` all look up Notes and Todos by name through `ResolveByName`. `find_by_name`
+uses `LIMIT 1` with no `ORDER BY`, so which of two same-named notes you get is undefined.
+`structure_type` isn't checked (the registry check skips unknown structures), so an empty
+or unknown type creates an entity anyway.
+
+**Fix:** Either make names unique wherever lookup by name is used, or make the lookup
+deterministic and document it. Reject unknown structure types.
+
+**Done when:** a lookup with two same-named entities returns the same one every time (or
+the duplicate can't exist), a create with an unknown or empty structure type is rejected,
+and tests cover both.
+
+---
+
+### I-25 · Wrong error message on a unique-name clash · low · confirmed
+
+**Where:** `server/src/services/entity.rs:523,567` (`create`, `update`), `server/src/services/entity.rs:397` (`map_unique_violation`)
+
+**Problem:** `Create` and `Update` map every unique violation to "a DailyNote for this
+date already exists". Creating or renaming a Tag onto an existing Tag name (which hits
+`one_tag_per_name`) gets that message.
+
+**Fix:** Pick the message from the constraint that failed (`one_daily_note_per_day` vs
+`one_tag_per_name`).
+
+**Done when:** a Tag name clash returns `AlreadyExists` with a Tag message, and a test
+covers it.
+
+---
+
+### I-26 · Unused property kinds, and structure flags only the frontend enforces · low · confirmed
+
+**Where:** `server/src/structures.rs` (registry), `calcifer/src/routes/e.$id.tsx:257`
+
+**Problem:** No structure declares a `relation`, `text` or `number` property, and the
+entity page silently renders nothing for them (`default: return null`). The server
+doesn't enforce `creatable` or `name_editable`; only the frontend does.
+
+**Fix:** Either remove the unused kinds or render them. Enforce `creatable` and
+`name_editable` on the server once I-20 and I-23 have landed.
+
+**Done when:** every `PropertyKind` is either used and rendered or removed, and the server
+rejects creating a non-creatable structure and renaming a non-name-editable entity.
+
+---
+
+### I-27 · Watch isn't built for keeping a full copy in sync · high · confirmed
+
+**Where:** `calcifer/src/App.tsx:11-43` (`useWatchSync`), `server/src/services/entity.rs:858-870` (`watch`), `server/src/watch.rs:24`, `calcifer/src/model/store.ts:109,172,241`
+
+**Problem:** The frontend keeps a full copy of every entity (reasonable for one user, ADR
+5), but Watch doesn't support that:
+- Race at startup: the initial `List` and the Watch subscription start at the same time
+  (`App.tsx:14-21`), so events that land between them are lost.
+- Lost events go unnoticed: the server drops events for a subscriber that falls behind
+  the 256-slot channel (`entity.rs:863-868`), and nothing tells the client to reload.
+- Reconnects: after a reconnect (`App.tsx:32-36`) the client doesn't refetch the list.
+- Refetch storm: every event and every mutation invalidates `['entities']`, so the
+  frontend reloads the full list each time, which the server serves as 1 + 4N queries.
+  Each debounced keystroke save means a full reload, and each `SetProperty` means two
+  (one from `onSettled`, one from the Watch echo).
+
+**Fix:** Make Watch start with a snapshot (or accept a `since` revision) and carry a
+revision number on each event. When a subscriber falls behind, send an explicit resync
+signal instead of dropping events. Have the frontend apply `Upserted`/`Deleted` directly
+to the cached list instead of refetching. State that the filtered `List`,
+`ListBacklinks` and `Search` are there for the agent.
+
+**Done when:** no event is lost between the initial load and the subscription, a lagging
+or reconnecting client resyncs, and an edit no longer triggers a full list refetch.
+
+---
+
+### I-28 · `repeated Property` should be `map<string, PropertyValue>` · medium · confirmed
+
+**Where:** `proto/calcifer/v1/entities.proto:55` (`Entity.properties`), `calcifer/src/model/store.ts:188,332`, `calcifer/src/model/todos.ts:42,49`, `calcifer/src/components/calendar/DailyNoteSection.tsx:149`, `calcifer/src/routes/e.$id.tsx:204`, `mcp-server/src/tools.ts:121`
+
+**Problem:** Every consumer repeats `properties.find(p => p.id === id)?.value?.value`, and
+nothing stops two properties with the same id. `Property` is `{id = 1, value = 2}`, which
+is exactly how protobuf encodes a map entry.
+
+**Fix:** Change `properties` to `map<string, PropertyValue>`. The change is
+wire-compatible and only breaks source code; a map also rules out duplicate ids.
+
+**Done when:** `Entity.properties` is a map and no consumer scans a property list.
+
+---
+
+### I-29 · Search has two RPCs for one job · low · confirmed
+
+**Where:** `proto/calcifer/v1/services.proto:39,42` (`Search`, `Retrieve`), `server/src/services/search.rs:62`, `mcp-server/src/tools.ts:74-87`
+
+**Problem:** `Search(query, limit)` and `Retrieve(query, k, hybrid)` return the same
+response, and `Retrieve` falls back to lexical search anyway. Separately, snippets mark
+matches with `[` `]`, which clashes with `[[wikilink]]` syntax.
+
+**Fix:** One `Search(query, limit, mode)` with a `SearchMode` enum; the MCP server
+already models exactly this (`tools.ts:74`). Return match ranges instead of bracketed
+snippets.
+
+**Done when:** there is one search RPC with a mode, and hits carry match ranges instead of
+`[ ]` markers.
+
+---
+
+### I-30 · `ListBacklinks` takes the wrong request and returns too little · low · confirmed
+
+**Where:** `proto/calcifer/v1/services.proto:24`, `server/src/services/entity.rs:815-835` (`list_backlinks`), `mcp-server/src/tools.ts:35`, `calcifer/src/model/backlinks.ts:40`
+
+**Problem:** It takes an `EntityRef` but reads only `id`, so the MCP server fills in
+`structureType: ''`. It returns plain entities with no link details (which property the
+link came from, or when). The frontend never calls it and works out backlinks itself,
+and the two disagree: the frontend excludes an entity linking to itself, the server
+doesn't.
+
+**Fix:** Use `ListBacklinksRequest { entity_id }`, or state that this RPC is only for the
+agent (see I-27). Make both paths agree on self-links.
+
+**Done when:** `ListBacklinks` takes a request with only `entity_id` (or is documented as
+agent-only), and the server and frontend agree on self-links.
+
+---
+
+### I-31 · The API contract is undocumented · low · confirmed
+
+**Where:** `proto/calcifer/v1/entities.proto`, `server/src/links.rs:30,52-70`, `mcp-server/src/markdown/` (TipTap conversion)
+
+**Problem:** The proto doesn't say that date values are ISO `yyyy-MM-dd` (only
+`CreateDailyNoteRequest` does), that links, referenced_dates and `RichText.updated_at`
+are output-only, or that relation values only need the target id. `RichText.doc` is
+TipTap JSON that the server parses, so the editor's node types (`mention`, `hashtag`,
+`dateChip` and their attributes) are part of the API, but the proto says nothing about
+them, and the MCP server had to reimplement them.
+
+**Fix:** Document these in the proto comments and in `docs/reference/data-model.md`,
+including the rich-text node types the server reads.
+
+**Done when:** every field above has a proto comment, and the rich-text node types the
+server parses are documented.
+
+---
+
+### I-32 · Proto and Connect details leak into components · low · confirmed
+
+**Where:** `calcifer/src/routes/e.$id.tsx:251`, `calcifer/src/components/entity/EntityRelationsField.tsx:2,37`, `calcifer/src/components/calendar/DailyNoteDateField.tsx:2,19`, `calcifer/src/model/api.ts:28`
+
+**Problem:** Components build proto messages directly (`createMessage(EntityRefListSchema,
+…)`, `createMessage(EntityRefSchema, …)`) and branch on `ConnectError` codes, instead of
+going through the model layer.
+
+**Fix:** Keep reading proto types in components, as ADR 2 intends, but route writes
+through model helpers (`setRelations(entity, id, ids)`, `setDate`, `setSelect`) and add
+`isAlreadyExists` next to `isNotFound` in `api.ts`.
+
+**Done when:** nothing under `components/` or `routes/` imports `@bufbuild/protobuf` or
+`@connectrpc`.
+
+---
+
+### I-33 · Duplicated code in the model layer · low · confirmed
+
+**Where:** `calcifer/src/model/backlinks.ts:14`, `calcifer/src/model/store.ts:316`, `calcifer/src/model/todos.ts:117`, `calcifer/src/App.tsx:16`, `calcifer/src/model/store.ts:92,112-130,275-312`
+
+**Problem:**
+- Timestamp-to-milliseconds conversion is written three times; `timestampMs` from
+  `@bufbuild/protobuf/wkt` already does this.
+- The `List` query function is written twice (`App.tsx:16`, `store.ts:92`).
+- The delete path (`useDeleteEntity`, `deleteEntityImperative`) and the create mutation
+  (`useCreateEntity`, `useCreateDailyNote`) each exist twice.
+- A raw `['entities']` key is used in places instead of `qk`.
+- The Watch consumer lives in `App.tsx` instead of `model/`.
+
+**Fix:** Use `timestampMs`. Export an `entitiesQuery` the way `structuresQuery` is
+exported. Merge the duplicate delete and create paths, use `qk` everywhere, and move the
+Watch consumer into `model/`.
+
+**Done when:** each of the above exists once, and no raw `['entities']` key remains.
+
+---
+
+### I-34 · Relation edits resend the whole list · low · confirmed
+
+**Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:32-40`, `calcifer/src/routes/e.$id.tsx:246-252`
+
+**Problem:** Adding or removing a tag sends the full relations list through
+`SetProperty`. If the browser and the agent tag something at the same time, one change is
+lost. Related to I-14.
+
+**Fix:** Add and remove single relation targets (e.g. add/remove ops on `SetProperty`)
+instead of replacing the list. Deferred: revisit if the agent starts tagging.
+
+**Done when:** concurrent tag additions from two clients both survive.
+
+---
+
+### I-35 · Pruning an empty daily note can delete content the agent just appended · medium · confirmed
+
+**Where:** `calcifer/src/components/calendar/DailyNoteSection.tsx:45-56`, `calcifer/src/model/richtext.ts:68` (`getRichTextSnapshot`)
+
+**Problem:** `DailyNoteSection`'s unmount effect deletes the day's note if the *cached*
+doc is empty. Nothing refreshes that cache when the agent appends (I-17), so a stale
+empty cache can delete a note that now has content. Confirmed by reading; not
+reproduced.
+
+**Fix:** Don't prune from a possibly stale cache: refresh the cache when the document
+changes (I-17's rich-text event), or check the server's current doc before deleting.
+
+**Done when:** leaving a day whose note the agent has appended to doesn't delete it.
+
+---
+
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
