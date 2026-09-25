@@ -161,7 +161,7 @@ user after Phase 2.
 | ID | Task | Area | Depends on | Parallel-safe with | Status |
 |---|---|---|---|---|---|
 | T01 | [Log review findings in ISSUES.md](tasks/T01-log-issues.md) | docs | none | none | done (43e25e0) |
-| T02 | [ADR 8 (server-owned writes) and ADR 9 (Watch replica)](tasks/T02-adrs.md) | docs | T01, G1 | T03 | in progress (engineer: T02) |
+| T02 | [ADR 8 (server-owned writes) and ADR 9 (Watch replica)](tasks/T02-adrs.md) | docs | T01, G1 | T03 | review (round 1 fixes sent) |
 | **Phase 1: stop losing data** |||||
 | T03 | [Sort daily notes by date](tasks/T03-daily-note-sort.md) | fe | T01 | T02 | done (0b12cf4, 1678503) |
 | T04 | [RichText Put: validate, conflict-check, publish events; Get returns empty](tasks/T04-richtext-put-server.md) | proto, server | T01, G1 | none (touches proto) | todo |
