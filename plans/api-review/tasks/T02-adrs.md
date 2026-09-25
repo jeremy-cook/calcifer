@@ -28,7 +28,7 @@ Content to cover:
   - The server enforces the registry flags (`creatable`, `name_editable`,
     `unique_names`).
   - Name lookup rule, per D2.
-- **Consequences:** a source-breaking proto change, migrated additively (D4); the FE
+- **Consequences:** a source-breaking proto change, staged as D4 says; the FE
   builders go away; one code path per job for every client.
 
 ## ADR 9 · The frontend is a full replica fed by Watch
