@@ -442,6 +442,24 @@ changes (I-17's rich-text event), or check the server's current doc before delet
 
 ---
 
+### I-36 · `ResolveByName` returns a generic error when it loses a create race · low · confirmed
+
+**Where:** `server/src/services/entity.rs:803-804` (`resolve_by_name`)
+
+**Problem:** `ResolveByName` with `create_if_missing` looks the name up, then creates.
+If a concurrent call creates the same unique-named entity (a Tag) in between, the
+insert hits `one_tag_per_name` and is mapped with `Status::from`, not
+`map_unique_violation`, so the caller gets a generic database error instead of the
+winner. Found during T01 of the API review.
+
+**Fix:** On a unique violation, re-read by name and return the winner with
+`created = false`. T07's `Resolve` replaces this path and must do this for both keys.
+
+**Done when:** a get-or-create that loses the race returns the existing entity, and a
+test covers it.
+
+---
+
 ## Resolved
 
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.

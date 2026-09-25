@@ -159,7 +159,7 @@ user after Phase 2.
 
 | ID | Task | Area | Depends on | Parallel-safe with | Status |
 |---|---|---|---|---|---|
-| T01 | [Log review findings in ISSUES.md](tasks/T01-log-issues.md) | docs | none | none | in progress (engineer: T01) |
+| T01 | [Log review findings in ISSUES.md](tasks/T01-log-issues.md) | docs | none | none | done (43e25e0) |
 | T02 | [ADR 8 (server-owned writes) and ADR 9 (Watch replica)](tasks/T02-adrs.md) | docs | T01, G1 | T03 | todo |
 | **Phase 1: stop losing data** |||||
 | T03 | [Sort daily notes by date](tasks/T03-daily-note-sort.md) | fe | T01 | T02 | todo |
