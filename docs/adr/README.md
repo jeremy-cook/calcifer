@@ -13,6 +13,8 @@ supersedes the old one rather than editing history.
 | [5](0005-single-user.md) | Single-user, no auth, no sync | Accepted |
 | [6](0006-drop-the-lexical-comparison.md) | Drop the TipTap-vs-Lexical comparison; standardise on TipTap | Accepted (supersedes the editor comparison plan) |
 | [7](0007-server-owned-structure-registry.md) | The server owns the structure registry; clients fetch it | Accepted |
+| [8](0008-server-builds-entities.md) | Clients send intent; the server builds entities | Accepted |
+| [9](0009-watch-fed-replica.md) | The frontend is a full replica fed by Watch | Accepted |
 
 Related: [`../reference/data-model.md`](../reference/data-model.md) for the shapes
 themselves, [`../specs/`](../specs/) for how built features work, and
