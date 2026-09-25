@@ -1,37 +1,44 @@
-# T12 · Remove the old write surface and stored RichTextRefs
+# T12 · Address rich text by declared property; drop stored RichTextRefs
 
-**Area:** proto, server, docs · **Issues:** closes I-15, I-20, I-21, I-22, I-23
+**Area:** proto, server, fe, mcp, docs · **Issues:** closes I-22 (A3)
 
 ## Background
-Both clients now use Create-by-intent, Rename, Resolve and SetProperty, and the FE
-addresses rich text by declared property (ADR 8). This task deletes what they replaced.
+A rich-text document is identified by `(entity id, property id)`. The structure registry
+(`StructureDef.properties` with `kind === PropertyKind.RICHTEXT`) already says which
+properties are rich text. Today every new entity also stores a
+`PropertyValue { richtext: RichTextRef }` for each rich-text property, and the FE reads
+that stored value to find the document, so it renders nothing if the row is missing
+(ADR 8 says to stop).
+
+Proto changes in this plan **break in place** (decision D4): one task changes the proto
+and every consumer together, and deletes what it replaces. Intermediate commits inside
+this task may leave a consumer uncompiled, but the branch must build, lint, typecheck
+and pass tests when you report.
+
 **Gate G2:** your prompt must say the user approved decision **D5** (deleting stored
 rich-text property rows). If it doesn't, stop and report.
 
+## Current code
+- **Server** (`server/src/services/entity.rs`): `new_entity` writes a `RichTextRef`
+  value for each rich-text property. The kind check (I-16) lets rich-text-kind
+  properties accept only the `richtext` case.
+- **FE** (`calcifer/src/`):
+  - `routes/e.$id.tsx`, `EntityProperties` → `renderProperty`, the
+    `PropertyKind.RICHTEXT` case (about l.209): `if (value?.case !== 'richtext') return null`.
+  - `components/calendar/DailyNoteSection.tsx`: `contentRichTextRef` (about l.148),
+    used by `DailyNoteBody` (about l.91) and the prune path.
+  - Anything else found by `grep -rn "'richtext'" calcifer/src`.
+- **MCP** (`mcp-server/src/`): check for any read of the `richtext` value case.
+
 ## Proto
-- Remove `rpc Update`, `rpc ResolveByName`, `rpc CreateDailyNote` and their messages
-  (`UpdateEntityRequest`, `ResolveByNameRequest`, `ResolveByNameResponse`,
-  `CreateDailyNoteRequest`).
-- `CreateEntityRequest`: remove `entity = 1`, and add `reserved 1; reserved "entity";`.
 - `PropertyValue`: remove `RichTextRef richtext = 6`, and add `reserved 6; reserved
   "richtext";`. `RichTextRef` stays as `RichTextService`'s address.
-- Mark `Entity`'s server-owned fields (`id`, `links`, `referenced_dates`, `created_at`,
-  `updated_at`) with an "output only" comment.
-- Regenerate both TS stubs. Fix any compile fallout in `calcifer/` and `mcp-server/`,
-  which should be none. If there's more than trivial fallout, stop and report.
+- Regenerate both TS stubs.
 
 ## Server
-- Delete the `update`, `resolve_by_name` and `create_daily_note` handlers and the
-  legacy-Create branch.
-- `creatable` is enforced on every Create (remove T08's `// T12:` note).
 - `new_entity` no longer writes rich-text property values.
-- `SetProperty` and Create reject any value for a rich-text-kind property.
-- Tests:
-  - rewrite the tests that used `Update` to use `Rename` or `SetProperty`, or delete
-    them;
-  - delete `update_from_a_stale_snapshot_loses_a_concurrent_edit`, since that behaviour
-    is gone;
-  - keep coverage for everything I-2, I-3, I-8, I-9 and I-11 fixed.
+- `SetProperty` and Create reject any value for a rich-text-kind property with
+  `InvalidArgument`.
 - **Migration** (`server/migrations/<timestamp>_drop_richtext_property_values.sql`):
   delete the `properties` rows that hold rich-text refs. `value_blob` is prost-encoded,
   so select rows by the registry instead: `(structure_type, property_id)` pairs whose
@@ -39,26 +46,49 @@ rich-text property rows). If it doesn't, stop and report.
   `structures.rs`). Join `entities`. Add a comment naming the source of the list.
 - Build and test against a scratch DB, as the engineer brief describes for migrations.
   Never run it against `server/calcifer.db`; the tech lead does that after a backup.
+- Tests: new entities have no rich-text property value; a rich-text value on Create or
+  SetProperty is rejected; the migration deletes exactly the rich-text rows (seed a
+  scratch pool with old-style rows if practical, or explain how you checked).
+
+## FE
+- Add one model helper, e.g. `richTextRef(entityId, propertyId): RichTextRef` in
+  `model/richtext.ts`. Build it with the proto `create` there, so components don't
+  import `@bufbuild/protobuf` for it.
+- Every rich-text editor mount derives its ref from the entity id and the **declared**
+  property id. It renders for every declared rich-text property; no property value is
+  involved.
+- `DailyNoteSection` gets the content ref the same way (`content` is the declared
+  rich-text property of DailyNote; read it from the registry rather than hard-coding it,
+  if that's natural).
+- Follow `CLAUDE.md` component style.
+
+## MCP
+Fix any fallout from the removed case. If there's none, say so.
 
 ## Docs
-- `docs/reference/data-model.md`: remove the deleted RPCs and the `richtext` value case,
-  and describe addressing by declared property.
-- `ISSUES.md`: move I-15, I-20, I-21, I-22 and I-23 to Resolved (house format, one line
-  each).
+- `docs/reference/data-model.md`: remove the `richtext` value case and describe
+  addressing by declared property.
+- `ISSUES.md`: move I-22 to Resolved (house format).
 
 ## Out of scope
-Watch (T14). Relation dead refs (I-14). Unused kinds (T23).
+Watch (T14). Relation dead refs (I-14). Unused kinds (T23). Other proto-leak cleanups
+(T21).
 
 ## Done when
-- `grep -rn "resolveByName\|createDailyNote\|UpdateEntityRequest\|case: 'richtext'" calcifer/src mcp-server/src server/src proto --exclude-dir=gen`
-  finds nothing.
+- `grep -rn "case: 'richtext'\|Value::Richtext\|richtext = 6" calcifer/src mcp-server/src server/src proto --exclude-dir=gen`
+  finds nothing, and `grep -rn "'richtext'" calcifer/src` finds only query keys or kind
+  references.
 - `cargo test` passes against the scratch DB, `calcifer` builds and lints, and
   `mcp-server` typechecks.
 - Your report gives the tech lead the migration's exact SQL and a read-only query to
   count the rows it will delete from the live DB.
+- Browser checks to report: existing notes, todos and daily notes open with their
+  content, and new ones get a working editor.
 
 ## Commits
-1. `proto: remove Update, ResolveByName, CreateDailyNote and stored RichTextRefs (I-20, I-22, I-23)`
-2. `server: drop the legacy write paths (I-15, I-20, I-23)`
+1. `proto: remove the stored richtext property value (I-22)`, with regenerated stubs.
+2. `server: stop storing rich-text refs as property values (I-22)`
 3. `server: migrate away stored rich-text property values (I-22)`
-4. `docs: resolve I-15, I-20, I-21, I-22 and I-23`
+4. `fe: address rich-text docs by declared property, not stored ref (I-22)`
+5. `mcp: …` only if there was fallout.
+6. `docs: resolve I-22`

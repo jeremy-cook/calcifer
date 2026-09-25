@@ -18,7 +18,7 @@ live DB holds no values of these kinds.
   `text`, `number` and `relation` cases from `PropertyValue` and reserve their numbers
   and names.
 - **Server:** remove the code paths for them, including the singular-relation link sync,
-  if `relations` doesn't share it. Keep T08's kind check exhaustive. Tests follow.
+  if `relations` doesn't share it. Keep T09's kind check exhaustive. Tests follow.
 - **FE:** remove the dead switch cases and any helpers.
 - **MCP:** remove them from `KIND_NAMES` in `tools.ts`.
 - Regenerate both TS stubs.

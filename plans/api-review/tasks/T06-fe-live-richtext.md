@@ -68,7 +68,7 @@ prune helper lives there.
 ## Out of scope
 - Removing the `['entities']` invalidations (T15).
 - Moving the Watch loop out of `App.tsx` (T15).
-- How rich text is addressed (T11).
+- How rich text is addressed (T12).
 - Merging concurrent edits.
 
 ## Done when

@@ -11,7 +11,7 @@ leftovers:
   `timestampMs` from `@bufbuild/protobuf/wkt` does this.
 - The delete path exists twice (`useDeleteEntity` and `deleteEntityImperative`).
 - The create mutation exists twice (`useCreateEntity` / `useCreateDailyNote`, or
-  whatever is left after T10).
+  whatever is left after T08).
 
 ## Requirements
 - Use `timestampMs` everywhere a Timestamp is converted to milliseconds, and delete the

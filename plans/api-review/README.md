@@ -116,9 +116,9 @@ answer and the date.
 | D1 | How should the frontend stay in sync (B3)? | Keep the full copy. Watch sends a snapshot on every (re)connect, then revisioned events. On lag, send a fresh snapshot. No `since` resume; that's overkill for a single user. | Keep the full copy; snapshot on every (re)connect, revisioned events, fresh snapshot on lag (as recommended). 2026-09-25 |
 | D2 | Should name lookup require unique names, or be deterministic (A7)? | Deterministic: the oldest `created_at` wins (id breaks ties), documented in the proto. Only Tag stays unique. | Deterministic: oldest `created_at` wins, id breaks ties (as recommended). 2026-09-25 |
 | D3 | What happens when a browser save loses to an agent write? | Reload the server's version into the editor and show an inline "changed elsewhere" note. Up to ~300 ms of typing can be lost. No merge. | Reload the server version with an inline "changed elsewhere" note; no merge (as recommended). 2026-09-25 |
-| D4 | How should the proto change? | Source-breaking changes are fine (all consumers are in this repo). Go additive first, migrate consumers, then remove, so every task leaves the branch green. New messages use buf naming. Everything else is renamed in T17. | **Break in place** (not the recommendation): change the proto and every consumer together in each task, instead of additive → migrate → remove. 2026-09-25 |
+| D4 | How should the proto change? | Source-breaking changes are fine (all consumers are in this repo). Go additive first, migrate consumers, then remove, so every task leaves the branch green. New messages use buf naming. Everything else is renamed in T17. | **Break in place** (not the recommendation): change the proto and every consumer together in each task, instead of additive → migrate → remove. Plan re-scoped to match, confirmed with the user 2026-09-25: Phase 2 is now T07 (Resolve), T08 (Create/Rename), T09 (validation), T12 (rich text by property); old T09–T11 merged in. T14/T15 stay separate: Watch's proto change is additive by nature (a new oneof case and field), so there's nothing to break in place. 2026-09-25 |
 | D5 | May T12 delete the stored `richtext` property rows (data change)? | Yes, via migration, after backing up `calcifer.db`. I-14's dead-ref cleanup stays with I-14. | *pending* |
-| D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | **Render them** (not the recommendation): keep `text`, `number`, `relation` and add FE rendering. 2026-09-25 |
+| D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | **Render them** (not the recommendation): keep `text`, `number`, `relation` and add FE rendering. T23 runs variant "render"; G4 doesn't apply. 2026-09-25 |
 | D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | Adopt buf naming, T19 variant A (as recommended). 2026-09-25 |
 
 ---
@@ -132,13 +132,13 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-17 | B1: Put sends no event, has no conflict check, no validation | high | T04–T06 |
 | I-18 | B2: Get returns NotFound for "not saved yet" | low | T04–T06 |
 | I-19 | C4: daily notes sorted by name | medium | T03 |
-| I-20 | A1: Entity is both write input and read output; Create saves client links | high | T07, T10, T12 |
-| I-21 | A2: default entities built in four places | medium | T07, T10, T12 |
-| I-22 | A3: RichTextRef stored as a property value | medium | T11, T12 |
-| I-23 | A4: daily notes created and moved differently per client | medium | T07, T09, T10, T12 |
-| I-24 | A7: name lookup not deterministic; unknown structure types accepted | medium | T08 |
-| I-25 | A8: wrong message on a unique-name clash | low | T08 |
-| I-26 | C3: unused property kinds; `creatable`/`name_editable` not enforced | low | T08 (flags), T23 (kinds) |
+| I-20 | A1: Entity is both write input and read output; Create saves client links | high | T08 |
+| I-21 | A2: default entities built in four places | medium | T07, T08 |
+| I-22 | A3: RichTextRef stored as a property value | medium | T12 |
+| I-23 | A4: daily notes created and moved differently per client | medium | T07 |
+| I-24 | A7: name lookup not deterministic; unknown structure types accepted | medium | T09 |
+| I-25 | A8: wrong message on a unique-name clash | low | T09 |
+| I-26 | C3: unused property kinds; `creatable`/`name_editable` not enforced | low | T09 (flags), T23 (kinds) |
 | I-27 | B3: Watch can't keep a full copy in sync; refetch storm | high | T13–T15 |
 | I-28 | C1: `repeated Property` should be a map | medium | T16 |
 | I-29 | A5: two search RPCs; bracket snippets | low | T17 |
@@ -148,9 +148,10 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-33 | D2: duplicated model-layer code | low | T15, T22 |
 | I-34 | D3: relation edits resend the whole list | low | deferred |
 | I-35 | P2: pruning an empty daily note can delete agent content | medium | T06 |
+| I-36 | ResolveByName returns a generic error when it loses a create race (found in T01) | low | T07 |
 
-Existing issues touched along the way: **I-15** (closed by T07/T10/T12), **I-16**
-(closed by T08), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
+Existing issues touched along the way: **I-15** (closed by T08), **I-16**
+(closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
 user after Phase 2.
 
 ---
@@ -167,12 +168,12 @@ user after Phase 2.
 | T05 | [MCP: conflict-safe appends](tasks/T05-mcp-conflict-safe-append.md) | mcp | T04 | T06 | todo |
 | T06 | [FE: live rich text, conflict handling, safe prune](tasks/T06-fe-live-richtext.md) | fe | T04 | T05 | todo |
 | **Phase 2: server owns writes** |||||
-| T07 | [New write RPCs: Create by intent, Rename, Resolve (additive)](tasks/T07-write-rpcs.md) | proto, server | T02, T06 | none | todo |
-| T08 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T08-write-validation.md) | server | T07 | none (regenerates stubs) | todo |
-| T09 | [MCP: move to Resolve](tasks/T09-mcp-resolve.md) | mcp | T07 | T10 | todo |
-| T10 | [FE: move writes to Create/Rename/Resolve/SetProperty; delete builders](tasks/T10-fe-writes.md) | fe | T07 | T09 | todo |
-| T11 | [FE: address rich text by registry, not by property value](tasks/T11-fe-richtext-addressing.md) | fe | T10 | none | todo |
-| T12 | [Remove the old write surface and stored RichTextRefs](tasks/T12-remove-old-surface.md) | proto, server, docs | T08, T09, T11, G2 | none | todo |
+| T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06 | none | todo |
+| T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | todo |
+| T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | todo |
+| T10 | *merged into T07 and T08 (D4)* | | | | n/a |
+| T11 | *merged into T12 (D4)* | | | | n/a |
+| T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | todo |
 | **Phase 3: sync** |||||
 | T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | todo |
 | T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | todo |
@@ -193,8 +194,11 @@ Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `
 ### Why this order
 - Phase 1 is first because B1 loses user data today. T03 is a trivial visible bug and
   fits anywhere.
-- Phase 2 is additive-first (T07/T08), then consumers move (T09–T11), then removal
-  (T12). The branch compiles and works after every task.
+- Phase 2 breaks in place (D4): each task changes the proto and every consumer
+  together and deletes what it replaces. Resolve (T07) goes first because it takes the
+  daily-note paths off `Create({ entity })` and `Update`, so T08 can then remove both.
+  Validation (T09) needs the final write surface. T12 goes last in the phase because
+  it carries the G2 data migration. The branch compiles and works after every task.
 - Phase 3 comes after Phase 2 so the snapshot and events carry the final entity shape,
   and so the refetch removal doesn't have to deal with the old builders.
 - T16 and T19 are mechanical changes across every consumer. Doing them after the big

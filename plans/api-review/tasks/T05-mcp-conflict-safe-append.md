@@ -29,7 +29,7 @@ side. `getDoc` turns `NotFound` into an empty doc.
 - Update `src/tools-test.ts` if its expectations change. Don't run it.
 
 ## Out of scope
-Moving daily-note resolution to `Resolve` (T09). `ListBacklinks` (T18). Search (T17).
+Moving daily-note resolution to `Resolve` (T07). `ListBacklinks` (T18). Search (T17).
 
 ## Done when
 - Both append tools send `expectedUpdatedAt` and retry on `FailedPrecondition`.
