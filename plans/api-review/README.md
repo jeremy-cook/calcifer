@@ -167,7 +167,7 @@ user after Phase 2.
 | **Phase 1: stop losing data** |||||
 | T03 | [Sort daily notes by date](tasks/T03-daily-note-sort.md) | fe | T01 | T02 | done (0b12cf4, 1678503) |
 | T04 | [RichText Put: validate, conflict-check, publish events; Get returns empty](tasks/T04-richtext-put-server.md) | proto, server | T01, G1 | none (touches proto) | done (4dea7a7, d68bb41, 81f1605) |
-| T05 | [MCP: conflict-safe appends](tasks/T05-mcp-conflict-safe-append.md) | mcp | T04 | T06 | in progress (engineer: T05) |
+| T05 | [MCP: conflict-safe appends](tasks/T05-mcp-conflict-safe-append.md) | mcp | T04 | T06 | done (b5ec83e) |
 | T06 | [FE: live rich text, conflict handling, safe prune](tasks/T06-fe-live-richtext.md) | fe | T04 | T05 | in progress (engineer: T06) |
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06 | none | todo |
