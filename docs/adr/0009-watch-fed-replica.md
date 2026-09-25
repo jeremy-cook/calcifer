@@ -40,8 +40,10 @@ Calcifer doesn't have.
 - **Lag means resync, never silent loss.** A subscriber that falls behind is sent a fresh
   snapshot in place of the events it missed.
 - **The frontend applies events to its cache and never refetches the list.** Mutations
-  don't invalidate it either; the Watch echo is how a write reaches the cache. The model
-  layer owns this in one sync module; components don't see it.
+  don't invalidate it either: each one writes the server's response into the cache,
+  keeping optimistic updates with per-entity rollback. The Watch echo of the same write
+  is harmless, because applying an upsert is idempotent. The model layer owns this in
+  one sync module; components don't see it.
 - **Rich-text changes are events too.** A `Put` publishes an entity update (its links,
   `referenced_dates` and `updated_at` change) and a rich-text-changed event, so an open
   editor can take in an outside change.

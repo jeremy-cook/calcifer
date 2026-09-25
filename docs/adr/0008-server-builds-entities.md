@@ -51,8 +51,9 @@ graph and the structure registry. The write path didn't follow:
 - **Rich-text documents are addressed by (entity id, declared property id).** The
   registry already says which properties are rich text. No `RichTextRef` is stored as a
   property value, and the rich-text case leaves `PropertyValue`.
-- **The server enforces the registry flags** on every write: `creatable` on Create and
-  Resolve, `name_editable` on Rename, and `unique_names` on Create, Rename and Resolve.
+- **The server enforces the registry flags** on every write: `creatable` on Create (a
+  non-creatable structure such as DailyNote is made only through `Resolve` by date),
+  `name_editable` on Rename, and `unique_names` on Create, Rename and Resolve.
   Unknown structure types are rejected.
 - **Name lookup is deterministic.** Names stay non-unique for every structure except
   Tag, the only one with `unique_names`. A lookup by `(structure_type, name)` matches
