@@ -28,6 +28,10 @@ service EntityService {
 }
 
 service RichTextService {
+  // A declared rich-text property with nothing saved returns an empty doc and
+  // epoch updated_at. NOT_FOUND means the entity doesn't exist. INVALID_ARGUMENT
+  // means the property isn't a declared rich-text property of the entity's
+  // structure.
   rpc Get(RichTextRef) returns (RichText);
   rpc Put(RichText) returns (RichText);
 }
@@ -94,5 +98,7 @@ message EntityEvent {
   oneof event {
     Entity upserted = 1;
     string deleted_id = 2;
+    // A RichTextService.Put saved this document (ref, doc, updated_at).
+    RichText rich_text_changed = 3;
   }
 }

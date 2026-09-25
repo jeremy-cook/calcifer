@@ -39,6 +39,11 @@ message RichText {
   RichTextRef ref = 1;
   string doc = 2;
   google.protobuf.Timestamp updated_at = 3;
+  // Put only; ignored on output. Unset means an unconditional write. Set means
+  // the write fails with FAILED_PRECONDITION unless the stored document's
+  // updated_at equals it exactly. The epoch (0 seconds, 0 nanos) means "expect
+  // nothing saved yet". Clients echo back the updated_at they last read.
+  google.protobuf.Timestamp expected_updated_at = 4;
 }
 
 message LinkRef {
