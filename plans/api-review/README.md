@@ -104,11 +104,15 @@ Remember the Node PATH pin before any pnpm command:
 
 ## Status (2026-09-26)
 
-Phase 4 is closed. The branch is green (`cargo test` 82 passed, `buf lint`, `calcifer`
-build + lint, `mcp-server` typecheck, and `pnpm smoke` + `pnpm test:tools` against a
-fresh scratch server after T19). Phases 1–3 were checked in the browser. Phase 4's
-frontend changes (T16's map reads were browser-checked; T19's renames were not, because
-the Firefox tools disconnected) still need a browser pass. Next is Phase 5 (T21).
+Every task (T01–T23) is done and reviewed. The branch is green (`cargo test` 82
+passed, `buf lint`, `calcifer` build + lint, `mcp-server` typecheck; `pnpm smoke` and
+`pnpm test:tools` passed against a fresh scratch server after T19). Phases 1–3 and T16
+were checked in the browser.
+
+**Left:** one browser pass over the frontend changes since T19 (renamed RPCs, T21's
+write helpers, T22's merged create/delete paths, T23's new kinds), which was blocked
+when the Firefox tools disconnected. Then the user triages the unassigned issues and
+decides when to merge `api-review` to `main`.
 
 - **Live DB:** the first start of a server built from this branch against
   `server/calcifer.db` runs T12's migration. It deletes the 27 rich-text pointer rows
@@ -197,6 +201,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-54 | Search text drops chips and splits words across marks (found in T20) | low | *unassigned* |
 | I-55 | `proto:gen` depends on the remote buf plugin and fails under rate limits (found in T20) | low | *unassigned* |
 | I-56 | Create and resolve callbacks are never stable (found in T22) | low | *unassigned* |
+| I-57 | Relation pickers: any-structure `relations` renders nothing; self is offered (found in T23) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -237,7 +242,7 @@ user after Phase 2.
 | **Phase 5: frontend cleanup** |||||
 | T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | done (037f920, 27857fd) |
 | T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | done (5a14ac1, 42cfb3b) |
-| T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | in progress (engineer: T23 engineer) |
+| T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | done (0e98e65, 09958dd, a2d2368) |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
 

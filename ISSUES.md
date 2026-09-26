@@ -363,6 +363,23 @@ key is fixed, but inconsistent). Found during T22 of the API review.
 
 ---
 
+### I-57 · Relation pickers: any-structure `relations` renders nothing; self is offered · low · confirmed
+
+**Where:** `calcifer/src/routes/e.$id.tsx` (about l.260), `calcifer/src/components/entity/EntityPicker.tsx`
+
+**Problem:** A `relations` property with an empty `target_structure` (the proto says
+empty means any structure) still renders nothing, though T23's shared `EntityPicker`
+supports "any". Neither relation picker leaves the current entity out of its
+candidates, so an entity can relate to itself. Found during T23 of the API review.
+
+**Fix:** Drop the empty-target guard for `relations`, and pass the current entity's id
+in `excludeIds`.
+
+**Done when:** an any-structure `relations` property renders a picker, and neither
+picker lists the entity being edited.
+
+---
+
 ## Resolved
 
 - **I-26 · Unused property kinds, and structure flags only the frontend enforces.** Fixed 2026-09-26. The server refuses `CreateEntity` of a non-creatable structure and `RenameEntity` of a structure whose name isn't editable, both with `FAILED_PRECONDITION` (`create_of_a_daily_note_is_failed_precondition`, `rename_of_a_daily_note_is_failed_precondition`). The `text`, `number` and `relation` kinds stay and the entity page renders them (D6, variant "render"): text and number get an inline input that writes on blur or Enter (empty clears), and a single relation gets a picker (`EntityRelationField`), sharing `EntityPicker` with `EntityRelationsField`; the pickers list any structure when `target_structure` is empty. `usePropertyWriters` gains `setText`, `setNumber` and `setRelation`. On the server, `validate_property` names kinds in one exhaustive match on the declared kind, so `kind_name`'s unreachable `Richtext` arm is gone. No structure declares these kinds yet. Not yet observed in the browser.
