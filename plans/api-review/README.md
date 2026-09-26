@@ -186,7 +186,7 @@ user after Phase 2.
 | T06b | [FE: flush pending saves before pruning a daily note](tasks/T06b-flush-before-prune.md) | fe | T06 | T06a | done (75815ae) |
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06a, T06b | none | done (ffbda48, aa5d882, 3644f2c, b4c3b09, 2391505, c2d4c67) |
-| T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | todo |
+| T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | in progress (engineer: T08) |
 | T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | todo |
 | T10 | *merged into T07 and T08 (D4)* | | | | n/a |
 | T11 | *merged into T12 (D4)* | | | | n/a |
