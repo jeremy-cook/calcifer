@@ -61,8 +61,7 @@ async function liveDerivation(): Promise<void> {
   const md = 'Notes on [[Krebs Cycle]] — central to #metabolism. Reviewed 2026-07-04.'
   const doc = await toTipTap(md, resolve)
 
-  const srcId = crypto.randomUUID()
-  await entityClient.create({ entity: { id: srcId, structureType: 'Note', name: `MD test ${Date.now()}` } })
+  const { id: srcId } = await entityClient.create({ structureType: 'Note', name: `MD test ${Date.now()}` })
   await richTextClient.put({ ref: { entityId: srcId, propertyId: 'content' }, doc: JSON.stringify(doc) })
 
   const ent = await entityClient.get({ id: srcId })

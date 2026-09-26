@@ -9,9 +9,7 @@ async function main(): Promise<void> {
 
   const name = `Node smoke ${new Date().toISOString().slice(11, 19)}`
   console.log(`create: "${name}"`)
-  const created = await entityClient.create({
-    entity: { id: crypto.randomUUID(), structureType: 'Note', name },
-  })
+  const created = await entityClient.create({ structureType: 'Note', name })
   console.log(`  -> created ${created.id}`)
 
   const after = await entityClient.list({ structureType: '' })
