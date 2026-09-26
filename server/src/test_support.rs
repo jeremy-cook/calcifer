@@ -73,6 +73,6 @@ fn create_request(structure_type: &str, name: &str) -> CreateEntityRequest {
     CreateEntityRequest {
         structure_type: structure_type.to_string(),
         name: Some(name.to_string()),
-        properties: vec![],
+        properties: Default::default(),
     }
 }

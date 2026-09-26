@@ -111,7 +111,7 @@ message CreateEntityRequest {
   optional string name = 3;
   // Initial values, laid over the structure's defaults (the request wins on the
   // same id). The server mints the id, timestamps and default properties.
-  repeated Property properties = 4;
+  map<string, PropertyValue> properties = 4;   // keyed by property id
 }
 message RenameEntityRequest   { string id = 1; string name = 2; }
 message DeleteEntityRequest   { string id = 1; }

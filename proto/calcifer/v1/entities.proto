@@ -28,11 +28,6 @@ message PropertyValue {
   }
 }
 
-message Property {
-  string id = 1;
-  PropertyValue value = 2;
-}
-
 // RichTextService's address for one document: an entity and one of its
 // structure's declared rich-text property ids.
 message RichTextRef {
@@ -64,7 +59,7 @@ message Entity {
   string id = 1;                                  // output only
   string structure_type = 2;
   string name = 3;
-  repeated Property properties = 4;
+  map<string, PropertyValue> properties = 4;     // keyed by property id
   repeated LinkRef links = 5;                     // output only
   google.protobuf.Timestamp created_at = 6;       // output only
   google.protobuf.Timestamp updated_at = 7;       // output only

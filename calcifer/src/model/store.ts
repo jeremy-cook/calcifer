@@ -4,7 +4,6 @@ import { create as createMessage } from '@bufbuild/protobuf'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   EntitySchema,
-  PropertySchema,
   PropertyValueSchema,
   type Entity,
   type RichTextRef,
@@ -126,8 +125,8 @@ interface SetPropertyVars {
 
 // A property's current value on `entity`: `null` when it has no such property.
 function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['value'] | null {
-  const property = entity.properties.find((p) => p.id === propertyId)
-  return property ? (property.value?.value ?? { case: undefined }) : null
+  const property = entity.properties[propertyId]
+  return property ? property.value : null
 }
 
 // Write one property (`null` clears it) through EntityService.SetProperty, so
@@ -192,12 +191,9 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
 // relation properties that are absent (SetProperty also for ad-hoc ones), so
 // removing the last ref is safe.
 export function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
-  if (value === null) {
-    return createMessage(EntitySchema, { ...entity, properties: entity.properties.filter((p) => p.id !== propertyId) })
-  }
-  const next = createMessage(PropertySchema, { id: propertyId, value: createMessage(PropertyValueSchema, { value }) })
-  const exists = entity.properties.some((p) => p.id === propertyId)
-  const properties = exists ? entity.properties.map((p) => (p.id === propertyId ? next : p)) : [...entity.properties, next]
+  const properties = { ...entity.properties }
+  if (value === null) delete properties[propertyId]
+  else properties[propertyId] = createMessage(PropertyValueSchema, { value })
   return createMessage(EntitySchema, { ...entity, properties })
 }
 
@@ -282,7 +278,7 @@ export function listByStructure(entities: Entity[], structureType: string): Enti
 
 export function dailyNoteDate(entity: Entity): string | undefined {
   if (entity.structureType !== 'DailyNote') return undefined
-  const value = entity.properties.find((p) => p.id === 'date')?.value?.value
+  const value = entity.properties.date?.value
   return value?.case === 'date' ? value.value : undefined
 }
 

@@ -12,7 +12,7 @@ use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
     EntityRef, EntitySnapshot, GetEntityRequest, LinkRef, ListEntitiesRequest,
-    ListEntitiesResponse, Property, PropertyValue, RenameEntityRequest, ResolveEntityRequest,
+    ListEntitiesResponse, PropertyValue, RenameEntityRequest, ResolveEntityRequest,
     ResolveEntityResponse, SetPropertyRequest, WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
@@ -148,7 +148,7 @@ impl EntityService {
             )));
         }
 
-        let entity = new_entity(structure_type, Some(name), vec![]);
+        let entity = new_entity(structure_type, Some(name), HashMap::new());
         let saved = self
             .persist_new_entity(&entity)
             .await
@@ -190,7 +190,7 @@ impl EntityService {
             return Err(Status::not_found(format!("DailyNote for {date}")));
         }
 
-        let entity = new_entity("DailyNote", None, vec![date_property(date)]);
+        let entity = new_entity("DailyNote", None, date_properties(date));
         let saved = self
             .persist_new_entity(&entity)
             .await
@@ -226,16 +226,16 @@ impl EntityService {
             .execute(&mut **tx)
             .await?;
 
-        for prop in &entity.properties {
-            let value = prop
-                .value
-                .as_ref()
-                .ok_or_else(|| AppError::Invalid("property missing value".to_string()))?;
+        for (property_id, value) in &entity.properties {
+            // A map entry can't omit its value, so an empty one stands for "missing".
+            if value.value.is_none() {
+                return Err(AppError::Invalid("property missing value".to_string()));
+            }
             let blob = prost::Message::encode_to_vec(value);
             sqlx::query!(
                 "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)",
                 entity.id,
-                prop.id,
+                property_id,
                 blob,
             )
             .execute(&mut **tx)
@@ -271,12 +271,9 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
         .into_iter()
         .map(|r| {
             let value: PropertyValue = prost::Message::decode(&*r.value_blob)?;
-            Ok::<_, AppError>(Property {
-                id: r.property_id,
-                value: Some(value),
-            })
+            Ok::<_, AppError>((r.property_id, value))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<HashMap<_, _>, _>>()?;
 
     let link_rows = sqlx::query!(
         r#"SELECT link_id AS "link_id!", target_id AS "target_id!",
@@ -370,7 +367,7 @@ pub(crate) async fn load_entities(
             id: row.id,
             structure_type: row.structure_type,
             name: row.name,
-            properties: vec![],
+            properties: HashMap::new(),
             links: vec![],
             referenced_dates: vec![],
             created_at: Some(ts_from_millis(row.created_at)),
@@ -400,10 +397,7 @@ pub(crate) async fn load_entities(
             continue;
         };
         let value: PropertyValue = prost::Message::decode(&*r.value_blob)?;
-        entities[i].properties.push(Property {
-            id: r.property_id,
-            value: Some(value),
-        });
+        entities[i].properties.insert(r.property_id, value);
     }
 
     let link_rows = sqlx::query!(
@@ -506,23 +500,23 @@ pub(crate) fn ts_from_millis(millis: i64) -> prost_types::Timestamp {
 /// `one_daily_note_per_day` unique index. Returning None for non-DailyNote types
 /// keeps the partial index inert for everything else.
 fn date_key_for(entity: &Entity) -> Option<String> {
-    entity
-        .properties
-        .iter()
-        .find_map(|p| date_key_from(&entity.structure_type, p))
+    let value = entity.properties.get("date").and_then(|v| v.value.as_ref());
+    date_key_from(&entity.structure_type, "date", value)
 }
 
 /// The `date_key` a single property contributes: its value when it's a
 /// DailyNote's non-empty `date`, else None. Shared by `date_key_for` and
 /// SetProperty, which only sees the one property.
-fn date_key_from(structure_type: &str, prop: &Property) -> Option<String> {
-    if structure_type != "DailyNote" || prop.id != "date" {
+fn date_key_from(
+    structure_type: &str,
+    property_id: &str,
+    value: Option<&property_value::Value>,
+) -> Option<String> {
+    if structure_type != "DailyNote" || property_id != "date" {
         return None;
     }
-    match &prop.value {
-        Some(PropertyValue {
-            value: Some(property_value::Value::Date(d)),
-        }) if !d.is_empty() => Some(d.clone()),
+    match value {
+        Some(property_value::Value::Date(d)) if !d.is_empty() => Some(d.clone()),
         _ => None,
     }
 }
@@ -530,8 +524,8 @@ fn date_key_from(structure_type: &str, prop: &Property) -> Option<String> {
 /// Check every property of an entity against its structure. See
 /// `validate_property`.
 fn validate_properties(entity: &Entity) -> Result<(), AppError> {
-    for prop in &entity.properties {
-        validate_property(&entity.structure_type, prop)?;
+    for (property_id, value) in &entity.properties {
+        validate_property(&entity.structure_type, property_id, value.value.as_ref())?;
     }
     Ok(())
 }
@@ -546,25 +540,26 @@ fn validate_properties(entity: &Entity) -> Result<(), AppError> {
 /// the registry (rows written before unknown types were rejected, I-24) have no
 /// schema and pass unchecked. Shared by Create and Resolve (via
 /// `validate_properties`) and SetProperty.
-fn validate_property(structure_type: &str, prop: &Property) -> Result<(), AppError> {
+fn validate_property(
+    structure_type: &str,
+    property_id: &str,
+    value: Option<&property_value::Value>,
+) -> Result<(), AppError> {
     if structures::structure(structure_type).is_none() {
         return Ok(());
     }
-    let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
-    let Some(def) = structures::property(structure_type, &prop.id) else {
+    let Some(def) = structures::property(structure_type, property_id) else {
         return match value {
             Some(property_value::Value::Select(key)) => Err(AppError::Invalid(format!(
-                "{structure_type}.{} is not a select property (got select {key:?})",
-                prop.id
+                "{structure_type}.{property_id} is not a select property (got select {key:?})"
             ))),
             _ => Ok(()),
         };
     };
     if def.kind == PropertyKind::Richtext {
         return Err(AppError::Invalid(format!(
-            "{structure_type}.{} is a rich-text property and takes no value; \
-             its document is read and written with RichTextService",
-            prop.id
+            "{structure_type}.{property_id} is a rich-text property and takes no value; \
+             its document is read and written with RichTextService"
         )));
     }
     if def.kind == PropertyKind::Select {
@@ -573,8 +568,7 @@ fn validate_property(structure_type: &str, prop: &Property) -> Result<(), AppErr
     let got = value.map(value_kind);
     if got != Some(def.kind) {
         return Err(AppError::Invalid(format!(
-            "{structure_type}.{} must be a {} value, got {}",
-            prop.id,
+            "{structure_type}.{property_id} must be a {} value, got {}",
             kind_name(def.kind),
             got.map_or("no value", kind_name)
         )));
@@ -693,23 +687,22 @@ fn apply_daily_note_name(entity: &mut Entity) {
 /// (`apply_daily_note_name`); otherwise the name is `name`, or with none the
 /// structure's `default_name`. The caller makes a `unique_names` default free
 /// (`EntityService::free_name`); this has no database.
-fn new_entity(structure_type: &str, name: Option<&str>, properties: Vec<Property>) -> Entity {
+fn new_entity(
+    structure_type: &str,
+    name: Option<&str>,
+    properties: HashMap<String, PropertyValue>,
+) -> Entity {
     let id = uuid::Uuid::new_v4().to_string();
-    let mut defaults: Vec<Property> = structures::select_defaults(structure_type)
+    let mut defaults: HashMap<String, PropertyValue> = structures::select_defaults(structure_type)
         .iter()
-        .map(|(pid, default)| Property {
-            id: pid.to_string(),
-            value: Some(PropertyValue {
+        .map(|(pid, default)| {
+            let value = PropertyValue {
                 value: Some(property_value::Value::Select(default.to_string())),
-            }),
+            };
+            (pid.to_string(), value)
         })
         .collect();
-    for prop in properties {
-        match defaults.iter_mut().find(|p| p.id == prop.id) {
-            Some(existing) => *existing = prop,
-            None => defaults.push(prop),
-        }
-    }
+    defaults.extend(properties);
     let mut entity = Entity {
         id,
         structure_type: structure_type.to_string(),
@@ -731,14 +724,12 @@ fn default_name(structure_type: &str) -> String {
     format!("Untitled {name}")
 }
 
-/// A DailyNote's `date` property holding the ISO day `date`.
-fn date_property(date: &str) -> Property {
-    Property {
-        id: "date".to_string(),
-        value: Some(PropertyValue {
-            value: Some(property_value::Value::Date(date.to_string())),
-        }),
-    }
+/// A DailyNote's properties: just its `date`, holding the ISO day `date`.
+fn date_properties(date: &str) -> HashMap<String, PropertyValue> {
+    let value = PropertyValue {
+        value: Some(property_value::Value::Date(date.to_string())),
+    };
+    HashMap::from([("date".to_string(), value)])
 }
 
 /// The registry entry for `structure_type`, or `InvalidArgument` for a type the
@@ -875,10 +866,7 @@ impl EntityServiceTrait for EntityService {
             return Err(Status::invalid_argument("property_id is required"));
         }
         // An unset value, or one with no case, clears the property.
-        let prop = Property {
-            id: property_id,
-            value: value.filter(|v| v.value.is_some()),
-        };
+        let value = value.filter(|v| v.value.is_some());
         let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
@@ -893,14 +881,15 @@ impl EntityServiceTrait for EntityService {
         .ok_or_else(|| Status::not_found(format!("entity {}", entity_id)))?;
 
         // Clearing is allowed on any property.
-        if prop.value.is_some() {
-            validate_property(&structure_type, &prop).map_err(Status::from)?;
+        if let Some(v) = &value {
+            validate_property(&structure_type, &property_id, v.value.as_ref())
+                .map_err(Status::from)?;
         }
 
         let previous = sqlx::query_scalar!(
             "SELECT value_blob FROM properties WHERE entity_id = ? AND property_id = ?",
             entity_id,
-            prop.id
+            property_id
         )
         .fetch_optional(&mut *tx)
         .await
@@ -909,14 +898,14 @@ impl EntityServiceTrait for EntityService {
         .transpose()
         .map_err(AppError::from)?;
 
-        match &prop.value {
+        match &value {
             Some(value) => {
                 let blob = prost::Message::encode_to_vec(value);
                 sqlx::query!(
                     "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
                      ON CONFLICT (entity_id, property_id) DO UPDATE SET value_blob = excluded.value_blob",
                     entity_id,
-                    prop.id,
+                    property_id,
                     blob,
                 )
                 .execute(&mut *tx)
@@ -927,7 +916,7 @@ impl EntityServiceTrait for EntityService {
                 sqlx::query!(
                     "DELETE FROM properties WHERE entity_id = ? AND property_id = ?",
                     entity_id,
-                    prop.id
+                    property_id
                 )
                 .execute(&mut *tx)
                 .await
@@ -938,21 +927,28 @@ impl EntityServiceTrait for EntityService {
         // Only this property's links. The old value counts too, so replacing or
         // clearing an ad-hoc relation property drops its links. Richtext-derived
         // links live under their own source_property_id and aren't touched.
-        let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
+        let value = value.as_ref().and_then(|v| v.value.as_ref());
         let was_relation = is_relation_value(previous.as_ref().and_then(|v| v.value.as_ref()));
-        if structures::relation_properties(&structure_type).contains(&prop.id.as_str())
+        if structures::relation_properties(&structure_type).contains(&property_id.as_str())
             || is_relation_value(value)
             || was_relation
         {
-            sync_relation_property(&mut tx, &entity_id, &structure_type, &prop.id, value, now)
-                .await
-                .map_err(Status::from)?;
+            sync_relation_property(
+                &mut tx,
+                &entity_id,
+                &structure_type,
+                &property_id,
+                value,
+                now,
+            )
+            .await
+            .map_err(Status::from)?;
         }
 
         // A DailyNote's `date` drives date_key and its name; every other property
         // leaves both be. Clearing the date keeps the name it had.
-        if structure_type == "DailyNote" && prop.id == "date" {
-            let date_key = date_key_from(&structure_type, &prop);
+        if structure_type == "DailyNote" && property_id == "date" {
+            let date_key = date_key_from(&structure_type, &property_id, value);
             let name = daily_note_name(date_key.as_deref());
             sqlx::query!(
                 "UPDATE entities SET name = COALESCE(?, name), date_key = ?, updated_at = ? WHERE id = ?",
@@ -1215,7 +1211,7 @@ mod tests {
         CreateEntityRequest {
             structure_type: structure_type.to_string(),
             name: None,
-            properties: vec![],
+            properties: HashMap::new(),
         }
     }
 
@@ -1258,7 +1254,7 @@ mod tests {
         assert_eq!(select_value(&first, "status").as_deref(), Some("open"));
         assert_eq!(select_value(&first, "priority").as_deref(), Some("none"));
         // No stored value for the rich-text `content` (I-22), here or in the DB.
-        assert!(first.properties.iter().all(|p| p.id != "content"));
+        assert!(!first.properties.contains_key("content"));
         assert!(stored_property_ids(&pool, &first.id)
             .await
             .iter()
@@ -1456,9 +1452,7 @@ mod tests {
     fn select_value(entity: &Entity, property_id: &str) -> Option<String> {
         entity
             .properties
-            .iter()
-            .find(|p| p.id == property_id)
-            .and_then(|p| p.value.as_ref())
+            .get(property_id)
             .and_then(|v| match &v.value {
                 Some(property_value::Value::Select(key)) => Some(key.clone()),
                 _ => None,
@@ -1471,11 +1465,10 @@ mod tests {
         property_id: &str,
         value: property_value::Value,
     ) -> CreateEntityRequest {
-        req.properties.retain(|p| p.id != property_id);
-        req.properties.push(Property {
-            id: property_id.to_string(),
-            value: Some(PropertyValue { value: Some(value) }),
-        });
+        req.properties.insert(
+            property_id.to_string(),
+            PropertyValue { value: Some(value) },
+        );
         req
     }
 
@@ -1938,18 +1931,11 @@ mod tests {
             .await
             .expect("clear tags");
 
-        assert!(cleared.properties.iter().all(|p| p.id != "tags"));
+        assert!(!cleared.properties.contains_key("tags"));
         assert!(link_targets(&cleared, "tags").is_empty());
-        let mut expected: Vec<_> = entity
-            .properties
-            .iter()
-            .filter(|p| p.id != "tags")
-            .cloned()
-            .collect();
-        let mut remaining = cleared.properties.clone();
-        expected.sort_by(|a, b| a.id.cmp(&b.id));
-        remaining.sort_by(|a, b| a.id.cmp(&b.id));
-        assert_eq!(remaining, expected);
+        let mut expected = entity.properties.clone();
+        expected.remove("tags");
+        assert_eq!(cleared.properties, expected);
         assert_eq!(
             link_targets(&cleared, "content"),
             [(mentioned.id.clone(), "Note".to_string())]
@@ -2020,32 +2006,40 @@ mod tests {
         let entity = new_entity(
             "Todo",
             Some("Water plants"),
-            vec![Property {
-                id: "priority".to_string(),
-                value: Some(PropertyValue {
+            HashMap::from([(
+                "priority".to_string(),
+                PropertyValue {
                     value: Some(property_value::Value::Select("high".to_string())),
-                }),
-            }],
+                },
+            )]),
         );
 
         assert_eq!(entity.name, "Water plants");
         assert_eq!(select_value(&entity, "status").as_deref(), Some("open"));
         assert_eq!(select_value(&entity, "priority").as_deref(), Some("high"));
-        assert_eq!(
-            entity.properties.iter().filter(|p| p.id == "priority").count(),
-            1
-        );
+        // The defaults (status, priority) with the caller's priority laid over.
+        assert_eq!(entity.properties.len(), 2);
         // Rich-text properties get no value (I-22).
-        assert!(entity.properties.iter().all(|p| p.id != "content"));
+        assert!(!entity.properties.contains_key("content"));
+    }
+
+    // A map entry can't omit its value, so a value with no case is the "missing
+    // value" a Property with no value used to be (I-28).
+    #[tokio::test]
+    async fn create_with_an_empty_property_value_is_invalid_argument() {
+        let svc = entity_service(memory_pool().await);
+        let mut req = note("Empty");
+        req.properties
+            .insert("mood".to_string(), PropertyValue { value: None });
+
+        let err = try_create(&svc, req).await.expect_err("empty value");
+
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
     }
 
     #[test]
     fn new_entity_names_a_daily_note_for_its_date() {
-        let entity = new_entity(
-            "DailyNote",
-            Some("Ignored"),
-            vec![date_property("2026-06-13")],
-        );
+        let entity = new_entity("DailyNote", Some("Ignored"), date_properties("2026-06-13"));
         assert_eq!(entity.name, "June 13, 2026");
     }
 
@@ -2061,7 +2055,7 @@ mod tests {
             CreateEntityRequest {
                 structure_type: "DailyNote".to_string(),
                 name: None,
-                properties: vec![date_property("2026-06-13")],
+                properties: date_properties("2026-06-13"),
             },
         )
         .await
@@ -2195,7 +2189,7 @@ mod tests {
             Some("2026-06-13")
         );
         // No stored value for its rich-text `content` (I-22).
-        assert!(entity.properties.iter().all(|p| p.id != "content"));
+        assert!(!entity.properties.contains_key("content"));
         assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
 
         // Again, with the structure named: the same note, nothing published.

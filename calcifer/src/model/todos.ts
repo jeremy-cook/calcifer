@@ -39,14 +39,14 @@ export function isOptionKey<K extends string>(options: readonly { key: K }[], v:
 // A select value that isn't a declared option reads as the declared default.
 function selectValue(entity: Entity, todo: StructureDef | undefined, id: string): string {
   const def = propertyDef(todo, id)
-  const value = entity.properties.find((p) => p.id === id)?.value?.value
+  const value = entity.properties[id]?.value
   return value?.case === 'select' && def && isOptionKey(def.options, value.value)
     ? value.value
     : (def?.defaultOption ?? '')
 }
 
 export function todoFields(entity: Entity): TodoFields {
-  const valueOf = (id: string) => entity.properties.find((p) => p.id === id)?.value?.value
+  const valueOf = (id: string) => entity.properties[id]?.value
   const todo = getStructure('Todo')
 
   const status = selectValue(entity, todo, 'status')

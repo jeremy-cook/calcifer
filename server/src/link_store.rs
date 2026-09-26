@@ -89,22 +89,32 @@ pub(crate) async fn sync_relation_links(
     now: i64,
 ) -> Result<(), AppError> {
     let mut property_ids: Vec<&str> = relation_properties(&entity.structure_type);
-    for prop in &entity.properties {
-        let is_relation = is_relation_value(prop.value.as_ref().and_then(|v| v.value.as_ref()));
-        if is_relation && !property_ids.contains(&prop.id.as_str()) {
-            property_ids.push(&prop.id);
-        }
-    }
+    // Ad-hoc relation properties in id order, so the map's order doesn't leak.
+    let mut ad_hoc: Vec<&str> = entity
+        .properties
+        .iter()
+        .filter(|(id, v)| {
+            is_relation_value(v.value.as_ref()) && !property_ids.contains(&id.as_str())
+        })
+        .map(|(id, _)| id.as_str())
+        .collect();
+    ad_hoc.sort_unstable();
+    property_ids.extend(ad_hoc);
 
     for property_id in property_ids {
         let value = entity
             .properties
-            .iter()
-            .find(|p| p.id == property_id)
-            .and_then(|p| p.value.as_ref())
+            .get(property_id)
             .and_then(|v| v.value.as_ref());
-        sync_relation_property(tx, &entity.id, &entity.structure_type, property_id, value, now)
-            .await?;
+        sync_relation_property(
+            tx,
+            &entity.id,
+            &entity.structure_type,
+            property_id,
+            value,
+            now,
+        )
+        .await?;
     }
     Ok(())
 }

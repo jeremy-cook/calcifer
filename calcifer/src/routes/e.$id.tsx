@@ -196,8 +196,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     const override = overrides[`${entity.structureType}.${def.id}`]
     if (override) return override()
 
-    const property = entity.properties.find((p) => p.id === def.id)
-    const value = property?.value?.value
+    const value = entity.properties[def.id]?.value
 
     switch (def.kind) {
       case PropertyKind.RICHTEXT:

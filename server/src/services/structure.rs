@@ -202,12 +202,7 @@ mod tests {
             .iter()
             .filter(|p| !p.default_option.is_empty())
         {
-            let value = entity
-                .properties
-                .iter()
-                .find(|p| p.id == def.id)
-                .and_then(|p| p.value.as_ref())
-                .and_then(|v| v.value.clone());
+            let value = entity.properties.get(&def.id).and_then(|v| v.value.clone());
             assert_eq!(
                 value,
                 Some(property_value::Value::Select(def.default_option.clone()))

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/entities.proto.
  */
 export const file_calcifer_v1_entities: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLJAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLwoJcmVsYXRpb25zGAcgASgLMhouY2FsY2lmZXIudjEuRW50aXR5UmVmTGlzdEgAQgcKBXZhbHVlSgQIBhAHUghyaWNodGV4dCJBCghQcm9wZXJ0eRIKCgJpZBgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiNQoLUmljaFRleHRSZWYSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJIqcBCghSaWNoVGV4dBIlCgNyZWYYASABKAsyGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhILCgNkb2MYAiABKAkSLgoKdXBkYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNwoTZXhwZWN0ZWRfdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiiQEKB0xpbmtSZWYSCgoCaWQYASABKAkSJgoGdGFyZ2V0GAIgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmEhoKEnNvdXJjZV9wcm9wZXJ0eV9pZBgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKEAgoGRW50aXR5EgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEgwKBG5hbWUYAyABKAkSKQoKcHJvcGVydGllcxgEIAMoCzIVLmNhbGNpZmVyLnYxLlByb3BlcnR5EiMKBWxpbmtzGAUgAygLMhQuY2FsY2lmZXIudjEuTGlua1JlZhIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIYChByZWZlcmVuY2VkX2RhdGVzGAggAygJYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLJAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLwoJcmVsYXRpb25zGAcgASgLMhouY2FsY2lmZXIudjEuRW50aXR5UmVmTGlzdEgAQgcKBXZhbHVlSgQIBhAHUghyaWNodGV4dCI1CgtSaWNoVGV4dFJlZhIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkipwEKCFJpY2hUZXh0EiUKA3JlZhgBIAEoCzIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmEgsKA2RvYxgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI3ChNleHBlY3RlZF91cGRhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKJAQoHTGlua1JlZhIKCgJpZBgBIAEoCRImCgZ0YXJnZXQYAiABKAsyFi5jYWxjaWZlci52MS5FbnRpdHlSZWYSGgoSc291cmNlX3Byb3BlcnR5X2lkGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIuECCgZFbnRpdHkSCgoCaWQYASABKAkSFgoOc3RydWN0dXJlX3R5cGUYAiABKAkSDAoEbmFtZRgDIAEoCRI3Cgpwcm9wZXJ0aWVzGAQgAygLMiMuY2FsY2lmZXIudjEuRW50aXR5LlByb3BlcnRpZXNFbnRyeRIjCgVsaW5rcxgFIAMoCzIULmNhbGNpZmVyLnYxLkxpbmtSZWYSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGAoQcmVmZXJlbmNlZF9kYXRlcxgIIAMoCRpNCg9Qcm9wZXJ0aWVzRW50cnkSCwoDa2V5GAEgASgJEikKBXZhbHVlGAIgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZToCOAFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message calcifer.v1.EntityRef
@@ -113,28 +113,6 @@ export const PropertyValueSchema: GenMessage<PropertyValue> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 2);
 
 /**
- * @generated from message calcifer.v1.Property
- */
-export type Property = Message<"calcifer.v1.Property"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * @generated from field: calcifer.v1.PropertyValue value = 2;
-   */
-  value?: PropertyValue | undefined;
-};
-
-/**
- * Describes the message calcifer.v1.Property.
- * Use `create(PropertySchema)` to create a new message.
- */
-export const PropertySchema: GenMessage<Property> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_entities, 3);
-
-/**
  * RichTextService's address for one document: an entity and one of its
  * structure's declared rich-text property ids.
  *
@@ -157,7 +135,7 @@ export type RichTextRef = Message<"calcifer.v1.RichTextRef"> & {
  * Use `create(RichTextRefSchema)` to create a new message.
  */
 export const RichTextRefSchema: GenMessage<RichTextRef> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_entities, 4);
+  messageDesc(file_calcifer_v1_entities, 3);
 
 /**
  * @generated from message calcifer.v1.RichText
@@ -194,7 +172,7 @@ export type RichText = Message<"calcifer.v1.RichText"> & {
  * Use `create(RichTextSchema)` to create a new message.
  */
 export const RichTextSchema: GenMessage<RichText> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_entities, 5);
+  messageDesc(file_calcifer_v1_entities, 4);
 
 /**
  * @generated from message calcifer.v1.LinkRef
@@ -226,7 +204,7 @@ export type LinkRef = Message<"calcifer.v1.LinkRef"> & {
  * Use `create(LinkRefSchema)` to create a new message.
  */
 export const LinkRefSchema: GenMessage<LinkRef> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_entities, 6);
+  messageDesc(file_calcifer_v1_entities, 5);
 
 /**
  * Output only: no request message carries an Entity (ADR 8). Clients write
@@ -253,9 +231,11 @@ export type Entity = Message<"calcifer.v1.Entity"> & {
   name: string;
 
   /**
-   * @generated from field: repeated calcifer.v1.Property properties = 4;
+   * keyed by property id
+   *
+   * @generated from field: map<string, calcifer.v1.PropertyValue> properties = 4;
    */
-  properties: Property[];
+  properties: { [key: string]: PropertyValue };
 
   /**
    * output only
@@ -291,5 +271,5 @@ export type Entity = Message<"calcifer.v1.Entity"> & {
  * Use `create(EntitySchema)` to create a new message.
  */
 export const EntitySchema: GenMessage<Entity> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_entities, 7);
+  messageDesc(file_calcifer_v1_entities, 6);
 
