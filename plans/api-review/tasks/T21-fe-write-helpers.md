@@ -25,6 +25,10 @@ types; writes should go through `model/`.
 
 - Tech lead note (from T08): `withProperty` in `model/store.ts` is still exported, but
   its only caller is `useSetProperty`. Make it module-private unless a new helper needs it.
+- Tech lead note (from T16): `entity.properties` is a plain-object map, so
+  `properties[id]` for an ad-hoc id such as `constructor` would read an
+  `Object.prototype` member. Where you move or add property reads in `model/`, read
+  through one helper that checks `Object.hasOwn`.
 
 ## Out of scope
 Behaviour changes. Model-layer duplicates (T22).
