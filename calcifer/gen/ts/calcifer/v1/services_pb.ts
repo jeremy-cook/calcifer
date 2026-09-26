@@ -499,6 +499,10 @@ export const EntityService: GenService<{
    * [[wikilinks]], mentions and #tags, or a calendar day for its DailyNote. The
    * single server-authoritative identity path for every client. The server
    * builds a created entity's defaults and, for a DailyNote, its name.
+   * Names match case-insensitively. Only Tag names are unique, so for other
+   * structures several entities can share a name: the one with the oldest
+   * created_at wins, and the lowest id breaks ties. A day has at most one
+   * DailyNote.
    *
    * @generated from rpc calcifer.v1.EntityService.Resolve
    */
