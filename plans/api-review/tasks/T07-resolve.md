@@ -65,8 +65,6 @@ Regenerate both TS stubs.
 - **Resolve:**
   - The name key takes over the old ResolveByName path.
   - The date key looks up by `date_key` and creates via `new_entity("DailyNote", …)`.
-  - A concurrent create that loses the unique race must re-read and return the winner
-    with `created = false`, not error.
   - Publishes Upserted when it creates.
 - **Delete** the `resolve_by_name` and `create_daily_note` handlers. Port their tests to
   `Resolve`; don't drop coverage.
@@ -105,6 +103,7 @@ At least:
   messages, kind checks (T09).
 - How the editor finds its rich-text document (T12).
 - `['entities']` invalidations (T15). Proto helpers leaking into components (T21).
+- Handling a create that loses a concurrent race (I-36, deferred).
 
 ## Done when
 - `grep -rn "resolveByName\|ResolveByName\|CreateDailyNote\|entityClient.createDailyNote\|resolve_by_name\|fn create_daily_note\|buildDailyNoteMessage\|withDailyNoteDate" proto calcifer/src mcp-server/src server/src --exclude-dir=gen`

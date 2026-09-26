@@ -384,6 +384,8 @@ winner. Found during T01 of the API review.
 **Fix:** On a unique violation, re-read by name and return the winner with
 `created = false`. T07's `Resolve` replaces this path and must do this for both keys.
 
+**Deferred:** Calcifer is a single-user local app, so this race is very unlikely. Revisit if it's ever seen.
+
 **Done when:** a get-or-create that loses the race returns the existing entity, and a
 test covers it.
 
