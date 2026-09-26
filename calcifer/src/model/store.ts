@@ -1,63 +1,19 @@
 import { useCallback, useEffect, useRef } from 'react'
 import type { ConnectError } from '@connectrpc/connect'
 import { create as createMessage } from '@bufbuild/protobuf'
-import { timestampNow } from '@bufbuild/protobuf/wkt'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   EntitySchema,
   PropertySchema,
   PropertyValueSchema,
-  RichTextRefSchema,
   type Entity,
   type RichTextRef,
-  type Property,
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { PropertyKind, getStructure } from '~/model/structures'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
-
-function defaultNameFor(structureType: string): string {
-  return `Untitled ${getStructure(structureType)?.name ?? structureType}`
-}
-
-// Entities are still constructed client-side (id minted here) so the editor has
-// its richtext refs immediately; the server persists via Create.
-function buildEntityMessage(structureType: string, name?: string): Entity {
-  const id = crypto.randomUUID()
-  const now = timestampNow()
-  const properties: Property[] = []
-  for (const def of getStructure(structureType)?.properties ?? []) {
-    if (def.kind === PropertyKind.RICHTEXT) {
-      const ref = createMessage(RichTextRefSchema, { entityId: id, propertyId: def.id })
-      properties.push(
-        createMessage(PropertySchema, {
-          id: def.id,
-          value: createMessage(PropertyValueSchema, { value: { case: 'richtext', value: ref } }),
-        }),
-      )
-    } else if (def.kind === PropertyKind.SELECT && def.defaultOption !== '') {
-      properties.push(
-        createMessage(PropertySchema, {
-          id: def.id,
-          value: createMessage(PropertyValueSchema, { value: { case: 'select', value: def.defaultOption } }),
-        }),
-      )
-    }
-  }
-  return createMessage(EntitySchema, {
-    id,
-    structureType,
-    name: name ?? defaultNameFor(structureType),
-    properties,
-    links: [],
-    referencedDates: [],
-    createdAt: now,
-    updatedAt: now,
-  })
-}
 
 // --- Queries ---
 
@@ -84,14 +40,20 @@ function onEntityWritten(entity: Entity) {
   void queryClient.invalidateQueries({ queryKey: ['entities'] })
 }
 
+interface CreateEntityVars {
+  structureType: string
+  name?: string
+}
+
+// Create by intent: the server mints the id and builds the defaults, including
+// the default name when `name` is omitted. Resolves to the saved entity.
 export function useCreateEntity() {
   const m = useMutation({
-    mutationFn: (entity: Entity) => entityClient.create({ entity }),
+    mutationFn: ({ structureType, name }: CreateEntityVars) => entityClient.create({ structureType, name }),
     onSuccess: onEntityWritten,
   })
   return useCallback(
-    (structureType: string, name?: string) =>
-      m.mutateAsync(buildEntityMessage(structureType, name)),
+    (structureType: string, name?: string) => m.mutateAsync({ structureType, name }),
     [m],
   )
 }
@@ -112,53 +74,58 @@ export function useResolveDailyNote() {
   return useCallback((iso: string) => m.mutateAsync(iso), [m])
 }
 
-export interface UseUpdateEntityOptions {
-  // Called after the optimistic change has been rolled back.
-  onError?: (err: ConnectError | Error, entity: Entity) => void
+interface RenameEntityVars {
+  id: string
+  name: string
 }
 
-// Whole-entity write, for renames and multi-field edits. Optimistic on both the
-// entity cache and the list cache, rolled back on error. Sends every property, so
-// it can overwrite a concurrent writer's edit; single-property edits go through
-// useSetProperty.
-export function useUpdateEntity({ onError }: UseUpdateEntityOptions = {}) {
+function renamed(entity: Entity, name: string): Entity {
+  return createMessage(EntitySchema, { ...entity, name })
+}
+
+// Rename through EntityService.Rename, which writes only the name, so it can't
+// undo a concurrent property edit. Optimistic on `name` in both caches. On
+// error only the name is restored, on the current cached entity (the I-6
+// per-entity rollback), so a concurrent edit to anything else survives.
+export function useRenameEntity() {
   const qc = useQueryClient()
-  // Latest callback without re-creating the mutation on every render.
-  const onErrorRef = useRef(onError)
-  useEffect(() => {
-    onErrorRef.current = onError
-  })
   const { mutate } = useMutation({
-    mutationFn: (entity: Entity) => entityClient.update({ entity }),
-    onMutate: async (entity) => {
+    mutationFn: ({ id, name }: RenameEntityVars) => entityClient.rename({ id, name }),
+    onMutate: async ({ id, name }) => {
       await Promise.all([
-        qc.cancelQueries({ queryKey: qk.entity(entity.id) }),
+        qc.cancelQueries({ queryKey: qk.entity(id) }),
         qc.cancelQueries({ queryKey: qk.entities() }),
       ])
-      const prevEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
-      const prevListEntity = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === entity.id)
-      qc.setQueryData(qk.entity(entity.id), entity)
-      qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? entity : e)))
-      return { prevEntity, prevListEntity }
+      const prevEntityName = qc.getQueryData<Entity>(qk.entity(id))?.name
+      const prevListName = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === id)?.name
+      qc.setQueryData<Entity>(qk.entity(id), (e) => e && renamed(e, name))
+      qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === id ? renamed(e, name) : e)))
+      return { prevEntityName, prevListName }
     },
-    // Roll back only the failed entity's row: restoring a whole-list snapshot
-    // would also undo other updates that were in flight concurrently.
-    onError: (err, entity, ctx) => {
-      const prev = ctx?.prevEntity ?? ctx?.prevListEntity
-      if (prev) {
-        qc.setQueryData(qk.entity(entity.id), prev)
-        qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === entity.id ? prev : e)))
+    onSuccess: (saved) => {
+      qc.setQueryData(qk.entity(saved.id), saved)
+    },
+    onError: (_err, { id }, ctx) => {
+      if (ctx?.prevEntityName !== undefined) {
+        const prev = ctx.prevEntityName
+        qc.setQueryData<Entity>(qk.entity(id), (e) => e && renamed(e, prev))
       }
-      onErrorRef.current?.(err, entity)
+      if (ctx?.prevListName !== undefined) {
+        const prev = ctx.prevListName
+        qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === id ? renamed(e, prev) : e)))
+      }
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ['entities'] })
     },
   })
-  return useCallback((entity: Entity) => mutate(entity), [mutate])
+  return useCallback((id: string, name: string) => mutate({ id, name }), [mutate])
 }
 
-export type UseSetPropertyOptions = UseUpdateEntityOptions
+export interface UseSetPropertyOptions {
+  // Called after the optimistic change has been rolled back.
+  onError?: (err: ConnectError | Error, entity: Entity) => void
+}
 
 interface SetPropertyVars {
   entity: Entity
@@ -235,12 +202,7 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
   )
 }
 
-// --- Pure edit builders (pass the result to useUpdateEntity(); withProperty is
-// also useSetProperty()'s optimistic apply) ---
-
-export function withName(entity: Entity, name: string): Entity {
-  return createMessage(EntitySchema, { ...entity, name })
-}
+// --- Pure edit builder (useSetProperty()'s optimistic apply) ---
 
 // `null` removes the property. The server still clears links for declared
 // relation properties that are absent (SetProperty also for ad-hoc ones), so

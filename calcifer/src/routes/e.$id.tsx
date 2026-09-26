@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { TrashIcon } from '@phosphor-icons/react'
 import { create as createMessage } from '@bufbuild/protobuf'
 import {
@@ -22,7 +22,7 @@ import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
-import { useDeleteEntity, useEntity, useSetProperty, useUpdateEntity, withName, type Entity } from '~/model/store'
+import { useDeleteEntity, useEntity, useRenameEntity, useSetProperty, type Entity } from '~/model/store'
 import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/model/structures'
 import { EntityRefListSchema, type PropertyValue } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -75,7 +75,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
 
   const renderTitle = () =>
     nameEditable ? (
-      <EntityTitleInput key={entity.id} entity={entity} structureName={structureName} />
+      <EntityTitleInput key={entity.id} entity={entity} />
     ) : (
       <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.name}</h1>
     )
@@ -108,33 +108,29 @@ function EntityHeader({ entity }: EntityHeaderProps) {
 
 interface EntityTitleInputProps {
   entity: Entity
-  structureName: string
 }
 
-// Renames are debounced so a typing burst sends one Update. While the field is
+// Renames are debounced so a typing burst sends one Rename. While the field is
 // focused, `value` is the source of truth and entity.name is never synced into
 // it: watch-stream echoes of earlier writes can land after a later optimistic
 // update and briefly move entity.name back to an older prefix. Outside of focus,
 // external renames (another client, the MCP agent) are adopted during render.
-function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
-  const updateEntity = useUpdateEntity()
+// The title is focused only on arrival from a create flow, which marks the
+// navigation with `justCreated` history state.
+function EntityTitleInput({ entity }: EntityTitleInputProps) {
+  const renameEntity = useRenameEntity()
+  const justCreated = useLocation({ select: (location) => location.state.justCreated === true })
   const [value, setValue] = useState(entity.name)
   const [focused, setFocused] = useState(false)
   const [syncedName, setSyncedName] = useState(entity.name)
-  const latestEntity = useRef(entity)
   const pendingName = useRef<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const entityId = entity.id
 
   if (entity.name !== syncedName) {
     setSyncedName(entity.name)
     if (!focused) setValue(entity.name)
   }
-
-  // The debounced write must build on the latest entity, not the one captured
-  // when the timer started, or it would undo a concurrent property change.
-  useEffect(() => {
-    latestEntity.current = entity
-  }, [entity])
 
   const flush = useCallback(() => {
     clearTimeout(timer.current)
@@ -142,8 +138,8 @@ function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
     const name = pendingName.current
     if (name === null) return
     pendingName.current = null
-    updateEntity(withName(latestEntity.current, name))
-  }, [updateEntity])
+    renameEntity(entityId, name)
+  }, [renameEntity, entityId])
 
   // Unmount (including navigation to another entity, via the key in
   // EntityHeader) must not drop the last characters typed.
@@ -163,13 +159,12 @@ function EntityTitleInput({ entity, structureName }: EntityTitleInputProps) {
     flush()
   }
 
-  const isDefaultName = entity.name === `Untitled ${structureName}`
   const RENAME_DEBOUNCE_MS = 300
 
   return (
     <Input
       value={value}
-      autoFocus={isDefaultName}
+      autoFocus={justCreated}
       onFocus={() => setFocused(true)}
       onBlur={handleBlur}
       onChange={(e) => handleChange(e.target.value)}

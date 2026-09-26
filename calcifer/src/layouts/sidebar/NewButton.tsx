@@ -25,7 +25,7 @@ export function NewButton() {
 
   const handleCreate = async (structureType: string) => {
     const entity = await createEntity(structureType)
-    void navigate({ to: '/e/$id', params: { id: entity.id } })
+    void navigate({ to: '/e/$id', params: { id: entity.id }, state: { justCreated: true } })
   }
 
   return (
