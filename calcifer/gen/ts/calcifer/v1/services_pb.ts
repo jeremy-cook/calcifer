@@ -101,6 +101,9 @@ export type SearchHit = Message<"calcifer.v1.SearchHit"> & {
   /**
    * Plain text around the best lexical match, with no markup; `matches` says
    * where the query terms are. Empty for a hit that only the vector side found.
+   * The server marks matches internally with U+E000 and U+E001 and strips them,
+   * so a document containing those private-use characters loses them from its
+   * snippet, and they can shift a match range.
    *
    * @generated from field: string snippet = 2;
    */
@@ -674,6 +677,10 @@ export type PutRichTextRequest = Message<"calcifer.v1.PutRichTextRequest"> & {
   propertyId: string;
 
   /**
+   * TipTap JSON; see RichText.doc and docs/reference/richtext-doc.md. The
+   * server derives this property's links, the entity's referenced_dates and its
+   * search text from it; clients never send those.
+   *
    * @generated from field: string doc = 3;
    */
   doc: string;

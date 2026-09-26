@@ -16,6 +16,13 @@ export const file_calcifer_v1_entities: GenFile = /*@__PURE__*/
   fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLJAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLwoJcmVsYXRpb25zGAcgASgLMhouY2FsY2lmZXIudjEuRW50aXR5UmVmTGlzdEgAQgcKBXZhbHVlSgQIBhAHUghyaWNodGV4dCI1CgtSaWNoVGV4dFJlZhIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkiiQEKCFJpY2hUZXh0EiUKA3JlZhgBIAEoCzIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmEgsKA2RvYxgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBVITZXhwZWN0ZWRfdXBkYXRlZF9hdCKJAQoHTGlua1JlZhIKCgJpZBgBIAEoCRImCgZ0YXJnZXQYAiABKAsyFi5jYWxjaWZlci52MS5FbnRpdHlSZWYSGgoSc291cmNlX3Byb3BlcnR5X2lkGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIuECCgZFbnRpdHkSCgoCaWQYASABKAkSFgoOc3RydWN0dXJlX3R5cGUYAiABKAkSDAoEbmFtZRgDIAEoCRI3Cgpwcm9wZXJ0aWVzGAQgAygLMiMuY2FsY2lmZXIudjEuRW50aXR5LlByb3BlcnRpZXNFbnRyeRIjCgVsaW5rcxgFIAMoCzIULmNhbGNpZmVyLnYxLkxpbmtSZWYSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGAoQcmVmZXJlbmNlZF9kYXRlcxgIIAMoCRpNCg9Qcm9wZXJ0aWVzRW50cnkSCwoDa2V5GAEgASgJEikKBXZhbHVlGAIgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZToCOAFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
+ * A pointer to an entity.
+ * In a relation value a client writes, the server reads only `id`.
+ * `structure_type` may be left empty; when it's set it must be the target's
+ * real type, or the write is INVALID_ARGUMENT. The value is stored as sent, and
+ * the derived `LinkRef.target` carries the real type.
+ * In output (`LinkRef.target`) both fields are set.
+ *
  * @generated from message calcifer.v1.EntityRef
  */
 export type EntityRef = Message<"calcifer.v1.EntityRef"> & {
@@ -38,6 +45,8 @@ export const EntityRefSchema: GenMessage<EntityRef> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 0);
 
 /**
+ * The targets of a multi-target relation. Each ref is read as in `EntityRef`.
+ *
  * @generated from message calcifer.v1.EntityRefList
  */
 export type EntityRefList = Message<"calcifer.v1.EntityRefList"> & {
@@ -78,18 +87,26 @@ export type PropertyValue = Message<"calcifer.v1.PropertyValue"> & {
     case: "number";
   } | {
     /**
+     * An ISO calendar day, "yyyy-MM-dd" (e.g. "2026-06-13"); not an instant, no
+     * time zone. The server doesn't check the format.
+     *
      * @generated from field: string date = 3;
      */
     value: string;
     case: "date";
   } | {
     /**
+     * an option key of the declared select property
+     *
      * @generated from field: string select = 4;
      */
     value: string;
     case: "select";
   } | {
     /**
+     * A single-target relation. The server reads only the target `id` (see
+     * `EntityRef`) and derives `Entity.links` from it.
+     *
      * @generated from field: calcifer.v1.EntityRef relation = 5;
      */
     value: EntityRef;
@@ -113,8 +130,8 @@ export const PropertyValueSchema: GenMessage<PropertyValue> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 2);
 
 /**
- * RichTextService's address for one document: an entity and one of its
- * structure's declared rich-text property ids.
+ * Output only (in `RichText.ref`). RichTextService's address for one document:
+ * an entity and one of its structure's declared rich-text property ids.
  *
  * @generated from message calcifer.v1.RichTextRef
  */
@@ -149,11 +166,21 @@ export type RichText = Message<"calcifer.v1.RichText"> & {
   ref?: RichTextRef | undefined;
 
   /**
+   * TipTap (ProseMirror) JSON, or "" for a document never saved. The server
+   * parses it on PutRichText: mention, hashtag and dateChip nodes become
+   * `Entity.links` and `Entity.referenced_dates`, and text nodes feed search.
+   * The node types and attributes it reads are specified in
+   * docs/reference/richtext-doc.md. Invalid JSON is INVALID_ARGUMENT.
+   *
    * @generated from field: string doc = 2;
    */
   doc: string;
 
   /**
+   * Output only: set by the server on each save, max(now, previous + 1) in
+   * milliseconds. Echo it back as PutRichTextRequest.expected_updated_at. The
+   * epoch for a document never saved.
+   *
    * @generated from field: google.protobuf.Timestamp updated_at = 3;
    */
   updatedAt?: Timestamp | undefined;
@@ -167,25 +194,37 @@ export const RichTextSchema: GenMessage<RichText> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 4);
 
 /**
+ * Output only: one outgoing edge, derived by the server from a rich-text
+ * document or a relation property (ADR 3). No client writes links.
+ *
  * @generated from message calcifer.v1.LinkRef
  */
 export type LinkRef = Message<"calcifer.v1.LinkRef"> & {
   /**
+   * link id; kept while the target stays
+   *
    * @generated from field: string id = 1;
    */
   id: string;
 
   /**
+   * For a relation link, the target's real type. For a rich-text link, the
+   * mention node's `structureType` attribute as written.
+   *
    * @generated from field: calcifer.v1.EntityRef target = 2;
    */
   target?: EntityRef | undefined;
 
   /**
+   * the property it was derived from
+   *
    * @generated from field: string source_property_id = 3;
    */
   sourcePropertyId: string;
 
   /**
+   * when this edge was first derived
+   *
    * @generated from field: google.protobuf.Timestamp created_at = 4;
    */
   createdAt?: Timestamp | undefined;
@@ -251,7 +290,8 @@ export type Entity = Message<"calcifer.v1.Entity"> & {
   updatedAt?: Timestamp | undefined;
 
   /**
-   * output only
+   * Output only: the ISO "yyyy-MM-dd" days of every dateChip in the entity's
+   * rich-text documents, de-duplicated, in no particular order.
    *
    * @generated from field: repeated string referenced_dates = 8;
    */

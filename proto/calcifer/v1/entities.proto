@@ -4,11 +4,18 @@ package calcifer.v1;
 
 import "google/protobuf/timestamp.proto";
 
+// A pointer to an entity.
+// In a relation value a client writes, the server reads only `id`.
+// `structure_type` may be left empty; when it's set it must be the target's
+// real type, or the write is INVALID_ARGUMENT. The value is stored as sent, and
+// the derived `LinkRef.target` carries the real type.
+// In output (`LinkRef.target`) both fields are set.
 message EntityRef {
   string id = 1;
   string structure_type = 2;
 }
 
+// The targets of a multi-target relation. Each ref is read as in `EntityRef`.
 message EntityRefList {
   repeated EntityRef refs = 1;
 }
@@ -21,15 +28,19 @@ message PropertyValue {
   oneof value {
     string text = 1;
     double number = 2;
+    // An ISO calendar day, "yyyy-MM-dd" (e.g. "2026-06-13"); not an instant, no
+    // time zone. The server doesn't check the format.
     string date = 3;
-    string select = 4;
+    string select = 4;             // an option key of the declared select property
+    // A single-target relation. The server reads only the target `id` (see
+    // `EntityRef`) and derives `Entity.links` from it.
     EntityRef relation = 5;
     EntityRefList relations = 7;   // multi-target relation; server derives links from it
   }
 }
 
-// RichTextService's address for one document: an entity and one of its
-// structure's declared rich-text property ids.
+// Output only (in `RichText.ref`). RichTextService's address for one document:
+// an entity and one of its structure's declared rich-text property ids.
 message RichTextRef {
   string entity_id = 1;
   string property_id = 2;
@@ -40,15 +51,27 @@ message RichText {
   reserved 4;
   reserved "expected_updated_at";   // now PutRichTextRequest.expected_updated_at
   RichTextRef ref = 1;
+  // TipTap (ProseMirror) JSON, or "" for a document never saved. The server
+  // parses it on PutRichText: mention, hashtag and dateChip nodes become
+  // `Entity.links` and `Entity.referenced_dates`, and text nodes feed search.
+  // The node types and attributes it reads are specified in
+  // docs/reference/richtext-doc.md. Invalid JSON is INVALID_ARGUMENT.
   string doc = 2;
+  // Output only: set by the server on each save, max(now, previous + 1) in
+  // milliseconds. Echo it back as PutRichTextRequest.expected_updated_at. The
+  // epoch for a document never saved.
   google.protobuf.Timestamp updated_at = 3;
 }
 
+// Output only: one outgoing edge, derived by the server from a rich-text
+// document or a relation property (ADR 3). No client writes links.
 message LinkRef {
-  string id = 1;
+  string id = 1;                              // link id; kept while the target stays
+  // For a relation link, the target's real type. For a rich-text link, the
+  // mention node's `structureType` attribute as written.
   EntityRef target = 2;
-  string source_property_id = 3;
-  google.protobuf.Timestamp created_at = 4;
+  string source_property_id = 3;              // the property it was derived from
+  google.protobuf.Timestamp created_at = 4;   // when this edge was first derived
 }
 
 // Output only: no request message carries an Entity (ADR 8). Clients write
@@ -61,5 +84,7 @@ message Entity {
   repeated LinkRef links = 5;                     // output only
   google.protobuf.Timestamp created_at = 6;       // output only
   google.protobuf.Timestamp updated_at = 7;       // output only
-  repeated string referenced_dates = 8;           // output only
+  // Output only: the ISO "yyyy-MM-dd" days of every dateChip in the entity's
+  // rich-text documents, de-duplicated, in no particular order.
+  repeated string referenced_dates = 8;
 }
