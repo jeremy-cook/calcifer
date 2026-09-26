@@ -58,25 +58,6 @@ covers it.
 
 ---
 
-### I-15 · Renames and daily-note moves still resend every property · low · confirmed
-
-**Where:** `calcifer/src/model/store.ts` (`useUpdateEntity`), `EntityService.Update`
-
-**Problem:** I-11 moved single-property edits onto `SetProperty`, but renames
-(`EntityTitleInput`) and daily-note moves (`DailyNoteDateField`) still use `Update`,
-which replaces every property. An `Update` built from a stale copy undoes a concurrent
-`SetProperty` (e.g. the agent sets a to-do's status while the browser renames it). The
-server test `update_from_a_stale_snapshot_loses_a_concurrent_edit` shows it.
-
-**Fix:** Give renames their own path, e.g. a `Rename` RPC or a field mask on `Update`,
-and move daily notes with `SetProperty(date)` plus a rename.
-
-**Progress:** Since T07 of the API review, daily-note moves use `SetProperty(date)` and the server renames the note. Only title renames still use `Update` (T08).
-
-**Done when:** a rename concurrent with a `SetProperty` on the same entity keeps both.
-
----
-
 ### I-16 · Property values aren't checked against their declared kind (except select) · low · confirmed
 
 **Where:** `server/src/services/entity.rs` (`validate_select`), `server/src/link_store.rs`
@@ -92,50 +73,6 @@ declared `PropertyKind` for every declared property.
 
 **Done when:** `Update`/`SetProperty` with a value of the wrong kind for a declared
 property is rejected, and a test covers it.
-
----
-
-### I-20 · `Entity` is both the write input and the read output · high · confirmed
-
-**Where:** `proto/calcifer/v1/services.proto:68-69` (`CreateEntityRequest`, `UpdateEntityRequest`), `server/src/services/entity.rs:49-51` (`persist_new_entity`), `server/src/services/entity.rs:576` (`update`)
-
-**Problem:** `Create` and `Update` take a full `Entity`, including fields the server
-should own: id, links, referenced_dates, created_at and updated_at. `Create` saves the
-client-supplied links and referenced_dates (`replace_links` / `replace_referenced_dates`),
-which contradicts ADR 3's rule that no client writes links. `Update` silently ignores the
-same fields.
-
-**Fix:** Make `Entity` output-only. `CreateEntityRequest { structure_type, optional name,
-initial properties }`, with the server minting the id, timestamps and default properties.
-Replace `Update` with a `Rename` RPC plus the existing `SetProperty`; this also fixes I-15.
-
-**Done when:** no write RPC accepts an `Entity`, the server mints ids and defaults, and a
-test shows a client can't set links or referenced_dates through `Create`.
-
----
-
-### I-21 · Default entities are built in four places · medium · confirmed
-
-**Where:** `calcifer/src/model/store.ts:21-85` (`defaultNameFor`, `buildEntityMessage`, `buildDailyNoteMessage`), `server/src/services/entity.rs:406-474` (`build_resolved_entity`, `build_daily_note`), `calcifer/src/routes/e.$id.tsx:166`
-
-**Problem:** The frontend and the server each build new entities (rich-text refs, select
-defaults, the DailyNote date and name) with separate code; the server's
-`build_resolved_entity` says it "mirrors the FE's buildEntityMessage". The default name
-`Untitled X` is set in `store.ts:22` and compared again in `e.$id.tsx:166`. The frontend
-mints the id itself "so the editor has its richtext refs immediately", but `NewButton`
-(`calcifer/src/layouts/sidebar/NewButton.tsx:27-28`) waits for the server's response
-before navigating anyway, so this gains nothing.
-
-**Fix:** Fixed by I-20: the server is the only place that builds a new entity, and the
-frontend builders go away.
-
-**Done when:** `buildEntityMessage` and `buildDailyNoteMessage` are gone, and the default
-name is defined only on the server.
-
-**Progress:** 2026-09-25 (I-23): the server builds new entities in one place,
-`new_entity` in `services/entity.rs` (used by `Resolve`); `build_resolved_entity`,
-`build_daily_note` and the frontend's `buildDailyNoteMessage` are gone. The frontend's
-`buildEntityMessage` and `defaultNameFor` remain until `Create` takes intent (T08).
 
 ---
 
@@ -480,6 +417,9 @@ passed. Found during T07's integration check.
 
 ## Resolved
 
+- **I-20 · `Entity` is both the write input and the read output.** Fixed 2026-09-26. `Entity` is output-only: `Create` takes `{ structure_type, optional name, properties }` and the server builds the entity with `new_entity` (id, timestamps, defaults), so client links and referenced dates can't reach it; `Update` and `UpdateEntityRequest` are gone. Covered by `create_by_intent_mints_id_defaults_and_name`; the browser and MCP scripts use the id the server returns. Not yet observed in the browser.
+- **I-21 · Default entities are built in four places.** Fixed 2026-09-26. `new_entity` is the only builder and now owns the default name (`Untitled <structure name>`, with the first free `Untitled Tag N` for Tags); the frontend's `buildEntityMessage` and `defaultNameFor` are gone, and the entity page focuses the title from a `justCreated` history state set by "+ New" instead of comparing names. Covered by `create_second_untitled_tag_gets_a_free_name`. Not yet observed in the browser.
+- **I-15 · Renames and daily-note moves still resend every property.** Fixed 2026-09-26. New `EntityService.Rename` writes only the name, its FTS row and `updated_at`; the title input's debounced rename uses `useRenameEntity` (optimistic on `name`, rolled back per entity). Covered by `rename_concurrent_with_set_property_keeps_both`, `rename_changes_only_the_name` and `rename_missing_id_is_not_found`. Not yet observed in the browser.
 - **I-23 · Daily notes are created and moved differently by each client.** Fixed 2026-09-25. `EntityService.Resolve` (a `name` or `date` key, `create_if_missing`, returns `created`) replaces `ResolveByName` and `CreateDailyNote`; the browser and the MCP server both get-or-create daily notes through it, and the MCP list-and-scan fallback is gone. The server names a DailyNote for its date on Create, Update, SetProperty and Resolve, so the browser moves a note with a plain `SetProperty(date)` and shows its inline error on `ALREADY_EXISTS`. Covered by `set_property_date_renames_daily_note`, `resolve_by_date_gets_or_creates` and nine more tests. Not yet observed in the browser. `name_editable` is still not enforced (I-26).
 - **I-37 · A racing `RichText.Put` fails with `Internal`, not `FailedPrecondition`.** Fixed 2026-09-25. `Put` opens its transaction with `BEGIN IMMEDIATE`, so a racing `Put` waits on `busy_timeout` and then fails the expectation check. A file-backed race test fails without the fix (checked 5 of 5 runs) and passes with it; three simultaneous MCP appends to one note all landed.
 - **I-39 · Leaving a new daily note within the save debounce deletes what was typed.** Fixed 2026-09-25. The editor sends a pending debounced save when it unmounts, and the prune waits for that doc's outstanding saves before checking the server. Observed in the browser against a scratch DB: typing and leaving the day at once kept the note and its text; an empty note was still pruned.

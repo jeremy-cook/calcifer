@@ -46,16 +46,22 @@ message LinkRef {
   google.protobuf.Timestamp created_at = 4;
 }
 
+// Output only: no request carries an Entity (ADR 8).
 message Entity {
-  string id = 1;
+  string id = 1;                              // output only
   string structure_type = 2;    // 'Note' | 'Tag' | 'DailyNote' | ...
   string name = 3;
   repeated Property properties = 4;
-  repeated LinkRef links = 5;   // outgoing only; backlinks are derived
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
+  repeated LinkRef links = 5;   // output only; outgoing; backlinks are derived
+  google.protobuf.Timestamp created_at = 6;   // output only
+  google.protobuf.Timestamp updated_at = 7;   // output only
+  repeated string referenced_dates = 8;       // output only
 }
 ```
+
+`Entity` is only ever returned. Clients write through intent-shaped RPCs (`Create`,
+`Rename`, `SetProperty`, `Delete`, `Resolve`) and the server owns the id, links,
+referenced dates and timestamps ([ADR 8](../adr/0008-server-builds-entities.md)).
 
 Rich text lives in a parallel slice, addressed by `RichTextRef`, so list and metadata
 reads never pull document bodies.
@@ -105,9 +111,9 @@ message StructureDef {
 
 The server derives what its write paths need from the same table: `richtext_properties`
 and `select_defaults` (what `new_entity` in `services/entity.rs` puts on an entity
-`Resolve` creates), `relation_properties`
+`Create` or `Resolve` creates), `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups.
-`Create`, `Update` and `SetProperty` check select values against it and return `InvalidArgument` for
+`Create`, `Resolve` and `SetProperty` check select values against it and return `InvalidArgument` for
 a key that isn't one of the property's options, a `select` value on a property not
 declared as a select, or a non-select value on a declared select. Structures missing
 from the table have no schema and aren't checked; other kinds aren't checked either.
@@ -154,7 +160,7 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 - Relation properties (`relation`/`relations`) also produce `links` rows, scoped by
   `source_property_id` the same way as richtext-derived links — see
   `sync_relation_links` in `server/src/link_store.rs`. Server-derived only; no
-  client ever authors a link row directly. `Create`/`Update`/`SetProperty` return
+  client ever authors a link row directly. `Create`/`SetProperty` return
   `InvalidArgument` if a ref's target isn't the property's declared
   `target_structure`, or if the ref's non-empty `structure_type` isn't the target's
   real type; the link row records the real type. Refs to ids with no entity get no
@@ -174,7 +180,11 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 
 ```proto
 service EntityService {
-  rpc Get / List / Create / Update / Delete
+  rpc Get / List / Delete
+  // Create by intent; the server builds the entity. See below.
+  rpc Create(CreateEntityRequest) returns (Entity);  // structure_type, optional name, properties
+  // Only the name; properties are untouched. NOT_FOUND for an unknown id.
+  rpc Rename(RenameEntityRequest) returns (Entity);  // id, name
   // One property of an existing entity; an unset value clears it. Returns the entity.
   rpc SetProperty(SetPropertyRequest) returns (Entity);  // entity_id, property_id, value
   rpc Watch(WatchRequest) returns (stream EntityEvent);
@@ -215,9 +225,22 @@ service StructureService {
 
 Property edits go through `SetProperty`, which writes only that property's row and
 re-syncs only that property's relation links, so the browser and the agent editing
-different properties of one entity don't overwrite each other. `Update` replaces all
-of an entity's properties and stays for renames and multi-field edits; it can still
-overwrite a concurrent `SetProperty` from a stale copy.
+different properties of one entity don't overwrite each other. Renames go through
+`Rename`, which writes only the name (and its FTS row) and `updated_at`, so it can't
+undo a concurrent `SetProperty`. A name clash on a `unique_names` structure is
+`ALREADY_EXISTS`. There is no whole-entity write.
+
+`Create` takes intent: `structure_type`, an optional `name` and initial `properties`.
+The server builds the entity with `new_entity` (minted id and timestamps, a
+`RichTextRef` per declared rich-text property, select defaults, then the request's
+properties laid over them; a request value for a rich-text property is
+`INVALID_ARGUMENT`), saves it, publishes `upserted` and returns it. With no name (or a
+blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled To-do"; for a
+`unique_names` structure (Tag) the server takes the first free one of `Untitled Tag`,
+`Untitled Tag 2`, `Untitled Tag 3`, … (case-insensitive). A given name is trimmed.
+A DailyNote's name always comes from its `date` (see the rule below). A new entity
+has no `referenced_dates`, and its only links are those from relation properties in
+the request.
 
 `Resolve` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
@@ -231,8 +254,7 @@ declared rich-text property, select defaults, and for a date the `date` property
 its name), saves it, publishes `upserted` and returns `created = true`.
 
 **DailyNote name rule.** A DailyNote's name is its `date` as a long date ("June 13,
-2026"), set by the server on every write: `Create`, `Update`, `SetProperty` and
-`Resolve`. A client-sent name for a dated DailyNote is overwritten. `SetProperty` of
+2026"), set by the server on every write: `Create`, `SetProperty` and `Resolve`. A client-sent name for a dated DailyNote is overwritten. `SetProperty` of
 `date` on a DailyNote moves it: it sets the name, the FTS name row and `date_key` in
 one transaction, and fails with `ALREADY_EXISTS` if that day already has a DailyNote.
 Clearing the date keeps the name it had.
