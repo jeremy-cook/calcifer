@@ -16,7 +16,7 @@ import {
 import { PropertyKind, getStructure } from '~/model/structures'
 import { formatLongDate } from '~/model/dates'
 import { entityClient, qk, queryClient } from '~/model/api'
-import { fetchRichText, isRichTextEmpty } from '~/model/richtext'
+import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -315,13 +315,21 @@ export function deleteEntityImperative(id: string): void {
 
 // Deletes the entity only if the server's copy of `ref` is empty; reads the
 // server, not the cache, so a stale cache can't discard an outside write.
+// Local saves of `ref` (queued or in flight) land before the check.
 export function deleteEntityIfRichTextEmpty(id: string, ref: RichTextRef): void {
-  void fetchRichText(ref)
-    .then(({ doc }) => {
-      // Small race left: a write landing between this Get and the Delete is lost.
-      if (isRichTextEmpty(doc)) deleteEntityImperative(id)
-    })
-    .catch((err) => console.error('empty check before delete failed', err))
+  // Wait a macrotask first: callers run this from an effect cleanup, and React
+  // may run that before or after the editor's unmount cleanup that flushes its
+  // debounced save. By the next macrotask every cleanup in the commit has run,
+  // so a flushed save is already counted as outstanding.
+  setTimeout(() => {
+    void whenRichTextSaved(ref)
+      .then(() => fetchRichText(ref))
+      .then(({ doc }) => {
+        // Small race left: a write landing between this Get and the Delete is lost.
+        if (isRichTextEmpty(doc)) deleteEntityImperative(id)
+      })
+      .catch((err) => console.error('empty check before delete failed', err))
+  }, 0)
 }
 
 // --- Pure derivations over an entity array (consumers pass useAllEntities()) ---

@@ -58,6 +58,8 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
   const [dirty, setDirty] = useState(false)
   const [conflicted, setConflicted] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The latest editor doc, for flushing a pending save on unmount.
+  const latestDocRef = useRef<JSONContent | null>(null)
 
   const handleSaved = useCallback((saved: RichTextState) => {
     // Our own save: the editor already shows it, so only the base moves.
@@ -89,8 +91,20 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
     adopt(synced.updatedAt)
   }, [adopt, synced.updatedAt])
 
+  // Leaving with a debounced save pending (e.g. navigating to another day)
+  // sends it now, so the text isn't lost and a pending prune can wait for it.
+  useEffect(() => {
+    return () => {
+      if (!timerRef.current || !latestDocRef.current) return
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+      save(JSON.stringify(latestDocRef.current))
+    }
+  }, [save])
+
   const handleUpdate = useCallback(
     (json: JSONContent) => {
+      latestDocRef.current = json
       setConflicted(false)
       setDirty(true)
       if (timerRef.current) clearTimeout(timerRef.current)

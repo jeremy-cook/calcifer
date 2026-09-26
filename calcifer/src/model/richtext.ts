@@ -165,6 +165,36 @@ async function reloadAfterConflict(
   }
 }
 
+// Outstanding saves per doc (`richTextKey`): how many editors' save queues have
+// a Put in flight or a doc queued, and who is waiting for that to reach zero.
+const outstandingSaves = new Map<string, number>()
+const savedWaiters = new Map<string, Array<() => void>>()
+
+function beginSave(key: string): void {
+  outstandingSaves.set(key, (outstandingSaves.get(key) ?? 0) + 1)
+}
+
+function endSave(key: string): void {
+  const count = (outstandingSaves.get(key) ?? 1) - 1
+  if (count > 0) {
+    outstandingSaves.set(key, count)
+    return
+  }
+  outstandingSaves.delete(key)
+  const waiters = savedWaiters.get(key) ?? []
+  savedWaiters.delete(key)
+  for (const resolve of waiters) resolve()
+}
+
+// Resolves once the doc has no save in flight or queued (at once if it has none).
+export function whenRichTextSaved(ref: RichTextRef): Promise<void> {
+  const key = richTextKey(ref)
+  if (!outstandingSaves.has(key)) return Promise.resolve()
+  return new Promise((resolve) => {
+    savedWaiters.set(key, [...(savedWaiters.get(key) ?? []), resolve])
+  })
+}
+
 // Conditional saves for one rich-text doc. Each Put sends `expected_updated_at`
 // = the version the content is based on (the epoch if nothing is saved), so a
 // save built on a stale version fails instead of overwriting an outside change.
@@ -186,6 +216,8 @@ export function usePutRichText(
     if (queue.inFlight) return
     queue.inFlight = true
     setBusy(true)
+    const key = richTextKey(targetRef.current.ref)
+    beginSave(key)
     void (async () => {
       while (queue.pending !== null) {
         const next = queue.pending
@@ -194,6 +226,7 @@ export function usePutRichText(
       }
       queue.inFlight = false
       setBusy(false)
+      endSave(key)
     })()
   }, [])
 
