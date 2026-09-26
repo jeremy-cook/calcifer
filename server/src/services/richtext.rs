@@ -295,11 +295,9 @@ mod tests {
         Fixture { pool, hub, svc }
     }
 
-    async fn create(pool: &SqlitePool, entity: Entity) -> Entity {
+    async fn create(pool: &SqlitePool, req: CreateEntityRequest) -> Entity {
         entity_service(pool.clone())
-            .create(Request::new(CreateEntityRequest {
-                entity: Some(entity),
-            }))
+            .create(Request::new(req))
             .await
             .expect("create")
             .into_inner()

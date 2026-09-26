@@ -7,7 +7,7 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 
 use crate::embed::EmbedHandle;
-use crate::proto::{property_value, Entity, Property, PropertyValue, RichTextRef};
+use crate::proto::CreateEntityRequest;
 use crate::services::entity::EntityService;
 use crate::services::richtext::RichTextService;
 use crate::watch::WatchHub;
@@ -48,49 +48,25 @@ pub(crate) fn richtext_service(pool: SqlitePool, hub: WatchHub) -> RichTextServi
     RichTextService::new(pool, hub, EmbedHandle::disabled())
 }
 
-/// A new Note entity carrying its `content` richtext pointer, as the FE builds it.
-pub(crate) fn note(name: &str) -> Entity {
-    let id = uuid::Uuid::new_v4().to_string();
-    Entity {
-        properties: vec![Property {
-            id: "content".to_string(),
-            value: Some(PropertyValue {
-                value: Some(property_value::Value::Richtext(RichTextRef {
-                    entity_id: id.clone(),
-                    property_id: "content".to_string(),
-                })),
-            }),
-        }],
-        id,
-        structure_type: "Note".to_string(),
-        name: name.to_string(),
-        links: vec![],
-        referenced_dates: vec![],
-        created_at: None,
-        updated_at: None,
-    }
+/// A Create request for a Note named `name`: intent only, the server builds it.
+pub(crate) fn note(name: &str) -> CreateEntityRequest {
+    create_request("Note", name)
 }
 
-/// A new Todo entity as the FE builds it: `content` plus the table's select
-/// defaults (`status = open`, `priority = none`), no tags.
-pub(crate) fn todo(name: &str) -> Entity {
-    let mut entity = note(name);
-    entity.structure_type = "Todo".to_string();
-    for (id, default) in crate::structures::select_defaults("Todo") {
-        entity.properties.push(Property {
-            id: id.to_string(),
-            value: Some(PropertyValue {
-                value: Some(property_value::Value::Select(default.to_string())),
-            }),
-        });
-    }
-    entity
+/// A Create request for a Todo named `name`; the server adds the select defaults.
+pub(crate) fn todo(name: &str) -> CreateEntityRequest {
+    create_request("Todo", name)
 }
 
-/// A new Tag entity (Tags carry no properties).
-pub(crate) fn tag(name: &str) -> Entity {
-    let mut entity = note(name);
-    entity.structure_type = "Tag".to_string();
-    entity.properties.clear();
-    entity
+/// A Create request for a Tag named `name`.
+pub(crate) fn tag(name: &str) -> CreateEntityRequest {
+    create_request("Tag", name)
+}
+
+fn create_request(structure_type: &str, name: &str) -> CreateEntityRequest {
+    CreateEntityRequest {
+        structure_type: structure_type.to_string(),
+        name: Some(name.to_string()),
+        properties: vec![],
+    }
 }

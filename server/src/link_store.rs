@@ -145,7 +145,7 @@ pub(crate) async fn sync_relation_property(
 /// `target_structure`. Ad-hoc properties have no declared target to check.
 /// Refs to ids with no `entities` row are dropped, not rejected: a deleted
 /// target stays in other entities' stored values, and rejecting it would block
-/// every later Update of those entities.
+/// every later write of those relation values.
 async fn check_relation_targets(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     structure_type: &str,

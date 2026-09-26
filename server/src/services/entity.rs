@@ -10,8 +10,8 @@ use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
     EntityRef, GetEntityRequest, LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property,
-    PropertyValue, ResolveEntityRequest, ResolveEntityResponse, RichTextRef, SetPropertyRequest,
-    UpdateEntityRequest, WatchRequest,
+    PropertyValue, RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse, RichTextRef,
+    SetPropertyRequest, WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
 use crate::watch::WatchHub;
@@ -27,8 +27,10 @@ impl EntityService {
         Self { pool, hub, embed }
     }
 
-    /// Insert a brand-new entity (row + properties + links + dates) in one tx and
-    /// return the hydrated result. Shared by Create and Resolve.
+    /// Insert a brand-new entity built by `new_entity` (row, properties, relation
+    /// links and FTS name) in one tx and return the hydrated result. Shared by
+    /// Create and Resolve. A new entity has no content, so no content-derived
+    /// links or referenced dates: those are `RichTextService.Put`'s (ADR 3).
     async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
         let now = chrono::Utc::now().timestamp_millis();
         let date_key = date_key_for(entity);
@@ -46,9 +48,6 @@ impl EntityService {
         .execute(&mut *tx)
         .await?;
         self.replace_properties(&mut tx, entity).await?;
-        self.replace_links(&mut tx, &entity.id, &entity.links).await?;
-        self.replace_referenced_dates(&mut tx, &entity.id, &entity.referenced_dates)
-            .await?;
         sync_relation_links(&mut tx, entity, now).await?;
         fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
         tx.commit().await?;
@@ -74,6 +73,24 @@ impl EntityService {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row)
+    }
+
+    /// `base`, or if a `structure_type` entity already has that name
+    /// (case-insensitively), the first free `"<base> N"` from N = 2. For the
+    /// default name of a `unique_names` structure, so a second "+ New Tag"
+    /// doesn't clash with the first.
+    async fn free_name(&self, structure_type: &str, base: &str) -> Result<String, AppError> {
+        let mut candidate = base.to_string();
+        let mut n = 1;
+        while self
+            .find_by_name(structure_type, &candidate)
+            .await?
+            .is_some()
+        {
+            n += 1;
+            candidate = format!("{base} {n}");
+        }
+        Ok(candidate)
     }
 
     /// The DailyNote for an ISO day, by its `date_key` mirror.
@@ -186,7 +203,7 @@ impl EntityService {
     }
 
     /// Hydrate a full Entity (metadata + properties + links + referenced_dates).
-    /// Shared by Get / Create / Update / List so the read shape is defined once.
+    /// Shared by every RPC that returns an entity, so the read shape is defined once.
     async fn load_entity(&self, id: &str) -> Result<Entity, AppError> {
         load_entity(&self.pool, id).await
     }
@@ -214,74 +231,6 @@ impl EntityService {
                 entity.id,
                 prop.id,
                 blob,
-            )
-            .execute(&mut **tx)
-            .await?;
-        }
-        Ok(())
-    }
-
-    /// Replace an entity's outgoing links wholesale. Used by Create only.
-    ///
-    /// Update intentionally does NOT call this: richtext-sourced links are owned
-    /// by `RichTextService.Put` (scoped by source_property_id, Part 6), so a
-    /// metadata-only Update must not wipe an entity's content-derived links.
-    /// Relation-property links get their own scoped replacement via
-    /// `sync_relation_links`, called separately by both Create and Update.
-    async fn replace_links(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        entity_id: &str,
-        links: &[LinkRef],
-    ) -> Result<(), AppError> {
-        sqlx::query!("DELETE FROM links WHERE entity_id = ?", entity_id)
-            .execute(&mut **tx)
-            .await?;
-
-        for link in links {
-            let target = link
-                .target
-                .as_ref()
-                .ok_or_else(|| AppError::Invalid("link missing target".to_string()))?;
-            let created_at = link
-                .created_at
-                .as_ref()
-                .map(|t| t.seconds * 1000 + (t.nanos as i64) / 1_000_000)
-                .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
-
-            sqlx::query!(
-                "INSERT INTO links (entity_id, link_id, target_id, target_structure, source_property_id, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?)",
-                entity_id,
-                link.id,
-                target.id,
-                target.structure_type,
-                link.source_property_id,
-                created_at,
-            )
-            .execute(&mut **tx)
-            .await?;
-        }
-        Ok(())
-    }
-
-    /// Replace an entity's referenced_dates wholesale. Used by Create only;
-    /// the entity-scoped union is recomputed by `Put` (Part 6) thereafter.
-    async fn replace_referenced_dates(
-        &self,
-        tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-        entity_id: &str,
-        dates: &[String],
-    ) -> Result<(), AppError> {
-        sqlx::query!("DELETE FROM referenced_dates WHERE entity_id = ?", entity_id)
-            .execute(&mut **tx)
-            .await?;
-
-        for iso in dates {
-            sqlx::query!(
-                "INSERT INTO referenced_dates (entity_id, iso_date) VALUES (?, ?)",
-                entity_id,
-                iso,
             )
             .execute(&mut **tx)
             .await?;
@@ -454,7 +403,7 @@ fn validate_selects(entity: &Entity) -> Result<(), AppError> {
 /// a select must hold a `select` value naming one of its options, and a `select`
 /// value is only allowed on a declared select. Structures missing from the
 /// registry have no schema and pass unchecked; other kinds aren't checked.
-/// Shared by Create/Update (via `validate_selects`) and SetProperty.
+/// Shared by Create and Resolve (via `validate_selects`) and SetProperty.
 fn validate_select(structure_type: &str, prop: &Property) -> Result<(), AppError> {
     if structures::structure(structure_type).is_none() {
         return Ok(());
@@ -502,7 +451,8 @@ fn format_long_date(date: &str) -> String {
 }
 
 /// Map a SQLite UNIQUE-constraint failure to a tonic status, else fall back to
-/// the standard AppError -> Status conversion. Used by the DailyNote create path.
+/// the standard AppError -> Status conversion. Used by every write that can hit
+/// `one_daily_note_per_day` or `one_tag_per_name`.
 fn map_unique_violation(err: AppError, msg: &str) -> Status {
     if let AppError::Db(sqlx::Error::Database(ref db)) = err {
         if db.is_unique_violation() {
@@ -520,8 +470,8 @@ fn daily_note_name(date_key: Option<&str>) -> Option<String> {
     date_key.map(format_long_date)
 }
 
-/// Apply `daily_note_name` to a whole entity, for the write paths that see one
-/// (Create, Update and `new_entity`). SetProperty applies it to the one row.
+/// Apply `daily_note_name` to a whole entity, for `new_entity` (and so Create and
+/// Resolve). SetProperty applies it to the one row.
 fn apply_daily_note_name(entity: &mut Entity) {
     if let Some(name) = daily_note_name(date_key_for(entity).as_deref()) {
         entity.name = name;
@@ -532,8 +482,10 @@ fn apply_daily_note_name(entity: &mut Entity) {
 /// id, a `RichTextRef` for each declared rich-text property and each select's
 /// default option, with the caller's `properties` laid over them (the caller wins
 /// on the same id). A caller value for a declared rich-text property is rejected:
-/// the server owns those refs. The name is `name`, or for a DailyNote the one
-/// derived from its date (`apply_daily_note_name`).
+/// the server owns those refs. A DailyNote with a date is named for it
+/// (`apply_daily_note_name`); otherwise the name is `name`, or with none the
+/// structure's `default_name`. The caller makes a `unique_names` default free
+/// (`EntityService::free_name`); this has no database.
 fn new_entity(
     structure_type: &str,
     name: Option<&str>,
@@ -578,7 +530,7 @@ fn new_entity(
     let mut entity = Entity {
         id,
         structure_type: structure_type.to_string(),
-        name: name.unwrap_or_default().to_string(),
+        name: name.map_or_else(|| default_name(structure_type), str::to_string),
         properties: defaults,
         links: vec![],
         referenced_dates: vec![],
@@ -587,6 +539,13 @@ fn new_entity(
     };
     apply_daily_note_name(&mut entity);
     Ok(entity)
+}
+
+/// The name of a new entity created without one: `Untitled <StructureDef.name>`,
+/// e.g. "Untitled To-do". Structures missing from the registry use their type.
+fn default_name(structure_type: &str) -> String {
+    let name = structures::structure(structure_type).map_or(structure_type, |s| s.name);
+    format!("Untitled {name}")
 }
 
 /// A DailyNote's `date` property holding the ISO day `date`.
@@ -637,12 +596,24 @@ impl EntityServiceTrait for EntityService {
         Ok(Response::new(ListEntitiesResponse { entities }))
     }
 
+    // Create by intent (ADR 8): the server builds the entity with `new_entity`,
+    // so a client can't supply its id, links, referenced dates or timestamps.
     async fn create(&self, req: Request<CreateEntityRequest>) -> Result<Response<Entity>, Status> {
-        let mut entity = req
-            .into_inner()
-            .entity
-            .ok_or_else(|| Status::invalid_argument("missing entity"))?;
-        apply_daily_note_name(&mut entity);
+        let CreateEntityRequest {
+            structure_type,
+            name,
+            properties,
+        } = req.into_inner();
+        let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+        let mut entity =
+            new_entity(&structure_type, name.as_deref(), properties).map_err(Status::from)?;
+        let unique_names = structures::structure(&structure_type).is_some_and(|s| s.unique_names);
+        if name.is_none() && unique_names {
+            entity.name = self
+                .free_name(&structure_type, &entity.name)
+                .await
+                .map_err(Status::from)?;
+        }
 
         let saved = self
             .persist_new_entity(&entity)
@@ -654,66 +625,33 @@ impl EntityServiceTrait for EntityService {
         Ok(Response::new(saved))
     }
 
-    async fn update(&self, req: Request<UpdateEntityRequest>) -> Result<Response<Entity>, Status> {
-        let mut entity = req
-            .into_inner()
-            .entity
-            .ok_or_else(|| Status::invalid_argument("missing entity"))?;
-        apply_daily_note_name(&mut entity);
+    // The name (and its FTS row) and updated_at only: properties are untouched,
+    // so a rename doesn't undo a concurrent SetProperty (I-15).
+    async fn rename(&self, req: Request<RenameEntityRequest>) -> Result<Response<Entity>, Status> {
+        let RenameEntityRequest { id, name } = req.into_inner();
         let now = chrono::Utc::now().timestamp_millis();
-        let date_key = date_key_for(&entity);
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
-
-        // An entity's type is fixed at creation: changing it would break property
-        // and link assumptions (e.g. a DailyNote without a `date`). Reject rather
-        // than silently ignore, so the caller learns its request was wrong.
-        let stored_type = sqlx::query_scalar!(
-            "SELECT structure_type FROM entities WHERE id = ?",
-            entity.id
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(AppError::from)?
-        .ok_or_else(|| Status::not_found(format!("entity {}", entity.id)))?;
-        if stored_type != entity.structure_type {
-            return Err(Status::invalid_argument(format!(
-                "cannot change structure_type of entity {} from {} to {}",
-                entity.id, stored_type, entity.structure_type
-            )));
-        }
-
         let updated = sqlx::query!(
-            "UPDATE entities SET name = ?, date_key = ?, updated_at = ? WHERE id = ?",
-            entity.name,
-            date_key,
+            "UPDATE entities SET name = ?, updated_at = ? WHERE id = ?",
+            name,
             now,
-            entity.id,
+            id,
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| map_unique_violation(AppError::from(e), "a DailyNote for this date already exists"))?;
-        // Unknown id: bail before the properties insert trips the foreign key.
+        .map_err(|e| {
+            map_unique_violation(AppError::from(e), &format!("the name {name:?} is taken"))
+        })?;
         if updated.rows_affected() == 0 {
-            return Err(Status::not_found(format!("entity {}", entity.id)));
+            return Err(Status::not_found(format!("entity {id}")));
         }
-
-        self.replace_properties(&mut tx, &entity)
+        fts_upsert_name(&mut tx, &id, &name)
             .await
             .map_err(Status::from)?;
-        // links / referenced_dates intentionally untouched here — see replace_links docs.
-
-        sync_relation_links(&mut tx, &entity, now)
-            .await
-            .map_err(Status::from)?;
-
-        fts_upsert_name(&mut tx, &entity.id, &entity.name)
-            .await
-            .map_err(Status::from)?;
-
         tx.commit().await.map_err(AppError::from)?;
 
-        let saved = self.load_entity(&entity.id).await.map_err(Status::from)?;
+        let saved = self.load_entity(&id).await.map_err(Status::from)?;
         self.hub.publish(EntityEvent {
             event: Some(entity_event::Event::Upserted(saved.clone())),
         });
@@ -722,7 +660,7 @@ impl EntityServiceTrait for EntityService {
 
     // One property row, not the whole entity, so writers editing different
     // properties of the same entity don't undo each other (I-11). Validates the
-    // property with the same checks Create/Update use: `validate_select` (I-9)
+    // property with the same checks Create uses: `validate_select` (I-9)
     // and, through `sync_relation_property`, `check_relation_targets` (I-2).
     // Only a DailyNote's `date` changes the name (and so the FTS name row).
     async fn set_property(
@@ -755,7 +693,7 @@ impl EntityServiceTrait for EntityService {
         .map_err(AppError::from)?
         .ok_or_else(|| Status::not_found(format!("entity {}", entity_id)))?;
 
-        // Clearing is allowed on any property, as omitting it from an Update is.
+        // Clearing is allowed on any property.
         if prop.value.is_some() {
             validate_select(&structure_type, &prop).map_err(Status::from)?;
         }
@@ -970,81 +908,200 @@ impl EntityServiceTrait for EntityService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto::EntityRefList;
-    use crate::test_support::{entity_service, memory_pool, note, tag, todo};
+    use crate::proto::rich_text_service_server::RichTextService as _;
+    use crate::proto::{EntityRefList, RichText};
+    use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag, todo};
 
-    async fn create(svc: &EntityService, entity: Entity) -> Entity {
-        svc.create(Request::new(CreateEntityRequest {
-            entity: Some(entity),
+    async fn create(svc: &EntityService, req: CreateEntityRequest) -> Entity {
+        try_create(svc, req).await.expect("create")
+    }
+
+    async fn try_create(svc: &EntityService, req: CreateEntityRequest) -> Result<Entity, Status> {
+        svc.create(Request::new(req))
+            .await
+            .map(Response::into_inner)
+    }
+
+    /// A Create request with no name, so the server picks the default.
+    fn untitled(structure_type: &str) -> CreateEntityRequest {
+        CreateEntityRequest {
+            structure_type: structure_type.to_string(),
+            name: None,
+            properties: vec![],
+        }
+    }
+
+    async fn rename(svc: &EntityService, id: &str, name: &str) -> Result<Entity, Status> {
+        svc.rename(Request::new(RenameEntityRequest {
+            id: id.to_string(),
+            name: name.to_string(),
         }))
         .await
-        .expect("create")
-        .into_inner()
+        .map(Response::into_inner)
     }
 
-    #[tokio::test]
-    async fn update_renames_existing_entity() {
-        let svc = entity_service(memory_pool().await);
-        let mut entity = create(&svc, note("Before")).await;
-
-        entity.name = "After".to_string();
-        let updated = svc
-            .update(Request::new(UpdateEntityRequest {
-                entity: Some(entity.clone()),
-            }))
+    async fn entity_count(pool: &SqlitePool) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM entities")
+            .fetch_one(pool)
             .await
-            .expect("update")
-            .into_inner();
+            .expect("count entities")
+    }
 
-        assert_eq!(updated.name, "After");
-        assert_eq!(updated.structure_type, "Note");
-        assert_eq!(updated.properties, entity.properties);
-        let stored = svc.load_entity(&entity.id).await.expect("load");
-        assert_eq!(stored.name, "After");
+    fn millis(ts: Option<prost_types::Timestamp>) -> i64 {
+        let ts = ts.expect("timestamp");
+        ts.seconds * 1000 + i64::from(ts.nanos) / 1_000_000
     }
 
     #[tokio::test]
-    async fn update_missing_entity_is_not_found() {
+    async fn create_by_intent_mints_id_defaults_and_name() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
-        // Carries a property, so without the guard the properties insert would
-        // hit the foreign key instead.
-        let entity = note("Ghost");
+        let mut rx = svc.hub.subscribe();
 
-        let err = svc
-            .update(Request::new(UpdateEntityRequest {
-                entity: Some(entity.clone()),
+        let first = create(&svc, untitled("Todo")).await;
+        let second = create(&svc, untitled("Todo")).await;
+
+        assert!(uuid::Uuid::parse_str(&first.id).is_ok(), "{}", first.id);
+        assert_ne!(first.id, second.id);
+        assert_eq!(first.structure_type, "Todo");
+        // Todo names aren't unique, so the default may repeat.
+        assert_eq!(first.name, "Untitled To-do");
+        assert_eq!(second.name, "Untitled To-do");
+        assert_eq!(select_value(&first, "status").as_deref(), Some("open"));
+        assert_eq!(select_value(&first, "priority").as_deref(), Some("none"));
+        let content = first
+            .properties
+            .iter()
+            .find(|p| p.id == "content")
+            .and_then(|p| p.value.as_ref())
+            .and_then(|v| v.value.clone());
+        assert_eq!(
+            content,
+            Some(property_value::Value::Richtext(RichTextRef {
+                entity_id: first.id.clone(),
+                property_id: "content".to_string(),
             }))
+        );
+        // Server-owned fields: no links or dates until content is saved (ADR 3).
+        assert!(first.links.is_empty());
+        assert!(first.referenced_dates.is_empty());
+        assert_eq!(millis(first.created_at), millis(first.updated_at));
+        assert_eq!(fts_name(&pool, &first.id).await, "Untitled To-do");
+        assert_eq!(upserted_ids(&mut rx), [first.id.clone(), second.id.clone()]);
+
+        // A given name is trimmed, and given properties win over the defaults.
+        let named = create(
+            &svc,
+            with_select(todo("  Water plants "), "priority", "high"),
+        )
+        .await;
+        assert_eq!(named.name, "Water plants");
+        assert_eq!(select_value(&named, "priority").as_deref(), Some("high"));
+        assert_eq!(select_value(&named, "status").as_deref(), Some("open"));
+
+        // A blank name is no name.
+        let blank = create(&svc, note("  ")).await;
+        assert_eq!(blank.name, "Untitled Note");
+    }
+
+    #[tokio::test]
+    async fn create_second_untitled_tag_gets_a_free_name() {
+        let svc = entity_service(memory_pool().await);
+        // Taken case-insensitively, so this one is skipped too.
+        create(&svc, tag("UNTITLED TAG 3")).await;
+
+        let names = [
+            create(&svc, untitled("Tag")).await.name,
+            create(&svc, untitled("Tag")).await.name,
+            create(&svc, untitled("Tag")).await.name,
+        ];
+
+        assert_eq!(names, ["Untitled Tag", "Untitled Tag 2", "Untitled Tag 4"]);
+    }
+
+    #[tokio::test]
+    async fn rename_changes_only_the_name() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let urgent = create(&svc, tag("urgent")).await;
+        let entity = create(
+            &svc,
+            with_relations(
+                with_select(todo("Before"), "priority", "high"),
+                "tags",
+                &[(&urgent.id, "Tag")],
+            ),
+        )
+        .await;
+        let mut rx = svc.hub.subscribe();
+
+        let renamed = rename(&svc, &entity.id, "After").await.expect("rename");
+
+        assert_eq!(renamed.name, "After");
+        // No write can change an entity's type (I-3).
+        assert_eq!(renamed.structure_type, "Todo");
+        assert_eq!(renamed.properties, entity.properties);
+        assert_eq!(renamed.links, entity.links);
+        assert_eq!(renamed.created_at, entity.created_at);
+        assert!(millis(renamed.updated_at) >= millis(entity.updated_at));
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored, renamed);
+        assert_eq!(fts_name(&pool, &entity.id).await, "After");
+        assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+    }
+
+    // I-8: an unknown id is NotFound, and nothing is written for it.
+    #[tokio::test]
+    async fn rename_missing_id_is_not_found() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = rename(&svc, "no-such-entity", "Ghost")
             .await
-            .expect_err("update of a missing id should fail");
+            .expect_err("rename of a missing id should fail");
 
         assert_eq!(err.code(), tonic::Code::NotFound);
-        let fts_rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entity_fts WHERE entity_id = ?")
-            .bind(&entity.id)
-            .fetch_one(&pool)
-            .await
-            .expect("count fts");
+        let fts_rows: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM entity_fts WHERE entity_id = ?")
+                .bind("no-such-entity")
+                .fetch_one(&pool)
+                .await
+                .expect("count fts");
         assert_eq!(fts_rows, 0);
     }
 
     #[tokio::test]
-    async fn update_rejects_structure_type_change() {
+    async fn rename_onto_a_taken_tag_name_is_already_exists() {
         let svc = entity_service(memory_pool().await);
-        let mut entity = create(&svc, note("Typed")).await;
+        create(&svc, tag("urgent")).await;
+        let other = create(&svc, tag("later")).await;
 
-        entity.structure_type = "Tag".to_string();
-        entity.name = "Renamed".to_string();
-        let err = svc
-            .update(Request::new(UpdateEntityRequest {
-                entity: Some(entity.clone()),
-            }))
+        let err = rename(&svc, &other.id, "URGENT")
             .await
-            .expect_err("changing structure_type should be rejected");
+            .expect_err("tag names are unique");
 
-        assert_eq!(err.code(), tonic::Code::InvalidArgument);
-        let stored = svc.load_entity(&entity.id).await.expect("load");
-        assert_eq!(stored.structure_type, "Note");
-        assert_eq!(stored.name, "Typed");
+        assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        let stored = svc.load_entity(&other.id).await.expect("load");
+        assert_eq!(stored.name, "later");
+    }
+
+    // I-15's done-when: the agent sets a to-do's status while the browser renames
+    // it; both edits survive.
+    #[tokio::test]
+    async fn rename_concurrent_with_set_property_keeps_both() {
+        let svc = entity_service(memory_pool().await);
+        let snapshot = create(&svc, todo("Water plants")).await;
+
+        set_property(&svc, &snapshot.id, "status", select("done"))
+            .await
+            .expect("agent sets status");
+        rename(&svc, &snapshot.id, "Water the plants")
+            .await
+            .expect("browser renames");
+
+        let stored = svc.load_entity(&snapshot.id).await.expect("load");
+        assert_eq!(stored.name, "Water the plants");
+        assert_eq!(select_value(&stored, "status").as_deref(), Some("done"));
     }
 
     fn select_value(entity: &Entity, property_id: &str) -> Option<String> {
@@ -1059,74 +1116,52 @@ mod tests {
             })
     }
 
-    fn with_select(mut entity: Entity, property_id: &str, key: &str) -> Entity {
-        let value = Some(PropertyValue {
-            value: Some(property_value::Value::Select(key.to_string())),
+    /// `req` with `property_id` set to `value`, replacing any earlier value.
+    fn with_value(
+        mut req: CreateEntityRequest,
+        property_id: &str,
+        value: property_value::Value,
+    ) -> CreateEntityRequest {
+        req.properties.retain(|p| p.id != property_id);
+        req.properties.push(Property {
+            id: property_id.to_string(),
+            value: Some(PropertyValue { value: Some(value) }),
         });
-        match entity.properties.iter_mut().find(|p| p.id == property_id) {
-            Some(p) => p.value = value,
-            None => entity.properties.push(Property {
-                id: property_id.to_string(),
-                value,
-            }),
-        }
-        entity
+        req
     }
 
-    #[tokio::test]
-    async fn update_rejects_unknown_select_value() {
-        let svc = entity_service(memory_pool().await);
-        let entity = create(&svc, todo("Water plants")).await;
-
-        let err = svc
-            .update(Request::new(UpdateEntityRequest {
-                entity: Some(with_select(entity.clone(), "status", "banana")),
-            }))
-            .await
-            .expect_err("unknown status should be rejected");
-
-        assert_eq!(err.code(), tonic::Code::InvalidArgument);
-        assert!(err.message().contains("banana"), "{}", err.message());
-        let stored = svc.load_entity(&entity.id).await.expect("load");
-        assert_eq!(select_value(&stored, "status").as_deref(), Some("open"));
+    fn with_select(req: CreateEntityRequest, property_id: &str, key: &str) -> CreateEntityRequest {
+        with_value(
+            req,
+            property_id,
+            property_value::Value::Select(key.to_string()),
+        )
     }
 
-    #[tokio::test]
-    async fn update_accepts_declared_select_value() {
-        let svc = entity_service(memory_pool().await);
-        let entity = create(&svc, todo("Water plants")).await;
-
-        let updated = svc
-            .update(Request::new(UpdateEntityRequest {
-                entity: Some(with_select(entity, "status", "done")),
-            }))
-            .await
-            .expect("update")
-            .into_inner();
-
-        assert_eq!(select_value(&updated, "status").as_deref(), Some("done"));
+    fn with_relations(
+        req: CreateEntityRequest,
+        property_id: &str,
+        refs: &[(&str, &str)],
+    ) -> CreateEntityRequest {
+        let value = tags_value(refs).expect("relations value");
+        with_value(req, property_id, value)
     }
 
     #[tokio::test]
     async fn create_rejects_unknown_select_value() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
-        let entity = with_select(todo("Water plants"), "priority", "urgent");
 
-        let err = svc
-            .create(Request::new(CreateEntityRequest {
-                entity: Some(entity.clone()),
-            }))
-            .await
-            .expect_err("unknown priority should be rejected");
+        let err = try_create(
+            &svc,
+            with_select(todo("Water plants"), "priority", "urgent"),
+        )
+        .await
+        .expect_err("unknown priority should be rejected");
 
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
-        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entities WHERE id = ?")
-            .bind(&entity.id)
-            .fetch_one(&pool)
-            .await
-            .expect("count entities");
-        assert_eq!(rows, 0);
+        assert!(err.message().contains("urgent"), "{}", err.message());
+        assert_eq!(entity_count(&pool).await, 0);
     }
 
     #[tokio::test]
@@ -1134,28 +1169,18 @@ mod tests {
         let svc = entity_service(memory_pool().await);
 
         // A select on a property the structure doesn't declare as one.
-        let err = svc
-            .create(Request::new(CreateEntityRequest {
-                entity: Some(with_select(note("Stray"), "status", "open")),
-            }))
+        let err = try_create(&svc, with_select(note("Stray"), "status", "open"))
             .await
             .expect_err("select on a non-select property should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
 
         // A declared select holding some other kind of value.
-        let mut entity = todo("Mistyped");
-        let status = entity
-            .properties
-            .iter_mut()
-            .find(|p| p.id == "status")
-            .expect("status");
-        status.value = Some(PropertyValue {
-            value: Some(property_value::Value::Text("open".to_string())),
-        });
-        let err = svc
-            .create(Request::new(CreateEntityRequest {
-                entity: Some(entity),
-            }))
+        let mistyped = with_value(
+            todo("Mistyped"),
+            "status",
+            property_value::Value::Text("open".to_string()),
+        );
+        let err = try_create(&svc, mistyped)
             .await
             .expect_err("text on a select property should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
@@ -1163,67 +1188,35 @@ mod tests {
         // Structures outside the registry have no schema to check against.
         let mut custom = with_select(note("Custom"), "mood", "whatever");
         custom.structure_type = "Custom".to_string();
-        svc.create(Request::new(CreateEntityRequest {
-            entity: Some(custom),
-        }))
-        .await
-        .expect("unknown structure is unchecked");
+        try_create(&svc, custom)
+            .await
+            .expect("unknown structure is unchecked");
     }
 
-    fn with_relations(mut entity: Entity, property_id: &str, refs: &[(&str, &str)]) -> Entity {
-        let value = Some(PropertyValue {
-            value: Some(property_value::Value::Relations(EntityRefList {
-                refs: refs
-                    .iter()
-                    .map(|(id, structure_type)| EntityRef {
-                        id: id.to_string(),
-                        structure_type: structure_type.to_string(),
-                    })
-                    .collect(),
-            })),
-        });
-        entity.properties.retain(|p| p.id != property_id);
-        entity.properties.push(Property {
-            id: property_id.to_string(),
-            value,
-        });
-        entity
-    }
-
-    async fn update(svc: &EntityService, entity: Entity) -> Result<Entity, Status> {
-        svc.update(Request::new(UpdateEntityRequest {
-            entity: Some(entity),
-        }))
-        .await
-        .map(Response::into_inner)
-    }
-
-    /// (target_id, target_structure) of an entity's links from `property_id`.
+    /// (target_id, target_structure) of an entity's links from `property_id`, sorted.
     fn link_targets(entity: &Entity, property_id: &str) -> Vec<(String, String)> {
-        entity
+        let mut targets: Vec<_> = entity
             .links
             .iter()
             .filter(|l| l.source_property_id == property_id)
             .filter_map(|l| l.target.as_ref())
             .map(|t| (t.id.clone(), t.structure_type.clone()))
-            .collect()
+            .collect();
+        targets.sort();
+        targets
     }
 
     #[tokio::test]
-    async fn update_rejects_note_in_todo_tags() {
-        let svc = entity_service(memory_pool().await);
+    async fn create_rejects_note_in_todo_tags() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
         let urgent = create(&svc, tag("urgent")).await;
         let other = create(&svc, note("Not a tag")).await;
-        let todo = create(
-            &svc,
-            with_relations(todo("Water plants"), "tags", &[(&urgent.id, "Tag")]),
-        )
-        .await;
 
-        let err = update(
+        let err = try_create(
             &svc,
             with_relations(
-                todo.clone(),
+                todo("Water plants"),
                 "tags",
                 &[(&urgent.id, "Tag"), (&other.id, "Note")],
             ),
@@ -1233,27 +1226,23 @@ mod tests {
 
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
         assert!(err.message().contains("tags"), "{}", err.message());
-        let stored = svc.load_entity(&todo.id).await.expect("load");
-        assert_eq!(stored.properties, todo.properties);
-        assert_eq!(
-            link_targets(&stored, "tags"),
-            [(urgent.id.clone(), "Tag".to_string())]
-        );
+        assert_eq!(entity_count(&pool).await, 2);
     }
 
     #[tokio::test]
     async fn tag_in_todo_tags_links_with_its_real_type() {
         let svc = entity_service(memory_pool().await);
         let urgent = create(&svc, tag("urgent")).await;
-        let todo = create(&svc, todo("Water plants")).await;
 
         // An empty claimed type is allowed; the link still records the real one.
-        let updated = update(&svc, with_relations(todo, "tags", &[(&urgent.id, "")]))
-            .await
-            .expect("update");
+        let todo = create(
+            &svc,
+            with_relations(todo("Water plants"), "tags", &[(&urgent.id, "")]),
+        )
+        .await;
 
         assert_eq!(
-            link_targets(&updated, "tags"),
+            link_targets(&todo, "tags"),
             [(urgent.id.clone(), "Tag".to_string())]
         );
     }
@@ -1266,24 +1255,28 @@ mod tests {
 
         // Claims a Tag in a declared Tag-only property, but the target is a Note.
         let todo = create(&svc, todo("Water plants")).await;
-        let err = update(&svc, with_relations(todo, "tags", &[(&target.id, "Tag")]))
+        let err = set_property(&svc, &todo.id, "tags", tags_value(&[(&target.id, "Tag")]))
             .await
             .expect_err("lying claimed type should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
 
         // Ad-hoc properties have no declared target, but the claim is still checked...
-        let err = update(
+        let err = set_property(
             &svc,
-            with_relations(source.clone(), "related", &[(&target.id, "Tag")]),
+            &source.id,
+            "related",
+            tags_value(&[(&target.id, "Tag")]),
         )
         .await
         .expect_err("lying claimed type on an ad-hoc property should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
 
         // ...and a truthful one links with the real type.
-        let updated = update(
+        let updated = set_property(
             &svc,
-            with_relations(source, "related", &[(&target.id, "Note")]),
+            &source.id,
+            "related",
+            tags_value(&[(&target.id, "Note")]),
         )
         .await
         .expect("ad-hoc relation to any structure");
@@ -1294,12 +1287,14 @@ mod tests {
     }
 
     // A deleted Tag stays in the Todo's stored `tags` value (Delete only sweeps
-    // links), and every Update resends it, so a dead ref must not block the write.
+    // links), and a tag edit resends the whole list, so a dead ref must not block
+    // the write.
     #[tokio::test]
-    async fn dead_relation_ref_does_not_block_update() {
+    async fn dead_relation_ref_does_not_block_set_property() {
         let svc = entity_service(memory_pool().await);
         let gone = create(&svc, tag("gone")).await;
         let kept = create(&svc, tag("kept")).await;
+        let added = create(&svc, tag("added")).await;
         let todo = create(
             &svc,
             with_relations(
@@ -1314,17 +1309,22 @@ mod tests {
         }))
         .await
         .expect("delete tag");
-        let todo = svc.load_entity(&todo.id).await.expect("load");
 
-        let updated = update(&svc, with_select(todo, "status", "done"))
-            .await
-            .expect("status change with a dead tag ref");
+        let updated = set_property(
+            &svc,
+            &todo.id,
+            "tags",
+            tags_value(&[(&gone.id, "Tag"), (&kept.id, "Tag"), (&added.id, "Tag")]),
+        )
+        .await
+        .expect("tag edit with a dead tag ref");
 
-        assert_eq!(select_value(&updated, "status").as_deref(), Some("done"));
-        assert_eq!(
-            link_targets(&updated, "tags"),
-            [(kept.id.clone(), "Tag".to_string())]
-        );
+        let mut expected = vec![
+            (kept.id.clone(), "Tag".to_string()),
+            (added.id.clone(), "Tag".to_string()),
+        ];
+        expected.sort();
+        assert_eq!(link_targets(&updated, "tags"), expected);
     }
 
     async fn set_property(
@@ -1375,26 +1375,6 @@ mod tests {
         let stored = svc.load_entity(&snapshot.id).await.expect("load");
         assert_eq!(select_value(&stored, "status").as_deref(), Some("done"));
         assert_eq!(select_value(&stored, "priority").as_deref(), Some("high"));
-    }
-
-    // The contrast: Update resends every property, so a writer holding a stale
-    // snapshot silently reverts the other writer's edit. Kept for renames and
-    // multi-field edits only.
-    #[tokio::test]
-    async fn update_from_a_stale_snapshot_loses_a_concurrent_edit() {
-        let svc = entity_service(memory_pool().await);
-        let snapshot = create(&svc, todo("Water plants")).await;
-
-        set_property(&svc, &snapshot.id, "status", select("done"))
-            .await
-            .expect("writer A");
-        update(&svc, with_select(snapshot.clone(), "priority", "high"))
-            .await
-            .expect("writer B");
-
-        let stored = svc.load_entity(&snapshot.id).await.expect("load");
-        assert_eq!(select_value(&stored, "priority").as_deref(), Some("high"));
-        assert_eq!(select_value(&stored, "status").as_deref(), Some("open"));
     }
 
     #[tokio::test]
@@ -1452,23 +1432,35 @@ mod tests {
 
     #[tokio::test]
     async fn set_property_clear_removes_only_that_property_and_its_links() {
-        let svc = entity_service(memory_pool().await);
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
         let urgent = create(&svc, tag("urgent")).await;
         let mentioned = create(&svc, note("Mentioned")).await;
-        // Create persists `links` as given, standing in for RichTextService.Put's
-        // content-derived links.
-        let mut entity = with_relations(todo("Water plants"), "tags", &[(&urgent.id, "Tag")]);
-        entity.links.push(LinkRef {
-            id: uuid::Uuid::new_v4().to_string(),
-            target: Some(EntityRef {
-                id: mentioned.id.clone(),
-                structure_type: "Note".to_string(),
-            }),
-            source_property_id: "content".to_string(),
-            created_at: None,
-        });
-        let entity = create(&svc, entity).await;
+        let entity = create(
+            &svc,
+            with_relations(todo("Water plants"), "tags", &[(&urgent.id, "Tag")]),
+        )
+        .await;
+        // Content that mentions a note, for content-derived links to keep.
+        let doc = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{{"type":"mention","attrs":{{"id":"{}","structureType":"Note"}}}}]}}]}}"#,
+            mentioned.id
+        );
+        richtext_service(pool.clone(), WatchHub::new())
+            .put(Request::new(RichText {
+                r#ref: Some(RichTextRef {
+                    entity_id: entity.id.clone(),
+                    property_id: "content".to_string(),
+                }),
+                doc,
+                updated_at: None,
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put content");
+        let entity = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(link_targets(&entity, "tags").len(), 1);
+        assert_eq!(link_targets(&entity, "content").len(), 1);
 
         let cleared = set_property(&svc, &entity.id, "tags", None)
             .await
@@ -1511,9 +1503,13 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::NotFound);
     }
 
-    /// A new DailyNote for `date`, built by the server's default builder.
-    fn daily_note(date: &str) -> Entity {
-        new_entity("DailyNote", None, vec![date_property(date)]).expect("daily note")
+    /// A Create request for a DailyNote on `date`.
+    fn daily_note(date: &str) -> CreateEntityRequest {
+        CreateEntityRequest {
+            structure_type: "DailyNote".to_string(),
+            name: None,
+            properties: vec![date_property(date)],
+        }
     }
 
     fn date(d: &str) -> Option<property_value::Value> {
@@ -1599,24 +1595,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn create_and_update_derive_daily_note_name() {
+    async fn create_derives_daily_note_name() {
         let svc = entity_service(memory_pool().await);
-        let mut entity = daily_note("2026-06-13");
-        entity.name = "Client name".to_string();
+        let mut req = daily_note("2026-06-13");
+        req.name = Some("Client name".to_string());
 
-        let created = create(&svc, entity).await;
+        let created = create(&svc, req).await;
+
         assert_eq!(created.name, "June 13, 2026");
-
-        let mut moved = with_date(created, "2026-06-14");
-        moved.name = "Stale name".to_string();
-        let updated = update(&svc, moved).await.expect("update");
-        assert_eq!(updated.name, "June 14, 2026");
-    }
-
-    fn with_date(mut entity: Entity, d: &str) -> Entity {
-        entity.properties.retain(|p| p.id != "date");
-        entity.properties.push(date_property(d));
-        entity
     }
 
     #[tokio::test]
