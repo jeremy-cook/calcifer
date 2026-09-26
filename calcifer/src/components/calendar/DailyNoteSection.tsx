@@ -48,7 +48,7 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
       const existing = dailyNoteByDate(getEntitiesSnapshot(), iso)
       if (!existing) return
       const ref = contentRichTextRef(existing)
-      const doc = ref ? getRichTextSnapshot(ref) : undefined
+      const doc = ref ? getRichTextSnapshot(ref)?.doc : undefined
       if (isRichTextEmpty(doc)) {
         deleteEntityImperative(existing.id)
       }

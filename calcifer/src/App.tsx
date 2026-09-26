@@ -4,6 +4,7 @@ import { QueryClientProvider, useQuery } from '@tanstack/react-query'
 import { router } from '~/router'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { structuresQuery } from '~/model/structures'
+import { writeRichTextIfNewer } from '~/model/richtext'
 
 // Long-lived Watch loop: server EntityEvents feed the cache so any open tab
 // (and the MCP agent's writes) reflect live without polling. Also warms the
@@ -27,6 +28,8 @@ function useWatchSync() {
             } else if (event.event.case === 'deletedId') {
               queryClient.removeQueries({ queryKey: qk.entity(event.event.value) })
               void queryClient.invalidateQueries({ queryKey: ['entities'] })
+            } else if (event.event.case === 'richTextChanged') {
+              writeRichTextIfNewer(event.event.value)
             }
           }
         } catch (err) {

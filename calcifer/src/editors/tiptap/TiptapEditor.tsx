@@ -1,5 +1,7 @@
+import { useEffect, useRef, type ReactNode } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
-import type { Content, JSONContent } from '@tiptap/core'
+import type { Content, Editor, JSONContent } from '@tiptap/core'
+import { Selection, TextSelection } from '@tiptap/pm/state'
 import { DragHandle as DragHandleReact } from '@tiptap/extension-drag-handle-react'
 import { StarterKit } from '@tiptap/starter-kit'
 import { Placeholder } from '@tiptap/extension-placeholder'
@@ -41,10 +43,17 @@ import { TableActionMenu } from './components/table/TableActionMenu'
 import { ImageActionMenu } from './components/image/ImageActionMenu'
 
 interface TiptapEditorProps {
+  // Initial content only; later changes come in through externalDoc.
   doc?: string
+  // Replaces the content (without emitting onUpdate) whenever externalVersion
+  // changes after mount.
+  externalDoc?: string
+  externalVersion?: number
   onUpdate?: (docJSON: JSONContent) => void
   autoFocus?: boolean
   hideToolbar?: boolean
+  // Rendered between the toolbar and the content, e.g. a status note.
+  notice?: ReactNode
 }
 
 function parseDoc(doc: string | undefined): Content {
@@ -52,7 +61,35 @@ function parseDoc(doc: string | undefined): Content {
   return doc.length > 0 ? (JSON.parse(doc) as JSONContent) : null
 }
 
-export function TiptapEditor({ doc, onUpdate, autoFocus, hideToolbar }: TiptapEditorProps) {
+const EMPTY_DOC: JSONContent = { type: 'doc', content: [{ type: 'paragraph' }] }
+
+// Swap in `doc` as one transaction that neither emits `update` nor lands in the
+// undo history. The cursor stays put if it still fits, else goes to the end.
+function replaceContent(editor: Editor, doc: string) {
+  const { from, to } = editor.state.selection
+  editor
+    .chain()
+    .setMeta('addToHistory', false)
+    .setContent(parseDoc(doc) ?? EMPTY_DOC, { emitUpdate: false })
+    .command(({ tr }) => {
+      const size = tr.doc.content.size
+      const selection =
+        to <= size ? TextSelection.between(tr.doc.resolve(from), tr.doc.resolve(to)) : Selection.atEnd(tr.doc)
+      tr.setSelection(selection)
+      return true
+    })
+    .run()
+}
+
+export function TiptapEditor({
+  doc,
+  externalDoc,
+  externalVersion,
+  onUpdate,
+  autoFocus,
+  hideToolbar,
+  notice,
+}: TiptapEditorProps) {
   const editor = useEditor({
     shouldRerenderOnTransaction: false,
     autofocus: autoFocus ? 'end' : false,
@@ -127,11 +164,21 @@ export function TiptapEditor({ doc, onUpdate, autoFocus, hideToolbar }: TiptapEd
     },
   })
 
+  // The version mounted with `doc` counts as applied.
+  const appliedVersionRef = useRef(externalVersion)
+  useEffect(() => {
+    if (!editor || externalDoc === undefined) return
+    if (externalVersion === appliedVersionRef.current) return
+    appliedVersionRef.current = externalVersion
+    replaceContent(editor, externalDoc)
+  }, [editor, externalDoc, externalVersion])
+
   if (!editor) return null
 
   return (
     <div className="flex h-full w-full flex-col border border-border">
       {!hideToolbar && <Toolbar editor={editor} />}
+      {notice}
       <TableActionMenu editor={editor} />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <DragHandleReact editor={editor}>
