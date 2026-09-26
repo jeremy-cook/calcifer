@@ -105,7 +105,17 @@ impl RichTextServiceTrait for RichTextService {
             .ok_or_else(|| Status::invalid_argument("richtext missing ref"))?;
         let now = chrono::Utc::now().timestamp_millis();
 
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        // IMMEDIATE takes the write lock before the expectation check reads. A DEFERRED
+        // transaction that has already read can't upgrade to a writer once another
+        // connection commits: SQLite returns SQLITE_BUSY at once, ignoring
+        // busy_timeout, so a racing Put would fail as Internal. With IMMEDIATE the
+        // loser waits on busy_timeout, then reads the winner's updated_at and fails
+        // with FailedPrecondition (I-37).
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(AppError::from)?;
 
         // 0. Validate the target and check the caller's expectation against what's stored.
         check_declared(&mut tx, &r).await?;
@@ -472,6 +482,48 @@ mod tests {
             }
             last = Some(ts);
         }
+    }
+
+    /// Removes a scratch SQLite file and its WAL sidecars when dropped, so the
+    /// file is cleaned up even if the test panics.
+    struct ScratchDb(std::path::PathBuf);
+
+    impl Drop for ScratchDb {
+        fn drop(&mut self) {
+            for suffix in ["", "-wal", "-shm"] {
+                let mut path = self.0.clone().into_os_string();
+                path.push(suffix);
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+
+    // `memory_pool` has a single connection, so the race needs a real file-backed
+    // pool (WAL, busy_timeout, several connections) as `main.rs` opens it.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn racing_conditional_puts_give_one_success_and_one_conflict() {
+        let scratch = ScratchDb(
+            std::env::temp_dir().join(format!("calcifer-race-{}.db", uuid::Uuid::new_v4())),
+        );
+        let url = format!("sqlite://{}", scratch.0.display());
+        let pool = crate::db::connect(&url).await.expect("open file pool");
+        let svc = richtext_service(pool.clone(), WatchHub::new());
+        let entity = create(&pool, note("N")).await;
+        let r = rt_ref(&entity.id, "content");
+        let seeded = put(&svc, r.clone(), DOC_A, None).await.expect("seed put");
+
+        let (a, b) = tokio::join!(
+            put(&svc, r.clone(), DOC_B, seeded.updated_at),
+            put(&svc, r.clone(), DOC_B, seeded.updated_at),
+        );
+
+        let codes: Vec<Option<tonic::Code>> =
+            [&a, &b].iter().map(|res| res.as_ref().err().map(Status::code)).collect();
+        assert!(
+            codes.contains(&None) && codes.contains(&Some(tonic::Code::FailedPrecondition)),
+            "expected one success and one FailedPrecondition, got {a:?} and {b:?}"
+        );
+        pool.close().await;
     }
 
     #[tokio::test]
