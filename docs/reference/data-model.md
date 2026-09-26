@@ -175,8 +175,10 @@ All of this is recomputed server-side on write; none of it is client-authored. S
   link row but aren't rejected (a deleted target stays in stored values).
 - **`referenced_dates`** — entity-scoped; the union of date chips across all of the
   entity's richtext documents, recomputed per save.
-- **Backlinks** — never stored. Derived by `EntityService.ListBacklinks` via
-  `SELECT DISTINCT entity_id FROM links WHERE target_id = ?`.
+- **Backlinks** — never stored. Derived by `EntityService.ListBacklinks` from the
+  `links` rows whose `target_id` is the entity, one `Backlink` per row. A source
+  linking to itself is excluded, on the server and in the frontend's backlinks panel
+  (`calcifer/src/model/backlinks.ts`) alike.
 - **Deletion** — mention chips in other documents survive as clickable tombstones; the
   server sweeps `links WHERE target_id = ?` to keep the relational index clean.
 
@@ -201,8 +203,19 @@ service EntityService {
   rpc Watch(WatchRequest) returns (stream EntityEvent);
   // Get-or-create by a name or a day; see below.
   rpc Resolve(ResolveEntityRequest) returns (ResolveEntityResponse);
-  rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);  // for the agent
+  // For the agent. One Backlink per link row pointing at entity_id, self-links
+  // excluded; newest created_at first, then source id, then link id. NOT_FOUND
+  // for an unknown entity_id.
+  rpc ListBacklinks(ListBacklinksRequest) returns (ListBacklinksResponse);
 }
+
+message ListBacklinksRequest { string entity_id = 1; }
+message Backlink {
+  Entity source = 1;                          // the entity whose content/relations link here
+  string source_property_id = 2;              // which property the link came from
+  google.protobuf.Timestamp created_at = 3;   // when that link was first derived
+}
+message ListBacklinksResponse { repeated Backlink backlinks = 1; }
 
 message ResolveEntityRequest {
   string structure_type = 1;   // required for `name`; must be "" or "DailyNote" for `date`

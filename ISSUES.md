@@ -79,24 +79,6 @@ rejects creating a non-creatable structure and renaming a non-name-editable enti
 
 ---
 
-### I-30 · `ListBacklinks` takes the wrong request and returns too little · low · confirmed
-
-**Where:** `proto/calcifer/v1/services.proto:24`, `server/src/services/entity.rs:815-835` (`list_backlinks`), `mcp-server/src/tools.ts:35`, `calcifer/src/model/backlinks.ts:40`
-
-**Problem:** It takes an `EntityRef` but reads only `id`, so the MCP server fills in
-`structureType: ''`. It returns plain entities with no link details (which property the
-link came from, or when). The frontend never calls it and works out backlinks itself,
-and the two disagree: the frontend excludes an entity linking to itself, the server
-doesn't.
-
-**Fix:** Use `ListBacklinksRequest { entity_id }`, or state that this RPC is only for the
-agent (see I-27). Make both paths agree on self-links.
-
-**Done when:** `ListBacklinks` takes a request with only `entity_id` (or is documented as
-agent-only), and the server and frontend agree on self-links.
-
----
-
 ### I-31 · The API contract is undocumented · low · confirmed
 
 **Where:** `proto/calcifer/v1/entities.proto`, `server/src/links.rs:30,52-70`, `mcp-server/src/markdown/` (TipTap conversion)
@@ -384,6 +366,7 @@ published last.
 
 ## Resolved
 
+- **I-30 · `ListBacklinks` takes the wrong request and returns too little.** Fixed 2026-09-26. `ListBacklinks` takes `ListBacklinksRequest { entity_id }` and returns one `Backlink { source, source_property_id, created_at }` per link row, newest `created_at` first (then source id, then link id), and is documented as agent-only. Self-links are excluded on the server as in the frontend's `selectBacklinks`; an unknown `entity_id` is `NOT_FOUND`. Sources are hydrated in one batch (`load_entities_by_id`) instead of `load_entity` per source. The MCP server folds rows into one entry per source and `get_backlinks` names the linking properties when any isn't `content`. Covered by `list_backlinks_excludes_self_links`, `list_backlinks_reports_property_and_time_newest_first` and `list_backlinks_of_missing_entity_is_not_found`. Not yet run through the MCP server against a scratch DB.
 - **I-29 · Search has two RPCs for one job.** Fixed 2026-09-26. `Retrieve` and `RetrieveRequest` are gone; `Search` takes a `SearchMode` (lexical, semantic, hybrid; unspecified means hybrid, the MCP tool's default), and semantic or hybrid with embeddings off behave as lexical. Snippets are plain text: FTS5 marks matches with private-use code points, which the server strips into `SearchHit.matches`, half-open UTF-16 ranges; a vector-only hit has no snippet and no matches. `search_notes` makes one `Search` call and bolds matches with `**`. Hits are hydrated in one batch (`load_entities_by_id`, four queries) instead of `load_entity` per hit. Covered by `search_dispatches_on_mode`, `semantic_and_hybrid_fall_back_to_lexical_without_embeddings`, `match_ranges_count_utf16_units_after_non_ascii_text`, `snippets_carry_no_bracket_markers` and `hits_hydrate_as_load_entity_in_rank_order_and_skip_stale_rows`. Observed 2026-09-26 against a scratch DB through the MCP server's `searchNotes`: lexical and hybrid snippets are plain text with `**bold**` matches, and semantic mode ranks the right note first for a paraphrase.
 - **I-28 · `repeated Property` should be `map<string, PropertyValue>`.** Fixed 2026-09-26. `Entity.properties` and `CreateEntityRequest.properties` are `map<string, PropertyValue>` (same field number, wire-compatible) and the `Property` message is gone, so an entity can't carry two values for one id. The server reads and writes the map (prost `HashMap`); nothing depended on property order, and `sync_relation_links` visits ad-hoc relation properties in id order. A `Create` map entry whose value has no case is `INVALID_ARGUMENT` ("property missing value"), as an entry with no value was before (`create_with_an_empty_property_value_is_invalid_argument`). The browser reads `entity.properties[id]` (the MCP server reads no entity properties); `withProperty` copies the map before setting or deleting a key. No consumer scans an entity's properties any more.
 - **I-27 · Watch isn't built for keeping a full copy in sync.** Fixed 2026-09-26. Watch opens every stream with a snapshot, numbers events with a revision and sends a fresh snapshot to a subscriber that lags (T14, ADR 9). The browser's entity list is a replica fed only by Watch (`model/sync.ts`): `entitiesQuery` resolves with the first snapshot and never calls `List`; later snapshots replace the list, reset cached entities and refetch open rich-text docs; upserts and deletes are applied in place; a reconnect resyncs from its snapshot. Mutations write the server's response through the same `writeEntity` / `removeEntity`, and nothing invalidates the list, so an edit no longer reloads it. `useEntity` seeds from the replica and only calls `Get` before the first snapshot. The Vite dev proxy now ends a proxied stream whose upstream dies, so a tab notices a server restart and reconnects; any other proxy put in front of the server needs the same behaviour. Observed 2026-09-26 on a scratch DB: no `EntityService/List` after startup, typing sends only `Put`, a second tab sees creates and status changes live, and after a server restart the tab reconnected and showed an edit made while the server was down. Publish order can still differ from commit order (I-49).
