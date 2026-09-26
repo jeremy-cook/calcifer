@@ -608,21 +608,26 @@ fn validate_property(
             _ => Ok(()),
         };
     };
-    if def.kind == PropertyKind::Richtext {
+    // Exhaustive, so a new kind must decide how it's checked.
+    let expected = match def.kind {
+        PropertyKind::Richtext => {
+            return Err(AppError::Invalid(format!(
+                "{structure_type}.{property_id} is a rich-text property and takes no value; \
+                 its document is read and written with RichTextService"
+            )));
+        }
+        PropertyKind::Select => return validate_select(structure_type, def, value),
+        PropertyKind::Text => "text",
+        PropertyKind::Number => "number",
+        PropertyKind::Date => "date",
+        PropertyKind::Relation => "relation",
+        PropertyKind::Relations => "relations",
+    };
+    let got = value.map(case_name);
+    if got != Some(expected) {
         return Err(AppError::Invalid(format!(
-            "{structure_type}.{property_id} is a rich-text property and takes no value; \
-             its document is read and written with RichTextService"
-        )));
-    }
-    if def.kind == PropertyKind::Select {
-        return validate_select(structure_type, def, value);
-    }
-    let got = value.map(value_kind);
-    if got != Some(def.kind) {
-        return Err(AppError::Invalid(format!(
-            "{structure_type}.{property_id} must be a {} value, got {}",
-            kind_name(def.kind),
-            got.map_or("no value", kind_name)
+            "{structure_type}.{property_id} must be a {expected} value, got {}",
+            got.unwrap_or("no value")
         )));
     }
     Ok(())
@@ -652,29 +657,16 @@ fn validate_select(
     Ok(())
 }
 
-/// The `PropertyKind` a value's case belongs to.
-fn value_kind(value: &property_value::Value) -> PropertyKind {
+/// A value's case as it is spelled in the proto, which is also the name of the
+/// `PropertyKind` that takes it.
+fn case_name(value: &property_value::Value) -> &'static str {
     match value {
-        property_value::Value::Text(_) => PropertyKind::Text,
-        property_value::Value::Number(_) => PropertyKind::Number,
-        property_value::Value::Date(_) => PropertyKind::Date,
-        property_value::Value::Select(_) => PropertyKind::Select,
-        property_value::Value::Relation(_) => PropertyKind::Relation,
-        property_value::Value::Relations(_) => PropertyKind::Relations,
-    }
-}
-
-/// A kind's name as its `PropertyValue` case is spelled in the proto. Rich text
-/// has no case (I-22); `validate_property` rejects its values before naming it.
-fn kind_name(kind: PropertyKind) -> &'static str {
-    match kind {
-        PropertyKind::Richtext => "richtext",
-        PropertyKind::Text => "text",
-        PropertyKind::Number => "number",
-        PropertyKind::Date => "date",
-        PropertyKind::Select => "select",
-        PropertyKind::Relation => "relation",
-        PropertyKind::Relations => "relations",
+        property_value::Value::Text(_) => "text",
+        property_value::Value::Number(_) => "number",
+        property_value::Value::Date(_) => "date",
+        property_value::Value::Select(_) => "select",
+        property_value::Value::Relation(_) => "relation",
+        property_value::Value::Relations(_) => "relations",
     }
 }
 
