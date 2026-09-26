@@ -37,6 +37,7 @@ function compareBacklinks(a: Backlink, b: Backlink, structureIndex: Record<strin
 export function selectBacklinks(entities: Entity[], targetEntityId: string): Backlink[] {
   const results: Backlink[] = []
   for (const source of entities) {
+    // Self-links are excluded, matching the server's EntityService.ListBacklinks.
     if (source.id === targetEntityId) continue
     const ms = mostRecentLinkMillis(source.links, targetEntityId)
     if (ms === 0) continue
