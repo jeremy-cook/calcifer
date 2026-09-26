@@ -93,8 +93,8 @@ Remember the Node PATH pin before any pnpm command:
   URL (it compiles against the empty DB and fails) or the `sqlx` CLI (it can't load
   `vec0`). This needs `:8080` free. If the user's own server (or another project) holds
   it, ask the user before stopping it.
-- **Before the first server boot after T12**, back up `server/calcifer.db`, because T12's
-  migration deletes rows. Only boot against it once gate G2 is cleared.
+- **Before the first server boot after T12**, gate G2 must be cleared, because T12's
+  migration deletes rows. The user waived the backup (D5).
 - For browser checks, use the `run` skill or the Firefox devtools tools. The
   `mcp__calcifer__*` tools act as "the agent" for concurrency checks, e.g. append to a
   note while it's open in the browser. They talk to whichever server is on `:8080`, so
@@ -139,7 +139,7 @@ answer and the date.
 | D2 | Should name lookup require unique names, or be deterministic (A7)? | Deterministic: the oldest `created_at` wins (id breaks ties), documented in the proto. Only Tag stays unique. | Deterministic: oldest `created_at` wins, id breaks ties (as recommended). 2026-09-25 |
 | D3 | What happens when a browser save loses to an agent write? | Reload the server's version into the editor and show an inline "changed elsewhere" note. Up to ~300 ms of typing can be lost. No merge. | Reload the server version with an inline "changed elsewhere" note; no merge (as recommended). 2026-09-25 |
 | D4 | How should the proto change? | Source-breaking changes are fine (all consumers are in this repo). Go additive first, migrate consumers, then remove, so every task leaves the branch green. New messages use buf naming. Everything else is renamed in T17. | **Break in place** (not the recommendation): change the proto and every consumer together in each task, instead of additive → migrate → remove. Plan re-scoped to match, confirmed with the user 2026-09-25: Phase 2 is now T07 (Resolve), T08 (Create/Rename), T09 (validation), T12 (rich text by property); old T09–T11 merged in. T14/T15 stay separate: Watch's proto change is additive by nature (a new oneof case and field), so there's nothing to break in place. 2026-09-25 |
-| D5 | May T12 delete the stored `richtext` property rows (data change)? | Yes, via migration, after backing up `calcifer.db`. I-14's dead-ref cleanup stays with I-14. | *pending* |
+| D5 | May T12 delete the stored `richtext` property rows (data change)? | Yes, via migration, after backing up `calcifer.db`. I-14's dead-ref cleanup stays with I-14. | Yes: the migration deletes only the stored rich-text pointer rows (`content` on Note, DailyNote, Todo); nothing else in `properties`. **No backup** (user: the live DB holds no real content). The tech lead still shows the row count before booting against the live DB. 2026-09-26 |
 | D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | **Render them** (not the recommendation): keep `text`, `number`, `relation` and add FE rendering. T23 runs variant "render"; G4 doesn't apply. 2026-09-25 |
 | D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | Adopt buf naming, T19 variant A (as recommended). 2026-09-25 |
 | D8 | Phase 1 check-in: fix I-37 and I-39 now or later? | Now, as a short task before T07 (both lose data) | Fix both in Phase 1, as T06a (server) and T06b (fe), run in parallel. The tech lead resolves both in `ISSUES.md` at integration. 2026-09-25 |
