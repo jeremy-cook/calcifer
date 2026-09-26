@@ -410,19 +410,36 @@ one `FailedPrecondition`, and a test covers it.
 
 ---
 
-### I-38 · Stale comments about which writes publish events and how unsaved docs read · low · confirmed
+### I-38 · Stale comment about which writes publish events · low · confirmed
 
-**Where:** `server/src/watch.rs:2`, `calcifer/src/model/richtext.ts:30`
+**Where:** `server/src/watch.rs:2`
 
 **Problem:** `watch.rs` says only Create/Update/Delete publish events; `RichText.Put`
-now publishes too. `richtext.ts` says an unsaved doc reads as '' via `NOT_FOUND`; the
-server now returns an empty doc, and `NOT_FOUND` means the entity is missing. Found
-during T04 of the API review.
+now publishes too. Found during T04 of the API review. (The matching stale comment in
+`calcifer/src/model/richtext.ts` was removed in T06.)
 
-**Fix:** Update both comments. Both files are rewritten by later API-review tasks (T14,
-T06), which can pick this up.
+**Fix:** Update the comment. T14 of the API review rewrites `watch.rs` and can pick this
+up.
 
-**Done when:** neither comment contradicts the code.
+**Done when:** the comment doesn't contradict the code.
+
+---
+
+### I-39 · Leaving a new daily note within the save debounce deletes what was typed · medium · confirmed
+
+**Where:** `calcifer/src/components/calendar/DailyNoteSection.tsx:45-54` (prune on unmount), `calcifer/src/components/entity/EntityRichTextField.tsx` (`RICHTEXT_DEBOUNCE_MS` timer)
+
+**Problem:** The editor saves 300 ms after the last keystroke. If you type into an empty
+daily note and leave the day inside that window, the prune's server check still sees an
+empty doc and deletes the note. The pending save then fires against a deleted entity
+and fails, so the typed text is lost. The old cache-based check had the same race.
+Found during T06 of the API review; confirmed by reading, not reproduced.
+
+**Fix:** Flush the pending save when the editor unmounts, and have the prune wait for
+that doc's save queue to settle before checking the server.
+
+**Done when:** typing into a new daily note and navigating away immediately keeps the
+note and its text.
 
 ---
 
