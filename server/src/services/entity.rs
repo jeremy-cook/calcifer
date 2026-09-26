@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
-use futures::StreamExt;
+use futures::stream::BoxStream;
 use sqlx::SqlitePool;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio::sync::broadcast::{self, error::RecvError};
 use tonic::{Request, Response, Status};
 
 use crate::embed::EmbedHandle;
@@ -11,9 +11,9 @@ use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_pr
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
-    EntityRef, GetEntityRequest, LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property,
-    PropertyValue, RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse,
-    SetPropertyRequest, WatchRequest,
+    EntityRef, EntitySnapshot, GetEntityRequest, LinkRef, ListEntitiesRequest,
+    ListEntitiesResponse, Property, PropertyValue, RenameEntityRequest, ResolveEntityRequest,
+    ResolveEntityResponse, SetPropertyRequest, WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
 use crate::watch::WatchHub;
@@ -200,9 +200,8 @@ impl EntityService {
 
     /// Publish a Resolve-created entity and wrap it in the response.
     fn created(&self, saved: Entity) -> ResolveEntityResponse {
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(saved.clone())),
-        });
+        self.hub
+            .publish(entity_event::Event::Upserted(saved.clone()));
         ResolveEntityResponse {
             entity: Some(saved),
             created: true,
@@ -809,9 +808,8 @@ impl EntityServiceTrait for EntityService {
             .map_err(|e| {
                 map_unique_violation(e, &entity.name, date_key_for(&entity).as_deref())
             })?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(saved.clone())),
-        });
+        self.hub
+            .publish(entity_event::Event::Upserted(saved.clone()));
         Ok(Response::new(saved))
     }
 
@@ -854,9 +852,8 @@ impl EntityServiceTrait for EntityService {
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(&id).await.map_err(Status::from)?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(saved.clone())),
-        });
+        self.hub
+            .publish(entity_event::Event::Upserted(saved.clone()));
         Ok(Response::new(saved))
     }
 
@@ -992,9 +989,8 @@ impl EntityServiceTrait for EntityService {
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(saved.clone())),
-        });
+        self.hub
+            .publish(entity_event::Event::Upserted(saved.clone()));
         Ok(Response::new(saved))
     }
 
@@ -1046,9 +1042,7 @@ impl EntityServiceTrait for EntityService {
             .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::DeletedId(id)),
-        });
+        self.hub.publish(entity_event::Event::DeletedId(id));
         Ok(Response::new(()))
     }
 
@@ -1097,20 +1091,105 @@ impl EntityServiceTrait for EntityService {
         Ok(Response::new(ListEntitiesResponse { entities }))
     }
 
-    type WatchStream = futures::stream::BoxStream<'static, Result<EntityEvent, Status>>;
+    type WatchStream = BoxStream<'static, Result<EntityEvent, Status>>;
     async fn watch(
         &self,
         _: Request<WatchRequest>,
     ) -> Result<Response<Self::WatchStream>, Status> {
+        // Subscribe now, before the stream reads a revision (see `watch_stream`).
         let rx = self.hub.subscribe();
-        let stream = BroadcastStream::new(rx).filter_map(|res| async move {
-            match res {
-                Ok(event) => Some(Ok(event)),
-                Err(_lagged) => None, // slow subscriber: skip lagged events
-            }
-        });
-        Ok(Response::new(Box::pin(stream)))
+        Ok(Response::new(watch_stream(
+            self.pool.clone(),
+            self.hub.clone(),
+            rx,
+        )))
     }
+}
+
+/// What a Watch stream sends next.
+enum WatchPhase {
+    /// A snapshot: at the start, and again after the receiver lags.
+    Snapshot,
+    /// Events newer than the last snapshot.
+    Events,
+    /// Nothing: a snapshot failed to load and the error has been sent.
+    Done,
+}
+
+struct WatchState {
+    pool: SqlitePool,
+    hub: WatchHub,
+    rx: broadcast::Receiver<EntityEvent>,
+    /// The revision the last snapshot is current as of.
+    covered: u64,
+    phase: WatchPhase,
+}
+
+/// The Watch stream (ADR 9): a snapshot of every entity, then each event the
+/// snapshot doesn't cover, in revision order. When `rx` lags, the stream sends a
+/// fresh snapshot in place of the events it missed. `rx` must already be
+/// subscribed to `hub`. The first snapshot is sent as soon as the stream is
+/// polled, without waiting for an event.
+///
+/// Why nothing is lost:
+/// 1. `rx` is subscribed before the stream reads `R = hub.current_revision()`,
+///    so every event with a revision above R reaches `rx` (or `rx` lags, which
+///    starts over with a new snapshot).
+/// 2. The snapshot is loaded after reading R. An event with a revision at or
+///    below R was published before that, and writes publish only after their
+///    transaction commits, so the snapshot already includes it. Skipping it
+///    loses nothing.
+/// 3. An event above R may repeat what the snapshot already shows, if its write
+///    committed before the snapshot query ran. That's harmless: upserts and
+///    deletes are idempotent, and the events after it are applied in order.
+fn watch_stream(
+    pool: SqlitePool,
+    hub: WatchHub,
+    rx: broadcast::Receiver<EntityEvent>,
+) -> BoxStream<'static, Result<EntityEvent, Status>> {
+    let state = WatchState {
+        pool,
+        hub,
+        rx,
+        covered: 0,
+        phase: WatchPhase::Snapshot,
+    };
+    Box::pin(futures::stream::unfold(state, |mut s| async move {
+        loop {
+            match s.phase {
+                WatchPhase::Done => return None,
+                WatchPhase::Snapshot => {
+                    // Read R before loading, per step 2 above.
+                    let revision = s.hub.current_revision();
+                    return match load_entities(&s.pool, None).await {
+                        Ok(entities) => {
+                            s.covered = revision;
+                            s.phase = WatchPhase::Events;
+                            let event = EntityEvent {
+                                event: Some(entity_event::Event::Snapshot(EntitySnapshot {
+                                    entities,
+                                })),
+                                revision,
+                            };
+                            Some((Ok(event), s))
+                        }
+                        Err(e) => {
+                            s.phase = WatchPhase::Done;
+                            Some((Err(Status::from(e)), s))
+                        }
+                    };
+                }
+                WatchPhase::Events => match s.rx.recv().await {
+                    Ok(event) if event.revision <= s.covered => continue,
+                    Ok(event) => return Some((Ok(event), s)),
+                    // Missed events: resync with the same receiver, which now
+                    // holds the oldest events still in the channel.
+                    Err(RecvError::Lagged(_)) => s.phase = WatchPhase::Snapshot,
+                    Err(RecvError::Closed) => return None,
+                },
+            }
+        }
+    }))
 }
 
 #[cfg(test)]
@@ -1119,6 +1198,7 @@ mod tests {
     use crate::proto::rich_text_service_server::RichTextService as _;
     use crate::proto::{EntityRefList, RichText, RichTextRef};
     use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag, todo};
+    use futures::StreamExt;
 
     async fn create(svc: &EntityService, req: CreateEntityRequest) -> Entity {
         try_create(svc, req).await.expect("create")
@@ -2380,5 +2460,162 @@ mod tests {
         let ideas = all.iter().find(|e| e.id == ideas.id).expect("ideas");
         assert_eq!(ideas.links.len(), 3);
         assert_eq!(ideas.referenced_dates, ["2026-01-02", "2026-09-01"]);
+    }
+
+    type EventStream = BoxStream<'static, Result<EntityEvent, Status>>;
+
+    /// Open a Watch stream on `svc` through the RPC.
+    async fn open_watch(svc: &EntityService) -> EventStream {
+        svc.watch(Request::new(WatchRequest {}))
+            .await
+            .expect("watch")
+            .into_inner()
+    }
+
+    /// The stream's next message, failing the test if none comes within a second.
+    async fn next_event(stream: &mut EventStream) -> EntityEvent {
+        tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
+            .await
+            .expect("an event within a second")
+            .expect("stream still open")
+            .expect("event, not an error")
+    }
+
+    /// The sorted entity ids of a snapshot event.
+    fn snapshot_ids(event: &EntityEvent) -> Vec<String> {
+        let Some(entity_event::Event::Snapshot(snapshot)) = &event.event else {
+            panic!("expected a snapshot, got {event:?}");
+        };
+        let mut ids: Vec<String> = snapshot.entities.iter().map(|e| e.id.clone()).collect();
+        ids.sort();
+        ids
+    }
+
+    /// The id of an upserted event.
+    fn upserted_id(event: &EntityEvent) -> &str {
+        let Some(entity_event::Event::Upserted(entity)) = &event.event else {
+            panic!("expected an upsert, got {event:?}");
+        };
+        &entity.id
+    }
+
+    fn sorted(mut ids: Vec<String>) -> Vec<String> {
+        ids.sort();
+        ids
+    }
+
+    #[tokio::test]
+    async fn watch_starts_with_a_snapshot_of_existing_entities() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let a = create(&svc, note("A")).await;
+        let b = create(&svc, tag("b")).await;
+
+        // No writes follow: the snapshot must come without waiting for an event.
+        let mut stream = open_watch(&svc).await;
+        let first = next_event(&mut stream).await;
+
+        assert_eq!(
+            snapshot_ids(&first),
+            sorted(vec![a.id.clone(), b.id.clone()])
+        );
+        assert_eq!(first.revision, 2);
+        assert_eq!(first.revision, svc.hub.current_revision());
+        let Some(entity_event::Event::Snapshot(snapshot)) = first.event else {
+            unreachable!()
+        };
+        let snapshot_a = snapshot.entities.iter().find(|e| e.id == a.id);
+        assert_eq!(snapshot_a, Some(&a));
+    }
+
+    #[tokio::test]
+    async fn watch_events_after_snapshot_have_increasing_revisions() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let mut stream = open_watch(&svc).await;
+        let snapshot = next_event(&mut stream).await;
+        assert!(snapshot_ids(&snapshot).is_empty());
+
+        let a = create(&svc, note("A")).await;
+        let b = create(&svc, todo("B")).await;
+        rename(&svc, &a.id, "A2").await.expect("rename");
+        svc.delete(Request::new(DeleteEntityRequest { id: b.id.clone() }))
+            .await
+            .expect("delete");
+
+        let mut revisions = vec![snapshot.revision];
+        let mut kinds = vec![];
+        for _ in 0..4 {
+            let event = next_event(&mut stream).await;
+            revisions.push(event.revision);
+            kinds.push(match event.event {
+                Some(entity_event::Event::Upserted(e)) => format!("upserted {}", e.name),
+                Some(entity_event::Event::DeletedId(id)) => format!("deleted {id}"),
+                other => panic!("unexpected event {other:?}"),
+            });
+        }
+        assert_eq!(
+            kinds,
+            [
+                "upserted A".to_string(),
+                "upserted B".to_string(),
+                "upserted A2".to_string(),
+                format!("deleted {}", b.id),
+            ]
+        );
+        assert!(
+            revisions.windows(2).all(|w| w[0] < w[1]),
+            "revisions increase: {revisions:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn watch_does_not_repeat_events_covered_by_the_snapshot() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        // Subscribe, then publish before the stream takes its snapshot: the
+        // window between `watch`'s subscribe and its revision read.
+        let rx = svc.hub.subscribe();
+        let a = create(&svc, note("A")).await;
+        let mut stream = watch_stream(pool.clone(), svc.hub.clone(), rx);
+
+        let snapshot = next_event(&mut stream).await;
+        assert_eq!(snapshot_ids(&snapshot), vec![a.id.clone()]);
+        assert_eq!(snapshot.revision, 1);
+
+        // A's upsert is still queued on the receiver; the stream must skip it.
+        let b = create(&svc, note("B")).await;
+        let next = next_event(&mut stream).await;
+        assert_eq!(upserted_id(&next), b.id);
+        assert_eq!(next.revision, 2);
+    }
+
+    #[tokio::test]
+    async fn watch_resyncs_with_a_snapshot_after_lag() {
+        let pool = memory_pool().await;
+        let svc = EntityService::new(pool, WatchHub::with_capacity(2), EmbedHandle::disabled());
+        let mut stream = open_watch(&svc).await;
+        assert!(snapshot_ids(&next_event(&mut stream).await).is_empty());
+
+        // Five events into a channel of two, without reading: the stream lags.
+        let mut ids = vec![];
+        for i in 0..5 {
+            ids.push(create(&svc, note(&format!("N{i}"))).await.id);
+        }
+
+        let resync = next_event(&mut stream).await;
+        assert_eq!(snapshot_ids(&resync), sorted(ids));
+        assert_eq!(resync.revision, 5);
+
+        // The two events still in the channel are covered by the resync: the
+        // stream reads and skips them, sending nothing.
+        let quiet = tokio::time::timeout(std::time::Duration::from_millis(50), stream.next()).await;
+        assert!(quiet.is_err(), "expected no event, got {quiet:?}");
+
+        // The next event is the next write.
+        let after = create(&svc, note("After")).await;
+        let next = next_event(&mut stream).await;
+        assert_eq!(upserted_id(&next), after.id);
+        assert_eq!(next.revision, 6);
     }
 }

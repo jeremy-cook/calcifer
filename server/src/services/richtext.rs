@@ -6,8 +6,8 @@ use crate::error::AppError;
 use crate::link_store::replace_scoped_links;
 use crate::links::{extract_doc_references, extract_plain_text};
 use crate::proto::{
-    entity_event, rich_text_service_server::RichTextService as RichTextServiceTrait, EntityEvent,
-    RichText, RichTextRef,
+    entity_event, rich_text_service_server::RichTextService as RichTextServiceTrait, RichText,
+    RichTextRef,
 };
 use crate::services::entity::{load_entity, ts_from_millis};
 use crate::structures;
@@ -259,12 +259,9 @@ impl RichTextServiceTrait for RichTextService {
         let entity = load_entity(&self.pool, &entity_id)
             .await
             .map_err(Status::from)?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::RichTextChanged(saved.clone())),
-        });
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(entity)),
-        });
+        self.hub
+            .publish(entity_event::Event::RichTextChanged(saved.clone()));
+        self.hub.publish(entity_event::Event::Upserted(entity));
 
         Ok(Response::new(saved))
     }
