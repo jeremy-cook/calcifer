@@ -248,21 +248,6 @@ test covers it.
 
 ---
 
-### I-38 · Stale comment about which writes publish events · low · confirmed
-
-**Where:** `server/src/watch.rs:2`
-
-**Problem:** `watch.rs` says only Create/Update/Delete publish events; `RichText.Put`
-now publishes too. Found during T04 of the API review. (The matching stale comment in
-`calcifer/src/model/richtext.ts` was removed in T06.)
-
-**Fix:** Update the comment. T14 of the API review rewrites `watch.rs` and can pick this
-up.
-
-**Done when:** the comment doesn't contradict the code.
-
----
-
 ### I-40 · Entity write transactions that read first fail with `Internal` under a race · medium · confirmed
 
 **Where:** `server/src/services/entity.rs` (`set_property`), `server/src/embed/worker.rs:133`
@@ -420,6 +405,7 @@ come back in plan order. Found during T13 of the API review.
 
 ## Resolved
 
+- **I-38 · Stale comment about which writes publish events.** Fixed 2026-09-26. The `watch.rs` module comment now lists every publishing write, `RichText.Put` included; rewritten with the Watch snapshot and revisions (T14).
 - **I-22 · A rich-text ref stored as a property value adds nothing.** Fixed 2026-09-26. `PropertyValue.richtext` is gone (field 6 and the name reserved); a document is addressed by (entity id, declared rich-text property id). `new_entity` stores no value for rich-text properties, and `Create` and `SetProperty` reject any value on one with `INVALID_ARGUMENT` (superseding I-16's `richtext`-ref case). Migration `20260926000000_drop_richtext_property_values` deletes the stored `content` rows of Note, DailyNote and Todo, chosen by the registry, and nothing else (D5). The browser builds each ref with `richTextRef(entity.id, propertyId)` from the registry's declared rich-text properties (`richTextPropertyIds`), so an editor renders for every declared one; the MCP server already addressed `content` directly. Covered by `rich_text_properties_take_no_value`, `create_by_intent_mints_id_defaults_and_name`, `drop_richtext_migration_deletes_exactly_the_richtext_rows` and `drop_richtext_migration_lists_every_declared_richtext_property`. Observed 2026-09-26 on a scratch DB written before T12: the migration removed its 7 pointer rows and kept every other property and both docs, and the old Note and daily note opened with their content. Not yet run against the live DB (27 rows to delete).
 - **I-16 · Property values aren't checked against their declared kind (except select).** Fixed 2026-09-26. `validate_property` (replacing `validate_select`) requires every declared property's value case to match its `PropertyKind`, in `Create`, `Resolve` and `SetProperty`; a rich-text property takes only a `richtext` ref. Undeclared property ids still take any value except `select`. Covered by `values_must_match_the_declared_kind`.
 - **I-24 · Looking up an entity by name isn't reliable for most structures.** Fixed 2026-09-26. `find_by_name` orders by `created_at, id`, so of several same-named entities the oldest wins and the lowest id breaks ties (D2; documented on `Resolve`). `Create`, `Resolve` by name and a non-empty `List` filter return `INVALID_ARGUMENT` for a structure type not in the registry. Covered by `resolve_by_name_with_duplicates_returns_the_oldest` and `unknown_structure_types_are_rejected`.

@@ -190,17 +190,20 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 
 ```proto
 service EntityService {
-  rpc Get / List / Delete
+  rpc Get / Delete
+  // For the agent; the frontend's replica comes from Watch (ADR 9).
+  rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);  // structure_type filter
   // Create by intent; the server builds the entity. See below.
   rpc Create(CreateEntityRequest) returns (Entity);  // structure_type, optional name, properties
   // Only the name; properties are untouched. NOT_FOUND for an unknown id.
   rpc Rename(RenameEntityRequest) returns (Entity);  // id, name
   // One property of an existing entity; an unset value clears it. Returns the entity.
   rpc SetProperty(SetPropertyRequest) returns (Entity);  // entity_id, property_id, value
+  // A snapshot, then revisioned events; a fresh snapshot after a lag. See below.
   rpc Watch(WatchRequest) returns (stream EntityEvent);
   // Get-or-create by a name or a day; see below.
   rpc Resolve(ResolveEntityRequest) returns (ResolveEntityResponse);
-  rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);
+  rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);  // for the agent
 }
 
 message ResolveEntityRequest {
@@ -217,15 +220,19 @@ message ResolveEntityResponse { Entity entity = 1; bool created = 2; }
 // the whole entity on every keystroke.
 service RichTextService { rpc Get / Put }
 
+message EntitySnapshot { repeated Entity entities = 1; }
 message EntityEvent {
   oneof event {
     Entity upserted = 1;
     string deleted_id = 2;
     RichText rich_text_changed = 3;   // the saved doc (ref, doc, updated_at)
+    EntitySnapshot snapshot = 4;      // replaces the client's whole entity set
   }
+  uint64 revision = 15;               // monotonic per server process
 }
 
-service SearchService   { rpc Search / Retrieve }   // FTS5 lexical / hybrid RRF
+// FTS5 lexical / hybrid RRF. Search is for the agent; the frontend doesn't call it.
+service SearchService   { rpc Search / Retrieve }
 
 // The structure registry (see Structures). No filters; every structure in table order.
 service StructureService {
@@ -291,7 +298,31 @@ the saved doc and then `upserted` with the reloaded entity, since its links,
 `referenced_dates` and `updated_at` changed.
 
 Transport is gRPC-Web from the browser (`tonic-web` bridges; Vite proxies `/api` →
-`:8080`). `Watch` is a server-streaming fan-out that keeps open tabs live.
+`:8080`).
+
+**Watch contract.** `Watch` is a one-way replication stream of the whole entity set
+([ADR 9](../adr/0009-watch-fed-replica.md)); the frontend's replica comes only from it,
+and the filtered `List`, `ListBacklinks` and `Search` are there for the agent.
+
+- The first message on every stream is a `snapshot` of every entity, sent at once
+  even when nothing is being written.
+- After it come `upserted`, `deleted_id` and `rich_text_changed` events with
+  increasing `revision`. The snapshot carries the revision it is current as of, and
+  every later event has a higher one.
+- Whenever the server can't guarantee continuity (the subscriber fell behind the
+  256-event channel), it sends a fresh `snapshot` in place of the missed events, and
+  the client must replace its whole set.
+- A snapshot doesn't include rich-text docs; clients refetch any doc they hold.
+- Revisions restart when the server restarts. Clients never compare revisions across
+  streams. There is no resume: a reconnect is a new stream and starts with a snapshot.
+- An event after a snapshot may repeat something the snapshot already shows. Applying
+  an upsert or a delete is idempotent, so clients apply every event in order.
+
+Every write publishes after its transaction commits: `Create`, `Rename`,
+`SetProperty` and a creating `Resolve` publish `upserted`, `Delete` publishes
+`deleted_id`, and `RichText.Put` publishes `rich_text_changed` then `upserted`. The
+server reads the current revision before loading a snapshot and skips queued events at
+or below it, which the snapshot already includes.
 
 ---
 
