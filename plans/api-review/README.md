@@ -125,6 +125,7 @@ answer and the date.
 | D5 | May T12 delete the stored `richtext` property rows (data change)? | Yes, via migration, after backing up `calcifer.db`. I-14's dead-ref cleanup stays with I-14. | *pending* |
 | D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | **Render them** (not the recommendation): keep `text`, `number`, `relation` and add FE rendering. T23 runs variant "render"; G4 doesn't apply. 2026-09-25 |
 | D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | Adopt buf naming, T19 variant A (as recommended). 2026-09-25 |
+| D8 | Phase 1 check-in: fix I-37 and I-39 now or later? | Now, as a short task before T07 (both lose data) | Fix both in Phase 1, as T06a (server) and T06b (fe), run in parallel. The tech lead resolves both in `ISSUES.md` at integration. 2026-09-25 |
 
 ---
 
@@ -154,9 +155,9 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-34 | D3: relation edits resend the whole list | low | deferred |
 | I-35 | P2: pruning an empty daily note can delete agent content | medium | T06 |
 | I-36 | ResolveByName returns a generic error when it loses a create race (found in T01) | low | T07 |
-| I-37 | A racing RichText.Put fails with Internal, not FailedPrecondition (found in T04) | medium | *unassigned; raise at Phase 1 check-in* |
+| I-37 | A racing RichText.Put fails with Internal, not FailedPrecondition (found in T04) | medium | T06a |
 | I-38 | Stale comment in watch.rs (found in T04; richtext.ts half fixed in T06) | low | T14 (note) |
-| I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | *unassigned; raise at Phase 1 check-in* |
+| I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | T06b |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -175,8 +176,10 @@ user after Phase 2.
 | T04 | [RichText Put: validate, conflict-check, publish events; Get returns empty](tasks/T04-richtext-put-server.md) | proto, server | T01, G1 | none (touches proto) | done (4dea7a7, d68bb41, 81f1605) |
 | T05 | [MCP: conflict-safe appends](tasks/T05-mcp-conflict-safe-append.md) | mcp | T04 | T06 | done (b5ec83e) |
 | T06 | [FE: live rich text, conflict handling, safe prune](tasks/T06-fe-live-richtext.md) | fe | T04 | T05 | done (17b38cc, 20dc58d, 62775de, 971e98a) |
+| T06a | [RichText Put takes the write lock first (racing save → FailedPrecondition)](tasks/T06a-richtext-put-immediate.md) | server | T06 | T06b | in progress (engineer: T06a) |
+| T06b | [FE: flush pending saves before pruning a daily note](tasks/T06b-flush-before-prune.md) | fe | T06 | T06a | in progress (engineer: T06b) |
 | **Phase 2: server owns writes** |||||
-| T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06 | none | todo |
+| T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06a, T06b | none | todo |
 | T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | todo |
 | T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | todo |
 | T10 | *merged into T07 and T08 (D4)* | | | | n/a |
