@@ -141,6 +141,16 @@ such as `PriorityBadge`'s variants (with a fallback variant). Option keys the UI
 branches on (status `done`/`open`, priority `none`) stay literal in the code that uses
 them. The MCP `list_structures` tool formats the same RPC response.
 
+The entity page (`calcifer/src/routes/e.$id.tsx`) renders a generic editor for every
+`PropertyKind`, in the structure's property order, unless the property has a custom one
+(`DailyNote.date`, `Todo.status`): richtext → an editor for its document; text and
+number → an inline input that writes on blur or Enter (empty clears the value); date →
+a date picker; select → a dropdown of its options; relation → a picker for one target;
+relations → a list of targets with an "Add" picker. The relation pickers list entities
+of `target_structure` (any structure when it's empty) and offer "Create" when the
+target has `unique_names`. No structure declares a `text`, `number` or `relation`
+property today; they are rendered so one can be added in `structures.rs` alone.
+
 Current shape:
 
 - **`Note`** — properties: `content` (richtext).

@@ -45,27 +45,6 @@ covers it.
 
 ---
 
-### I-26 · Unused property kinds, and structure flags only the frontend enforces · low · confirmed
-
-**Where:** `server/src/structures.rs` (registry), `calcifer/src/routes/e.$id.tsx:257`
-
-**Problem:** No structure declares a `relation`, `text` or `number` property, and the
-entity page silently renders nothing for them (`default: return null`). The server
-doesn't enforce `creatable` or `name_editable`; only the frontend does.
-
-**Fix:** Either remove the unused kinds or render them. Enforce `creatable` and
-`name_editable` on the server once I-20 and I-23 have landed.
-
-**Done when:** every `PropertyKind` is either used and rendered or removed, and the server
-rejects creating a non-creatable structure and renaming a non-name-editable entity.
-
-**Progress:** The flag half is done (2026-09-26): `Create` of a non-creatable structure and
-`Rename` of a structure with `name_editable: false` return `FAILED_PRECONDITION`, covered by
-`create_of_a_daily_note_is_failed_precondition` and
-`rename_of_a_daily_note_is_failed_precondition`. The unused-kinds half remains.
-
----
-
 ### I-34 · Relation edits resend the whole list · low · confirmed
 
 **Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:32-40`, `calcifer/src/routes/e.$id.tsx:246-252`
@@ -386,6 +365,7 @@ key is fixed, but inconsistent). Found during T22 of the API review.
 
 ## Resolved
 
+- **I-26 · Unused property kinds, and structure flags only the frontend enforces.** Fixed 2026-09-26. The server refuses `CreateEntity` of a non-creatable structure and `RenameEntity` of a structure whose name isn't editable, both with `FAILED_PRECONDITION` (`create_of_a_daily_note_is_failed_precondition`, `rename_of_a_daily_note_is_failed_precondition`). The `text`, `number` and `relation` kinds stay and the entity page renders them (D6, variant "render"): text and number get an inline input that writes on blur or Enter (empty clears), and a single relation gets a picker (`EntityRelationField`), sharing `EntityPicker` with `EntityRelationsField`; the pickers list any structure when `target_structure` is empty. `usePropertyWriters` gains `setText`, `setNumber` and `setRelation`. On the server, `validate_property` names kinds in one exhaustive match on the declared kind, so `kind_name`'s unreachable `Richtext` arm is gone. No structure declares these kinds yet. Not yet observed in the browser.
 - **I-33 · Duplicated code in the model layer.** Fixed 2026-09-26. T15 removed the duplicate `List` query functions, the raw `['entities']` keys and the Watch consumer in `App.tsx` (the list comes only from `entitiesQuery` in `model/sync.ts`). The three hand-written Timestamp-to-milliseconds conversions are gone: `timestampMsOrZero` in `model/dates.ts` wraps `timestampMs` from `@bufbuild/protobuf/wkt` (an unset Timestamp reads as 0) and backs `backlinks.ts`, `listByStructure`, `entityUpdatedAtDate` and the to-do created/updated sorts; `timestampMs` rounds to whole milliseconds, where the old code kept fractions. Delete has one path, `deleteEntity(id)` in `model/store.ts` (fire-and-forget, logs a failure); `useDeleteEntity` and `deleteEntityImperative` are gone. Create has one path per RPC: `useCreateEntity` for `CreateEntity`, and the private `resolveOrCreateEntity` for get-or-create through `ResolveEntity`, which `useResolveDailyNote` and `getOrCreateEntityForMention` both call. `useSetTodoStatus` writes through `usePropertyWriters().setSelect`, and property reads in `todos.ts` and the entity page go through the exported `propertyValueOf` (an `Object.hasOwn` check). Not yet observed in the browser.
 - **I-32 · Proto and Connect details leak into components.** Fixed 2026-09-26. Components no longer build proto messages or check `ConnectError` codes. `usePropertyWriters()` in `model/store.ts` wraps `useSetProperty` with `setDate(entity, id, iso | null)`, `setSelect(entity, id, key)` and `setRelations(entity, id, targets)` (an empty list clears the property); `EntityRelationsField` emits plain `{ id, structureType }` targets. `DailyNoteDateField` detects a collision with the new `isAlreadyExists` in `model/api.ts`, and the unused `isNotFound` is gone. `withProperty` is module-private, and property reads in `store.ts` go through an `Object.hasOwn` check. Nothing under `components/`, `routes/` or `layouts/` imports `@bufbuild/protobuf` or `@connectrpc`. Not yet observed in the browser.
 - **I-31 · The API contract is undocumented.** Fixed 2026-09-26. Proto comments now say that `PropertyValue.date` and `referenced_dates` are ISO `yyyy-MM-dd` days, that `RichTextRef`, `LinkRef`, `RichText.updated_at` and `Entity.referenced_dates` are output-only, that a relation value's `EntityRef` needs only `id` (a non-empty `structure_type` must match the target), and that `SearchHit.snippet` loses U+E000/U+E001. `RichText.doc` and `PutRichTextRequest.doc` point to the new [`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md), which specifies the nodes the server reads (`mention`/`hashtag` `id` and `structureType`, `dateChip` `date`, every `text`), what it derives from each (links, `referenced_dates`, FTS text, embedding chunks) and what it ignores, with an example and what each client writes. Linked from `data-model.md` and the README; `docs/specs/mentions.md` names `ResolveEntity` instead of `ResolveByName`. Comments and docs only.
