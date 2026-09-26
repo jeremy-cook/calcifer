@@ -66,32 +66,6 @@ rejects creating a non-creatable structure and renaming a non-name-editable enti
 
 ---
 
-### I-33 · Duplicated code in the model layer · low · confirmed
-
-**Where:** `calcifer/src/model/backlinks.ts:14`, `calcifer/src/model/store.ts:316`, `calcifer/src/model/todos.ts:117`, `calcifer/src/App.tsx:16`, `calcifer/src/model/store.ts:92,112-130,275-312`
-
-**Problem:**
-- Timestamp-to-milliseconds conversion is written three times; `timestampMs` from
-  `@bufbuild/protobuf/wkt` already does this.
-- The `List` query function is written twice (`App.tsx:16`, `store.ts:92`).
-- The delete path (`useDeleteEntity`, `deleteEntityImperative`) and the create mutation
-  (`useCreateEntity`, `useCreateDailyNote`) each exist twice.
-- A raw `['entities']` key is used in places instead of `qk`.
-- The Watch consumer lives in `App.tsx` instead of `model/`.
-
-**Fix:** Use `timestampMs`. Export an `entitiesQuery` the way `structuresQuery` is
-exported. Merge the duplicate delete and create paths, use `qk` everywhere, and move the
-Watch consumer into `model/`.
-
-**Done when:** each of the above exists once, and no raw `['entities']` key remains.
-
-**Progress:** T15 removed the `List` query functions (the list now comes only from
-Watch, through `entitiesQuery` in `model/sync.ts`), the raw `['entities']` keys, and
-the Watch consumer in `App.tsx`. Left for T22: the three timestamp conversions and the
-duplicate delete and create paths.
-
----
-
 ### I-34 · Relation edits resend the whole list · low · confirmed
 
 **Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:32-40`, `calcifer/src/routes/e.$id.tsx:246-252`
@@ -395,6 +369,7 @@ T19 of the API review.
 
 ## Resolved
 
+- **I-33 · Duplicated code in the model layer.** Fixed 2026-09-26. T15 removed the duplicate `List` query functions, the raw `['entities']` keys and the Watch consumer in `App.tsx` (the list comes only from `entitiesQuery` in `model/sync.ts`). The three hand-written Timestamp-to-milliseconds conversions are gone: `timestampMsOrZero` in `model/dates.ts` wraps `timestampMs` from `@bufbuild/protobuf/wkt` (an unset Timestamp reads as 0) and backs `backlinks.ts`, `listByStructure`, `entityUpdatedAtDate` and the to-do created/updated sorts; `timestampMs` rounds to whole milliseconds, where the old code kept fractions. Delete has one path, `deleteEntity(id)` in `model/store.ts` (fire-and-forget, logs a failure); `useDeleteEntity` and `deleteEntityImperative` are gone. Create has one path per RPC: `useCreateEntity` for `CreateEntity`, and the private `resolveOrCreateEntity` for get-or-create through `ResolveEntity`, which `useResolveDailyNote` and `getOrCreateEntityForMention` both call. `useSetTodoStatus` writes through `usePropertyWriters().setSelect`, and property reads in `todos.ts` and the entity page go through the exported `propertyValueOf` (an `Object.hasOwn` check). Not yet observed in the browser.
 - **I-32 · Proto and Connect details leak into components.** Fixed 2026-09-26. Components no longer build proto messages or check `ConnectError` codes. `usePropertyWriters()` in `model/store.ts` wraps `useSetProperty` with `setDate(entity, id, iso | null)`, `setSelect(entity, id, key)` and `setRelations(entity, id, targets)` (an empty list clears the property); `EntityRelationsField` emits plain `{ id, structureType }` targets. `DailyNoteDateField` detects a collision with the new `isAlreadyExists` in `model/api.ts`, and the unused `isNotFound` is gone. `withProperty` is module-private, and property reads in `store.ts` go through an `Object.hasOwn` check. Nothing under `components/`, `routes/` or `layouts/` imports `@bufbuild/protobuf` or `@connectrpc`. Not yet observed in the browser.
 - **I-31 · The API contract is undocumented.** Fixed 2026-09-26. Proto comments now say that `PropertyValue.date` and `referenced_dates` are ISO `yyyy-MM-dd` days, that `RichTextRef`, `LinkRef`, `RichText.updated_at` and `Entity.referenced_dates` are output-only, that a relation value's `EntityRef` needs only `id` (a non-empty `structure_type` must match the target), and that `SearchHit.snippet` loses U+E000/U+E001. `RichText.doc` and `PutRichTextRequest.doc` point to the new [`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md), which specifies the nodes the server reads (`mention`/`hashtag` `id` and `structureType`, `dateChip` `date`, every `text`), what it derives from each (links, `referenced_dates`, FTS text, embedding chunks) and what it ignores, with an example and what each client writes. Linked from `data-model.md` and the README; `docs/specs/mentions.md` names `ResolveEntity` instead of `ResolveByName`. Comments and docs only.
 - **I-13 · `buf lint` reports RPC naming errors in `services.proto`.** Fixed 2026-09-26. Adopted buf's standard naming (D7, variant A): every RPC is a verb and noun (`GetEntity`, `ListEntities`, `CreateEntity`, `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `WatchEntities`, `ResolveEntity`, `GetRichText`, `PutRichText`, `ListStructures`), takes `<Rpc>Request` and returns its own `<Rpc>Response`, which wraps the entity or doc (`GetEntityResponse { Entity entity = 1; }`, `PutRichTextResponse { RichText rich_text = 1; }`, `DeleteEntityResponse {}`). `EntityEvent` is `WatchEntitiesResponse` (same fields and numbers), `SetPropertyRequest` is `SetEntityPropertyRequest`, and `GetRichTextRequest` / `PutRichTextRequest` carry `entity_id` and `property_id` flat; `expected_updated_at` moved from `RichText` (field 4 reserved) to `PutRichTextRequest`. `RichTextRef`, `EntityRef` and `EntityRefList` stay, still used by `RichText.ref` and relations. Server, browser and MCP updated mechanically; `buf.yaml` stays on the default rules and `pnpm proto:lint` exits 0. Nothing runs it automatically: the README's proto dev loop now lists it first.
