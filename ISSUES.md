@@ -79,23 +79,6 @@ rejects creating a non-creatable structure and renaming a non-name-editable enti
 
 ---
 
-### I-29 · Search has two RPCs for one job · low · confirmed
-
-**Where:** `proto/calcifer/v1/services.proto:39,42` (`Search`, `Retrieve`), `server/src/services/search.rs:62`, `mcp-server/src/tools.ts:74-87`
-
-**Problem:** `Search(query, limit)` and `Retrieve(query, k, hybrid)` return the same
-response, and `Retrieve` falls back to lexical search anyway. Separately, snippets mark
-matches with `[` `]`, which clashes with `[[wikilink]]` syntax.
-
-**Fix:** One `Search(query, limit, mode)` with a `SearchMode` enum; the MCP server
-already models exactly this (`tools.ts:74`). Return match ranges instead of bracketed
-snippets.
-
-**Done when:** there is one search RPC with a mode, and hits carry match ranges instead of
-`[ ]` markers.
-
----
-
 ### I-30 · `ListBacklinks` takes the wrong request and returns too little · low · confirmed
 
 **Where:** `proto/calcifer/v1/services.proto:24`, `server/src/services/entity.rs:815-835` (`list_backlinks`), `mcp-server/src/tools.ts:35`, `calcifer/src/model/backlinks.ts:40`
@@ -401,6 +384,7 @@ published last.
 
 ## Resolved
 
+- **I-29 · Search has two RPCs for one job.** Fixed 2026-09-26. `Retrieve` and `RetrieveRequest` are gone; `Search` takes a `SearchMode` (lexical, semantic, hybrid; unspecified means hybrid, the MCP tool's default), and semantic or hybrid with embeddings off behave as lexical. Snippets are plain text: FTS5 marks matches with private-use code points, which the server strips into `SearchHit.matches`, half-open UTF-16 ranges; a vector-only hit has no snippet and no matches. `search_notes` makes one `Search` call and bolds matches with `**`. Hits are hydrated in one batch (`load_entities_by_id`, four queries) instead of `load_entity` per hit. Covered by `search_dispatches_on_mode`, `semantic_and_hybrid_fall_back_to_lexical_without_embeddings`, `match_ranges_count_utf16_units_after_non_ascii_text`, `snippets_carry_no_bracket_markers` and `hits_hydrate_as_load_entity_in_rank_order_and_skip_stale_rows`. Not yet run through the MCP server against a scratch DB.
 - **I-28 · `repeated Property` should be `map<string, PropertyValue>`.** Fixed 2026-09-26. `Entity.properties` and `CreateEntityRequest.properties` are `map<string, PropertyValue>` (same field number, wire-compatible) and the `Property` message is gone, so an entity can't carry two values for one id. The server reads and writes the map (prost `HashMap`); nothing depended on property order, and `sync_relation_links` visits ad-hoc relation properties in id order. A `Create` map entry whose value has no case is `INVALID_ARGUMENT` ("property missing value"), as an entry with no value was before (`create_with_an_empty_property_value_is_invalid_argument`). The browser reads `entity.properties[id]` (the MCP server reads no entity properties); `withProperty` copies the map before setting or deleting a key. No consumer scans an entity's properties any more.
 - **I-27 · Watch isn't built for keeping a full copy in sync.** Fixed 2026-09-26. Watch opens every stream with a snapshot, numbers events with a revision and sends a fresh snapshot to a subscriber that lags (T14, ADR 9). The browser's entity list is a replica fed only by Watch (`model/sync.ts`): `entitiesQuery` resolves with the first snapshot and never calls `List`; later snapshots replace the list, reset cached entities and refetch open rich-text docs; upserts and deletes are applied in place; a reconnect resyncs from its snapshot. Mutations write the server's response through the same `writeEntity` / `removeEntity`, and nothing invalidates the list, so an edit no longer reloads it. `useEntity` seeds from the replica and only calls `Get` before the first snapshot. The Vite dev proxy now ends a proxied stream whose upstream dies, so a tab notices a server restart and reconnects; any other proxy put in front of the server needs the same behaviour. Observed 2026-09-26 on a scratch DB: no `EntityService/List` after startup, typing sends only `Put`, a second tab sees creates and status changes live, and after a server restart the tab reconnected and showed an edit made while the server was down. Publish order can still differ from commit order (I-49).
 - **I-38 · Stale comment about which writes publish events.** Fixed 2026-09-26. The `watch.rs` module comment now lists every publishing write, `RichText.Put` included; rewritten with the Watch snapshot and revisions (T14).

@@ -229,8 +229,19 @@ message EntityEvent {
   uint64 revision = 15;               // monotonic per server process
 }
 
-// FTS5 lexical / hybrid RRF. Search is for the agent; the frontend doesn't call it.
-service SearchService   { rpc Search / Retrieve }
+// One search, for the agent; the frontend doesn't call it. See Retrieval.
+service SearchService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+}
+enum SearchMode { UNSPECIFIED (= HYBRID), LEXICAL, SEMANTIC, HYBRID }
+message SearchRequest { string query = 1; uint32 limit = 2; SearchMode mode = 3; }  // limit 0 => 10
+message SearchHit {
+  Entity entity = 1;
+  string snippet = 2;              // plain text; empty for a vector-only hit
+  double score = 3;                // higher is better, within one response
+  repeated MatchRange matches = 4; // where the query matched in snippet
+}
+message MatchRange { uint32 start = 1; uint32 end = 2; }  // half-open, UTF-16 code units
 
 // The structure registry (see Structures). No filters; every structure in table order.
 service StructureService {
@@ -328,20 +339,31 @@ or below it, which the snapshot already includes.
 
 ## Retrieval
 
-Both paths exist as the RAG substrate; neither is surfaced in the UI yet.
+`SearchService.Search` is the RAG substrate; it isn't surfaced in the UI yet. Its
+`mode` picks one of three rankings:
 
-- **`Search`** — FTS5 (`entity_fts`, `tokenize='unicode61'`) over entity names plus
-  plain text extracted from documents, ranked by `bm25()` with `snippet()` excerpts.
-  Kept in sync inside the same transactions as `RichTextService.Put` and entity
-  create/update/delete.
-- **`Retrieve`** — fuses `Search` with vector KNN by reciprocal-rank fusion.
-  Documents are chunked on heading and paragraph boundaries (~500 tokens) into
-  `chunks`; embeddings land in a `sqlite-vec` `vec0` table (`entity_vec`) at a
-  dimension pinned by the migration.
-- **Embedder** — a background `tokio` worker drains an embed queue off the write hot
-  path, behind an `Embedder` trait. Default is local and in-process: `all-MiniLM-L6-v2`
-  at 384 dimensions via fastembed. No API key; nothing leaves the machine. Changing the
-  model requires a re-embed and a migration.
+- **Lexical** — FTS5 (`entity_fts`, `tokenize='unicode61'`) over entity names plus
+  plain text extracted from documents, each query term prefix-matched, ranked by
+  `bm25()`. Kept in sync inside the same transactions as `RichTextService.Put` and
+  entity create/update/delete.
+- **Semantic** — vector KNN over chunk embeddings, best chunk per entity. Documents
+  are chunked on heading and paragraph boundaries (~500 tokens) into `chunks`;
+  embeddings land in a `sqlite-vec` `vec0` table (`entity_vec`) at a dimension pinned
+  by the migration.
+- **Hybrid** (the default, and what `UNSPECIFIED` means) — the lexical and semantic
+  rankings fused by reciprocal-rank fusion.
+
+With embeddings off (the model failed to load), semantic and hybrid behave exactly as
+lexical. A hit's `snippet` is plain text from FTS5's `snippet()` around the best
+lexical match, and `matches` holds each matched term as a half-open range of UTF-16
+code units into it (what JS string indices count). The server marks matches with
+private-use code points and strips them, so the snippet carries no markup. A hit only
+the vector side found has an empty snippet and no matches.
+
+**Embedder.** A background `tokio` worker drains an embed queue off the write hot
+path, behind an `Embedder` trait. Default is local and in-process: `all-MiniLM-L6-v2`
+at 384 dimensions via fastembed. No API key; nothing leaves the machine. Changing the
+model requires a re-embed and a migration.
 
 ---
 
@@ -351,6 +373,9 @@ Both paths exist as the RAG substrate; neither is surfaced in the UI yet.
 
 `search_notes` · `get_note` · `create_note` · `append_to_note` · `link_notes` ·
 `get_backlinks` · `create_daily_note` · `append_to_daily_note` · `list_structures`
+
+`search_notes` makes one `Search` call in its `mode` (default hybrid) and writes each
+hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
 
 `list_structures` calls `StructureService.List` and formats each structure's type,
 description and properties (kinds, select options and defaults, relation targets).
