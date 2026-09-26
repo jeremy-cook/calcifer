@@ -119,6 +119,7 @@ impl EntityService {
                 "structure_type is required to resolve by name",
             ));
         }
+        known_structure(structure_type)?;
         if name.is_empty() {
             return Err(Status::invalid_argument("name is required"));
         }
@@ -558,6 +559,15 @@ fn date_property(date: &str) -> Property {
     }
 }
 
+/// The registry entry for `structure_type`, or `InvalidArgument` for a type the
+/// registry doesn't declare (I-24). Every write or lookup that takes a
+/// `structure_type` goes through this, so an unknown type can't create an entity.
+fn known_structure(structure_type: &str) -> Result<&'static structures::StructureDef, Status> {
+    structures::structure(structure_type).ok_or_else(|| {
+        Status::invalid_argument(format!("unknown structure_type {structure_type:?}"))
+    })
+}
+
 #[tonic::async_trait]
 impl EntityServiceTrait for EntityService {
     async fn get(&self, req: Request<GetEntityRequest>) -> Result<Response<Entity>, Status> {
@@ -573,6 +583,10 @@ impl EntityServiceTrait for EntityService {
         req: Request<ListEntitiesRequest>,
     ) -> Result<Response<ListEntitiesResponse>, Status> {
         let filter = req.into_inner().structure_type;
+        // "" lists every structure.
+        if !filter.is_empty() {
+            known_structure(&filter)?;
+        }
 
         let ids: Vec<String> = if filter.is_empty() {
             sqlx::query_scalar!(r#"SELECT id AS "id!" FROM entities ORDER BY updated_at DESC"#)
@@ -604,11 +618,11 @@ impl EntityServiceTrait for EntityService {
             name,
             properties,
         } = req.into_inner();
+        let def = known_structure(&structure_type)?;
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
         let mut entity =
             new_entity(&structure_type, name.as_deref(), properties).map_err(Status::from)?;
-        let unique_names = structures::structure(&structure_type).is_some_and(|s| s.unique_names);
-        if name.is_none() && unique_names {
+        if name.is_none() && def.unique_names {
             entity.name = self
                 .free_name(&structure_type, &entity.name)
                 .await
@@ -1184,13 +1198,43 @@ mod tests {
             .await
             .expect_err("text on a select property should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
 
-        // Structures outside the registry have no schema to check against.
-        let mut custom = with_select(note("Custom"), "mood", "whatever");
-        custom.structure_type = "Custom".to_string();
-        try_create(&svc, custom)
+    // I-24: a type the registry doesn't declare can't create, resolve or filter.
+    #[tokio::test]
+    async fn unknown_structure_types_are_rejected() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        create(&svc, note("Kept")).await;
+
+        for structure_type in ["Custom", ""] {
+            let err = try_create(&svc, untitled(structure_type))
+                .await
+                .expect_err("create of an unknown type");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{structure_type:?}");
+        }
+        let err = resolve(&svc, "Custom", by_name("Anything"), true)
             .await
-            .expect("unknown structure is unchecked");
+            .expect_err("resolve of an unknown type");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert_eq!(entity_count(&pool).await, 1);
+
+        let err = svc
+            .list(Request::new(ListEntitiesRequest {
+                structure_type: "Custom".to_string(),
+            }))
+            .await
+            .expect_err("list of an unknown type");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        // An empty filter still lists every structure.
+        let all = svc
+            .list(Request::new(ListEntitiesRequest {
+                structure_type: String::new(),
+            }))
+            .await
+            .expect("list all")
+            .into_inner();
+        assert_eq!(all.entities.len(), 1);
     }
 
     /// (target_id, target_structure) of an entity's links from `property_id`, sorted.
