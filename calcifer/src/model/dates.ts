@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
 import { format, getISOWeek, parse } from 'date-fns'
+import { timestampMs, type Timestamp } from '@bufbuild/protobuf/wkt'
+
+// A proto Timestamp in epoch milliseconds; an unset one reads as 0 (the epoch).
+export function timestampMsOrZero(ts: Timestamp | undefined): number {
+  return ts ? timestampMs(ts) : 0
+}
 
 export function todayIso(): string {
   return isoFromDate(new Date())

@@ -17,11 +17,10 @@ import { PlusIcon } from '@phosphor-icons/react'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import {
   dailyNoteByDate,
+  deleteEntity,
   deleteEntityIfRichTextEmpty,
-  deleteEntityImperative,
   getEntitiesSnapshot,
   useResolveDailyNote,
-  useDeleteEntity,
   type Entity,
 } from '~/model/store'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
@@ -51,7 +50,7 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
       if (!existing) return
       const ref = contentRichTextRef(existing)
       if (ref) deleteEntityIfRichTextEmpty(existing.id, ref)
-      else deleteEntityImperative(existing.id)
+      else deleteEntity(existing.id)
     }
   }, [iso])
 
@@ -104,7 +103,6 @@ interface DailyNoteActionsProps {
 }
 
 function DailyNoteActions({ dailyNote }: DailyNoteActionsProps) {
-  const deleteEntity = useDeleteEntity()
   const navigate = useNavigate()
 
   const handleExpand = () => {

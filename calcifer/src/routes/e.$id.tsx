@@ -21,7 +21,14 @@ import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
-import { useDeleteEntity, useEntity, usePropertyWriters, useRenameEntity, type Entity } from '~/model/store'
+import {
+  deleteEntity,
+  propertyValueOf,
+  useEntity,
+  usePropertyWriters,
+  useRenameEntity,
+  type Entity,
+} from '~/model/store'
 import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/model/structures'
 
 export const Route = createFileRoute('/e/$id')({
@@ -59,7 +66,6 @@ interface EntityHeaderProps {
 }
 
 function EntityHeader({ entity }: EntityHeaderProps) {
-  const deleteEntity = useDeleteEntity()
   const navigate = useNavigate()
   const structure = useStructure(entity.structureType)
 
@@ -191,7 +197,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     const override = overrides[`${entity.structureType}.${def.id}`]
     if (override) return override()
 
-    const value = entity.properties[def.id]?.value
+    const value = propertyValueOf(entity, def.id)
 
     switch (def.kind) {
       case PropertyKind.RICHTEXT:

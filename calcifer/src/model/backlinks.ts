@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { useAllEntities } from '~/model/store'
 import { getStructures } from '~/model/structures'
 import type { Entity, LinkRef } from '@calcifer/proto/calcifer/v1/entities_pb'
-import type { Timestamp } from '@bufbuild/protobuf/wkt'
+import { timestampMsOrZero } from '~/model/dates'
 
 export interface Backlink {
   entityId: string
@@ -11,16 +11,11 @@ export interface Backlink {
   mostRecentAt: Date
 }
 
-function timestampMillis(ts: Timestamp | undefined): number {
-  if (!ts) return 0
-  return Number(ts.seconds) * 1000 + ts.nanos / 1_000_000
-}
-
 function mostRecentLinkMillis(links: readonly LinkRef[], targetId: string): number {
   let max = 0
   for (const link of links) {
     if (link.target?.id !== targetId) continue
-    const ms = timestampMillis(link.createdAt)
+    const ms = timestampMsOrZero(link.createdAt)
     if (ms > max) max = ms
   }
   return max

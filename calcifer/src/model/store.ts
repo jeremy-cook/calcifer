@@ -10,7 +10,9 @@ import {
   type RichTextRef,
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { ResolveEntityRequest } from '@calcifer/proto/calcifer/v1/services_pb'
 import { entityClient, qk, queryClient } from '~/model/api'
+import { timestampMsOrZero } from '~/model/dates'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
 import { entitiesQuery, removeEntity, writeEntity } from '~/model/sync'
 
@@ -64,18 +66,18 @@ export function useCreateEntity() {
   )
 }
 
+// Server-authoritative get-or-create through EntityService.ResolveEntity, so the
+// browser and the MCP agent share one identity path. Writes the result into the caches.
+async function resolveOrCreateEntity(structureType: string, key: ResolveEntityRequest['key']): Promise<Entity> {
+  const entity = requireEntity(await entityClient.resolveEntity({ structureType, key, createIfMissing: true }))
+  writeEntity(entity)
+  return entity
+}
+
 // Get-or-create the day's DailyNote. The server builds it and names it for the day.
 export function useResolveDailyNote() {
   const m = useMutation({
-    mutationFn: async (iso: string) => {
-      const { entity } = await entityClient.resolveEntity({
-        key: { case: 'date', value: iso },
-        createIfMissing: true,
-      })
-      if (!entity) throw new Error(`resolve returned no daily note for ${iso}`)
-      return entity
-    },
-    onSuccess: writeEntity,
+    mutationFn: (iso: string) => resolveOrCreateEntity('', { case: 'date', value: iso }),
   })
   return useCallback((iso: string) => m.mutateAsync(iso), [m])
 }
@@ -132,16 +134,11 @@ interface SetPropertyVars {
   value: PropertyValue['value'] | null
 }
 
+// A property's current value on `entity`: `null` when it has no such property.
 // `entity.properties` is a plain-object map, so an ad-hoc id such as
 // `constructor` would otherwise read an `Object.prototype` member.
-function propertyOf(entity: Entity, propertyId: string): PropertyValue | undefined {
-  return Object.hasOwn(entity.properties, propertyId) ? entity.properties[propertyId] : undefined
-}
-
-// A property's current value on `entity`: `null` when it has no such property.
-function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['value'] | null {
-  const property = propertyOf(entity, propertyId)
-  return property ? property.value : null
+export function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['value'] | null {
+  return Object.hasOwn(entity.properties, propertyId) ? entity.properties[propertyId].value : null
 }
 
 // Write one property (`null` clears it) through EntityService.SetEntityProperty, so
@@ -254,15 +251,7 @@ function withProperty(entity: Entity, propertyId: string, value: PropertyValue['
   return createMessage(EntitySchema, { ...entity, properties })
 }
 
-export function useDeleteEntity() {
-  const m = useMutation({
-    mutationFn: (id: string) => entityClient.deleteEntity({ id }),
-    onSuccess: (_r, id) => removeEntity(id),
-  })
-  return useCallback((id: string) => void m.mutateAsync(id), [m])
-}
-
-// --- Imperative (non-hook) helpers for the editor mention flow + cleanup ---
+// --- Imperative (non-hook) helpers: delete, the editor mention flow, cleanup ---
 
 export function getEntitiesSnapshot(): Entity[] {
   return queryClient.getQueryData(entitiesQuery.queryKey) ?? []
@@ -272,19 +261,13 @@ export async function getOrCreateEntityForMention(
   structureType: string,
   name: string,
 ): Promise<{ id: string; name: string; structureType: string }> {
-  // Server-authoritative get-or-create so the browser and the MCP agent share
-  // one identity path. The server dedupes by (structureType, name).
-  const { entity } = await entityClient.resolveEntity({
-    structureType,
-    key: { case: 'name', value: name },
-    createIfMissing: true,
-  })
-  if (!entity) throw new Error(`resolve returned no entity for ${structureType} "${name}"`)
-  writeEntity(entity)
+  // The server dedupes by (structureType, name).
+  const entity = await resolveOrCreateEntity(structureType, { case: 'name', value: name })
   return { id: entity.id, name: entity.name, structureType: entity.structureType }
 }
 
-export function deleteEntityImperative(id: string): void {
+// The one delete path: fire-and-forget, dropped from the caches once the server confirms.
+export function deleteEntity(id: string): void {
   void entityClient
     .deleteEntity({ id })
     .then(() => removeEntity(id))
@@ -304,19 +287,13 @@ export function deleteEntityIfRichTextEmpty(id: string, ref: RichTextRef): void 
       .then(() => fetchRichText(ref))
       .then(({ doc }) => {
         // Small race left: a write landing between this Get and the Delete is lost.
-        if (isRichTextEmpty(doc)) deleteEntityImperative(id)
+        if (isRichTextEmpty(doc)) deleteEntity(id)
       })
       .catch((err) => console.error('empty check before delete failed', err))
   }, 0)
 }
 
 // --- Pure derivations over an entity array (consumers pass useAllEntities()) ---
-
-function updatedAtMillis(entity: Entity): number {
-  const ts = entity.updatedAt
-  if (!ts) return 0
-  return Number(ts.seconds) * 1000 + ts.nanos / 1_000_000
-}
 
 export function listByStructure(entities: Entity[], structureType: string): Entity[] {
   const matches = entities.filter((e) => e.structureType === structureType)
@@ -330,7 +307,7 @@ export function listByStructure(entities: Entity[], structureType: string): Enti
       return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
     })
   }
-  return matches.sort((a, b) => updatedAtMillis(b) - updatedAtMillis(a))
+  return matches.sort((a, b) => timestampMsOrZero(b.updatedAt) - timestampMsOrZero(a.updatedAt))
 }
 
 export function dailyNoteDate(entity: Entity): string | undefined {
@@ -344,5 +321,5 @@ export function dailyNoteByDate(entities: Entity[], iso: string): Entity | undef
 }
 
 export function entityUpdatedAtDate(entity: Entity): Date {
-  return new Date(updatedAtMillis(entity))
+  return new Date(timestampMsOrZero(entity.updatedAt))
 }

@@ -1,8 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
-import type { Timestamp } from '@bufbuild/protobuf/wkt'
-import { useAllEntities, useSetProperty } from '~/model/store'
-import { shiftIso, useToday } from '~/model/dates'
+import { propertyValueOf, useAllEntities, usePropertyWriters } from '~/model/store'
+import { shiftIso, timestampMsOrZero, useToday } from '~/model/dates'
 import { getStructure, propertyDef, type StructureDef } from '~/model/structures'
 
 // Option keys, labels and defaults come from the fetched registry. Keys the UI
@@ -39,14 +38,14 @@ export function isOptionKey<K extends string>(options: readonly { key: K }[], v:
 // A select value that isn't a declared option reads as the declared default.
 function selectValue(entity: Entity, todo: StructureDef | undefined, id: string): string {
   const def = propertyDef(todo, id)
-  const value = entity.properties[id]?.value
+  const value = propertyValueOf(entity, id)
   return value?.case === 'select' && def && isOptionKey(def.options, value.value)
     ? value.value
     : (def?.defaultOption ?? '')
 }
 
 export function todoFields(entity: Entity): TodoFields {
-  const valueOf = (id: string) => entity.properties[id]?.value
+  const valueOf = (id: string) => propertyValueOf(entity, id)
   const todo = getStructure('Todo')
 
   const status = selectValue(entity, todo, 'status')
@@ -114,11 +113,6 @@ export interface TodoSearch {
   dir?: TodoSort['dir']
 }
 
-function timestampMillis(ts: Timestamp | undefined): number {
-  if (!ts) return 0
-  return Number(ts.seconds) * 1000 + ts.nanos / 1_000_000
-}
-
 function matchesDue(due: string | undefined, filter: NonNullable<TodoFilter['due']>, todayIsoValue: string): boolean {
   if (filter === 'none') return due === undefined
   if (due === undefined) return false
@@ -145,10 +139,10 @@ function compareTodos(a: Entity, b: Entity, sort: TodoSort, priorityOrder: reado
       cmp = priorityOrder.indexOf(af.priority) - priorityOrder.indexOf(bf.priority)
       break
     case 'created':
-      cmp = timestampMillis(a.createdAt) - timestampMillis(b.createdAt)
+      cmp = timestampMsOrZero(a.createdAt) - timestampMsOrZero(b.createdAt)
       break
     case 'updated':
-      cmp = timestampMillis(a.updatedAt) - timestampMillis(b.updatedAt)
+      cmp = timestampMsOrZero(a.updatedAt) - timestampMsOrZero(b.updatedAt)
       break
     case 'name':
       cmp = a.name.localeCompare(b.name)
@@ -177,11 +171,8 @@ export function todoDue(entity: Entity): string | undefined {
 }
 
 export function useSetTodoStatus() {
-  const setProperty = useSetProperty()
-  return useCallback(
-    (entity: Entity, status: TodoStatus) => setProperty(entity, 'status', { case: 'select', value: status }),
-    [setProperty],
-  )
+  const { setSelect } = usePropertyWriters()
+  return useCallback((entity: Entity, status: TodoStatus) => setSelect(entity, 'status', status), [setSelect])
 }
 
 export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
