@@ -57,10 +57,29 @@ async function appendDoc(entityId: string, label: string, markdown: string): Pro
   throw new Error(`${label} kept changing while appending (${APPEND_ATTEMPTS} attempts); nothing was appended. Try again.`)
 }
 
-async function backlinkNames(targetId: string): Promise<string[]> {
-  // Server-side backlink scan (SELECT ... WHERE target_id = ?), no client-side List.
-  const res = await entityClient.listBacklinks({ id: targetId, structureType: '' })
-  return res.entities.map((e) => e.name)
+interface BacklinkSource {
+  name: string
+  propertyIds: string[]
+}
+
+// The entities linking to `targetId`, newest link first. The server returns one
+// Backlink per link row (self-links excluded), so a source that links from two
+// properties is folded into one entry here.
+async function backlinkSources(targetId: string): Promise<BacklinkSource[]> {
+  const res = await entityClient.listBacklinks({ entityId: targetId })
+  const byId = new Map<string, BacklinkSource>()
+  for (const b of res.backlinks) {
+    const source = b.source!
+    const entry = byId.get(source.id) ?? { name: source.name, propertyIds: [] }
+    entry.propertyIds.push(b.sourcePropertyId)
+    byId.set(source.id, entry)
+  }
+  return [...byId.values()]
+}
+
+// The source's name, plus the linking properties unless it's only the body.
+function backlinkLabel({ name, propertyIds }: BacklinkSource): string {
+  return propertyIds.every((p) => p === 'content') ? name : `${name} (via ${propertyIds.join(', ')})`
 }
 
 export async function createNote(name: string, markdown: string): Promise<string> {
@@ -92,7 +111,7 @@ export async function getNote(name: string): Promise<string> {
     throw e
   }
   const md = fromTipTap((await getDoc(entityId)).doc).trim()
-  const back = await backlinkNames(entityId)
+  const back = (await backlinkSources(entityId)).map((s) => s.name)
   return `# ${entityName}\n\n${md || '(empty)'}\n\n---\nLinked from: ${back.join(', ') || '(nothing)'}`
 }
 
@@ -136,8 +155,10 @@ export async function searchNotes(
 export async function getBacklinks(name: string): Promise<string> {
   const r = await resolveName('Note', name, false).catch(() => null)
   if (!r?.entity) return `No note named "${name}".`
-  const names = await backlinkNames(r.entity.id)
-  return names.length ? names.map((n) => `- ${n}`).join('\n') : `Nothing links to "${name}" yet.`
+  const sources = await backlinkSources(r.entity.id)
+  return sources.length
+    ? sources.map((s) => `- ${backlinkLabel(s)}`).join('\n')
+    : `Nothing links to "${name}" yet.`
 }
 
 export async function linkNotes(from: string, to: string): Promise<string> {
