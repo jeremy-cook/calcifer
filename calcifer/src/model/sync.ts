@@ -88,8 +88,9 @@ async function applyEvent({ event }: EntityEvent): Promise<void> {
 }
 
 // Long-lived Watch loop: keeps the replica in step with the server, including
-// the MCP agent's writes, without polling. A dropped stream reconnects after a
-// second; the new stream's first message is a snapshot, which resyncs.
+// the MCP agent's writes, without polling. A stream that fails or ends
+// reconnects after a second (so a server that keeps closing streams can't cause
+// a tight loop); the new stream's first message is a snapshot, which resyncs.
 export function useEntitySync(): void {
   useEffect(() => {
     const controller = new AbortController()
@@ -100,11 +101,13 @@ export function useEntitySync(): void {
             if (controller.signal.aborted) return
             await applyEvent(event)
           }
+          if (controller.signal.aborted) return
+          console.warn('watch ended; reconnecting in 1s')
         } catch (err) {
           if (controller.signal.aborted) return
           console.warn('watch disconnected; reconnecting in 1s', err)
-          await new Promise((r) => setTimeout(r, 1000))
         }
+        await new Promise((r) => setTimeout(r, 1000))
       }
     })()
     return () => controller.abort()
