@@ -214,7 +214,7 @@ user after Phase 2.
 | T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | done (226d0c0, e405428, ffc5fa1, b3bc618, 883c039) |
 | **Phase 3: sync** |||||
 | T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | done (4cc92ec) |
-| T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | todo |
+| T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | in progress (engineer: T14 engineer) |
 | T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | todo |
 | **Phase 4: message shapes and naming** |||||
 | T16 | [Properties as a map](tasks/T16-properties-map.md) | all | T15 | none | todo |
