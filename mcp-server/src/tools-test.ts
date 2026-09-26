@@ -37,9 +37,10 @@ async function main(): Promise<void> {
   console.log('create_daily_note:', created)
   assert(created.includes(date), 'create_daily_note acknowledges the date')
 
-  // Second create for the same day is a no-op (already_exists handled internally).
+  // Second create for the same day is a no-op that returns the same note.
   const again = await ops.createDailyNote(date)
-  assert(/ready for 2026-06-13/.test(again), 'create_daily_note is idempotent per day')
+  assert(/for 2026-06-13 already existed/.test(again), 'create_daily_note is idempotent per day')
+  assert(again.includes(created.match(/\(([^)]+)\)/)![1]), 'create_daily_note returns the same note')
 
   await ops.appendToDailyNote(date, 'Read about [[Transformers]] today.')
   const dailyBack = await ops.getBacklinks('Transformers')

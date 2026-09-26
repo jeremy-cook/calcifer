@@ -55,7 +55,7 @@ async function pureRoundTrip(): Promise<void> {
 
 async function liveDerivation(): Promise<void> {
   const resolve = async (structureType: string, name: string) => {
-    const r = await entityClient.resolveByName({ structureType, name, createIfMissing: true })
+    const r = await entityClient.resolve({ structureType, key: { case: 'name', value: name }, createIfMissing: true })
     return { id: r.entity!.id, name: r.entity!.name }
   }
   const md = 'Notes on [[Krebs Cycle]] — central to #metabolism. Reviewed 2026-07-04.'

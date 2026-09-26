@@ -9,5 +9,5 @@ export interface TTNode {
   marks?: { type: string }[]
 }
 
-// Resolves a (structureType, name) to a canonical entity id (server ResolveByName).
+// Resolves a (structureType, name) to a canonical entity id (server Resolve by name).
 export type Resolver = (structureType: string, name: string) => Promise<{ id: string; name: string }>

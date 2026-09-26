@@ -8,9 +8,15 @@ import { toTipTap } from './markdown/parse.js'
 import { fromTipTap } from './markdown/serialize.js'
 import type { TTNode } from './markdown/types.js'
 
+// Get (or, with createIfMissing, create) the (structureType, name) entity.
+// NOT_FOUND when it's missing and createIfMissing is false.
+function resolveName(structureType: string, name: string, createIfMissing: boolean) {
+  return entityClient.resolve({ structureType, key: { case: 'name', value: name }, createIfMissing })
+}
+
 // [[wikilinks]] / #tags resolve to canonical entities (get-or-create) server-side.
 const resolver = async (structureType: string, name: string) => {
-  const r = await entityClient.resolveByName({ structureType, name, createIfMissing: true })
+  const r = await resolveName(structureType, name, true)
   return { id: r.entity!.id, name: r.entity!.name }
 }
 
@@ -77,7 +83,7 @@ export async function getNote(name: string): Promise<string> {
   let entityId: string
   let entityName: string
   try {
-    const r = await entityClient.resolveByName({ structureType: 'Note', name, createIfMissing: false })
+    const r = await resolveName('Note', name, false)
     entityId = r.entity!.id
     entityName = r.entity!.name
   } catch (e) {
@@ -113,7 +119,7 @@ export async function searchNotes(
 }
 
 export async function getBacklinks(name: string): Promise<string> {
-  const r = await entityClient.resolveByName({ structureType: 'Note', name, createIfMissing: false }).catch(() => null)
+  const r = await resolveName('Note', name, false).catch(() => null)
   if (!r?.entity) return `No note named "${name}".`
   const names = await backlinkNames(r.entity.id)
   return names.length ? names.map((n) => `- ${n}`).join('\n') : `Nothing links to "${name}" yet.`
@@ -125,27 +131,16 @@ export async function linkNotes(from: string, to: string): Promise<string> {
   return `Linked "${from}" -> "${to}".`
 }
 
-// Get-or-create the DailyNote for `date` (ISO "YYYY-MM-DD"), returning its id +
-// name. CreateDailyNote is server-authoritative (one note per day); on a repeat
-// call it returns already_exists, so we fall back to resolving by name.
-async function resolveDailyNote(date: string): Promise<{ id: string; name: string }> {
-  try {
-    const e = await entityClient.createDailyNote({ date })
-    return { id: e.id, name: e.name }
-  } catch (err) {
-    if (!(err instanceof ConnectError && err.code === Code.AlreadyExists)) throw err
-    const list = await entityClient.list({ structureType: 'DailyNote' })
-    const existing = list.entities.find((e) =>
-      e.properties.some((p) => p.value?.value?.case === 'date' && p.value.value.value === date),
-    )
-    if (!existing) throw err
-    return { id: existing.id, name: existing.name }
-  }
+// Get-or-create the DailyNote for `date` (ISO "YYYY-MM-DD"). The server keeps
+// one per day and names it for the day.
+async function resolveDailyNote(date: string): Promise<{ id: string; name: string; created: boolean }> {
+  const r = await entityClient.resolve({ key: { case: 'date', value: date }, createIfMissing: true })
+  return { id: r.entity!.id, name: r.entity!.name, created: r.created }
 }
 
 export async function createDailyNote(date: string): Promise<string> {
-  const { id, name } = await resolveDailyNote(date)
-  return `Daily note "${name}" (${id}) ready for ${date}.`
+  const { id, name, created } = await resolveDailyNote(date)
+  return `Daily note "${name}" (${id}) for ${date} ${created ? 'created' : 'already existed'}.`
 }
 
 export async function appendToDailyNote(date: string, markdown: string): Promise<string> {
