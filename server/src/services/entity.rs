@@ -190,9 +190,10 @@ impl EntityService {
 
         let entity =
             new_entity("DailyNote", None, vec![date_property(date)]).map_err(Status::from)?;
-        let saved = self.persist_new_entity(&entity).await.map_err(|e| {
-            map_unique_violation(e, &format!("a DailyNote for {date} already exists"))
-        })?;
+        let saved = self
+            .persist_new_entity(&entity)
+            .await
+            .map_err(|e| map_unique_violation(e, &entity.name, Some(date)))?;
         Ok(self.created(saved))
     }
 
@@ -455,16 +456,32 @@ fn format_long_date(date: &str) -> String {
     }
 }
 
-/// Map a SQLite UNIQUE-constraint failure to a tonic status, else fall back to
-/// the standard AppError -> Status conversion. Used by every write that can hit
-/// `one_daily_note_per_day` or `one_tag_per_name`.
-fn map_unique_violation(err: AppError, msg: &str) -> Status {
-    if let AppError::Db(sqlx::Error::Database(ref db)) = err {
-        if db.is_unique_violation() {
-            return Status::already_exists(msg.to_string());
-        }
+/// Map a SQLite UNIQUE-constraint failure to `AlreadyExists` with a message for
+/// the index that failed, else fall back to the standard AppError -> Status
+/// conversion (I-25). `name` and `date` are the name and DailyNote date the write
+/// tried to store. Used by every write that can hit `one_daily_note_per_day` or
+/// `one_tag_per_name`.
+fn map_unique_violation(err: AppError, name: &str, date: Option<&str>) -> Status {
+    let AppError::Db(sqlx::Error::Database(ref db)) = err else {
+        return Status::from(err);
+    };
+    if !db.is_unique_violation() {
+        return Status::from(err);
     }
-    Status::from(err)
+    // SQLite names a failed unique index on plain columns by its column list,
+    // not the index name: "UNIQUE constraint failed: entities.date_key" for
+    // `one_daily_note_per_day` and "UNIQUE constraint failed: entities.name" for
+    // `one_tag_per_name` (its COLLATE NOCASE doesn't change that). Only an index
+    // on an expression is reported by name. The tests below pin both texts.
+    let message = db.message();
+    if message.ends_with("entities.date_key") {
+        let date = date.unwrap_or("this date");
+        Status::already_exists(format!("a DailyNote for {date} already exists"))
+    } else if message.ends_with("entities.name") {
+        Status::already_exists(format!("a Tag named \"{name}\" already exists"))
+    } else {
+        Status::already_exists(message.to_string())
+    }
 }
 
 /// The DailyNote name rule (ADR 8): a DailyNote is named for its date, as a long
@@ -636,7 +653,9 @@ impl EntityServiceTrait for EntityService {
         let saved = self
             .persist_new_entity(&entity)
             .await
-            .map_err(|e| map_unique_violation(e, "a DailyNote for this date already exists"))?;
+            .map_err(|e| {
+                map_unique_violation(e, &entity.name, date_key_for(&entity).as_deref())
+            })?;
         self.hub.publish(EntityEvent {
             event: Some(entity_event::Event::Upserted(saved.clone())),
         });
@@ -658,9 +677,7 @@ impl EntityServiceTrait for EntityService {
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| {
-            map_unique_violation(AppError::from(e), &format!("the name {name:?} is taken"))
-        })?;
+        .map_err(|e| map_unique_violation(AppError::from(e), &name, None))?;
         if updated.rows_affected() == 0 {
             return Err(Status::not_found(format!("entity {id}")));
         }
@@ -782,7 +799,13 @@ impl EntityServiceTrait for EntityService {
             )
             .execute(&mut *tx)
             .await
-            .map_err(|e| map_unique_violation(AppError::from(e), "a DailyNote for this date already exists"))?;
+            .map_err(|e| {
+                map_unique_violation(
+                    AppError::from(e),
+                    name.as_deref().unwrap_or_default(),
+                    date_key.as_deref(),
+                )
+            })?;
             if let Some(name) = &name {
                 fts_upsert_name(&mut tx, &entity_id, name)
                     .await
@@ -1099,8 +1122,25 @@ mod tests {
             .expect_err("tag names are unique");
 
         assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        assert_eq!(err.message(), r#"a Tag named "URGENT" already exists"#);
         let stored = svc.load_entity(&other.id).await.expect("load");
         assert_eq!(stored.name, "later");
+    }
+
+    // I-25: the message names the Tag clash, not a DailyNote date.
+    #[tokio::test]
+    async fn create_onto_a_taken_tag_name_is_already_exists() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        create(&svc, tag("urgent")).await;
+
+        let err = try_create(&svc, tag("Urgent"))
+            .await
+            .expect_err("tag names are unique");
+
+        assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        assert_eq!(err.message(), r#"a Tag named "Urgent" already exists"#);
+        assert_eq!(entity_count(&pool).await, 1);
     }
 
     // I-15's done-when: the agent sets a to-do's status while the browser renames
@@ -1690,6 +1730,7 @@ mod tests {
             .expect_err("day already has a note");
 
         assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        assert_eq!(err.message(), "a DailyNote for 2026-06-13 already exists");
         let stored = svc.load_entity(&second.id).await.expect("load");
         assert_eq!(stored.name, "June 14, 2026");
         assert_eq!(stored.properties, second.properties);
