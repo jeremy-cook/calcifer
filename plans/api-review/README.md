@@ -86,8 +86,13 @@ Remember the Node PATH pin before any pnpm command:
   safe.
 - The tech lead does the integration checks (MCP `test:tools`, browser checks) against a
   **scratch** database:
-  `cd server && DATABASE_URL=sqlite://$SCRATCH/calcifer-it.db cargo run`. This needs
-  `:8080` free. If the user's own server is running, ask the user before stopping it.
+  build with `cd server && cargo build` (the `sqlx` macros check the schema of
+  `server/.env`'s DB at compile time), then run the binary:
+  `DATABASE_URL=sqlite://$SCRATCH/calcifer-it.db ./target/debug/calcifer-server`. The
+  server creates and migrates the file itself. Don't use `cargo run` with the scratch
+  URL (it compiles against the empty DB and fails) or the `sqlx` CLI (it can't load
+  `vec0`). This needs `:8080` free. If the user's own server (or another project) holds
+  it, ask the user before stopping it.
 - **Before the first server boot after T12**, back up `server/calcifer.db`, because T12's
   migration deletes rows. Only boot against it once gate G2 is cleared.
 - For browser checks, use the `run` skill or the Firefox devtools tools. The
@@ -150,7 +155,8 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-35 | P2: pruning an empty daily note can delete agent content | medium | T06 |
 | I-36 | ResolveByName returns a generic error when it loses a create race (found in T01) | low | T07 |
 | I-37 | A racing RichText.Put fails with Internal, not FailedPrecondition (found in T04) | medium | *unassigned; raise at Phase 1 check-in* |
-| I-38 | Stale comments in watch.rs and richtext.ts (found in T04) | low | *unassigned* |
+| I-38 | Stale comment in watch.rs (found in T04; richtext.ts half fixed in T06) | low | T14 (note) |
+| I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | *unassigned; raise at Phase 1 check-in* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -168,7 +174,7 @@ user after Phase 2.
 | T03 | [Sort daily notes by date](tasks/T03-daily-note-sort.md) | fe | T01 | T02 | done (0b12cf4, 1678503) |
 | T04 | [RichText Put: validate, conflict-check, publish events; Get returns empty](tasks/T04-richtext-put-server.md) | proto, server | T01, G1 | none (touches proto) | done (4dea7a7, d68bb41, 81f1605) |
 | T05 | [MCP: conflict-safe appends](tasks/T05-mcp-conflict-safe-append.md) | mcp | T04 | T06 | done (b5ec83e) |
-| T06 | [FE: live rich text, conflict handling, safe prune](tasks/T06-fe-live-richtext.md) | fe | T04 | T05 | in progress (engineer: T06) |
+| T06 | [FE: live rich text, conflict handling, safe prune](tasks/T06-fe-live-richtext.md) | fe | T04 | T05 | done (17b38cc, 20dc58d, 62775de, 971e98a) |
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06 | none | todo |
 | T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | todo |

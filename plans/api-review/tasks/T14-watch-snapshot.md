@@ -62,6 +62,8 @@ working.
   - a later event may duplicate snapshot content, which is harmless because upsert and
     delete are idempotent.
 - The first `snapshot` must arrive promptly, even with no writes happening.
+- Fix the module comment at the top of `watch.rs`: `RichText.Put` publishes too, not
+  only Create/Update/Delete (I-38). Move I-38 to Resolved in `ISSUES.md` in commit 3.
 
 ## Tests
 - `watch_starts_with_a_snapshot_of_existing_entities`
