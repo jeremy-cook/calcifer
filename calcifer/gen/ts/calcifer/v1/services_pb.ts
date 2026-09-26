@@ -3,8 +3,8 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Entity, EntityRefSchema, EntitySchema, PropertyValue, RichText, RichTextRefSchema, RichTextSchema } from "./entities_pb";
 import { file_calcifer_v1_entities } from "./entities_pb";
 import type { StructureDef } from "./structures_pb";
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IuwBChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARJECgpwcm9wZXJ0aWVzGAQgAygLMjAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdC5Qcm9wZXJ0aWVzRW50cnkaTQoPUHJvcGVydGllc0VudHJ5EgsKA2tleRgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWU6AjgBQgcKBV9uYW1lSgQIARACUgZlbnRpdHkiLwoTUmVuYW1lRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIiEKE0RlbGV0ZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkiZwoSU2V0UHJvcGVydHlSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIpCgV2YWx1ZRgDIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiDgoMV2F0Y2hSZXF1ZXN0IhcKFUxpc3RTdHJ1Y3R1cmVzUmVxdWVzdCJHChZMaXN0U3RydWN0dXJlc1Jlc3BvbnNlEi0KCnN0cnVjdHVyZXMYASADKAsyGS5jYWxjaWZlci52MS5TdHJ1Y3R1cmVEZWYicAoUUmVzb2x2ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkSDgoEbmFtZRgCIAEoCUgAEg4KBGRhdGUYAyABKAlIABIZChFjcmVhdGVfaWZfbWlzc2luZxgEIAEoCEIFCgNrZXkiTQoVUmVzb2x2ZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIjcKDkVudGl0eVNuYXBzaG90EiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IswBCgtFbnRpdHlFdmVudBInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SAASLwoIc25hcHNob3QYBCABKAsyGy5jYWxjaWZlci52MS5FbnRpdHlTbmFwc2hvdEgAEhAKCHJldmlzaW9uGA8gASgEQgcKBWV2ZW50MoAFCg1FbnRpdHlTZXJ2aWNlEjkKA0dldBIdLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSSwoETGlzdBIgLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1JlcXVlc3QaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZRI/CgZDcmVhdGUSIC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5Ej8KBlJlbmFtZRIgLmNhbGNpZmVyLnYxLlJlbmFtZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSQwoLU2V0UHJvcGVydHkSHy5jYWxjaWZlci52MS5TZXRQcm9wZXJ0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSQgoGRGVsZXRlEiAuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRI+CgVXYXRjaBIZLmNhbGNpZmVyLnYxLldhdGNoUmVxdWVzdBoYLmNhbGNpZmVyLnYxLkVudGl0eUV2ZW50MAESUAoHUmVzb2x2ZRIhLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXF1ZXN0GiIuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlc3BvbnNlEkoKDUxpc3RCYWNrbGlua3MSFi5jYWxjaWZlci52MS5FbnRpdHlSZWYaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZTJ+Cg9SaWNoVGV4dFNlcnZpY2USNgoDR2V0EhguY2FsY2lmZXIudjEuUmljaFRleHRSZWYaFS5jYWxjaWZlci52MS5SaWNoVGV4dBIzCgNQdXQSFS5jYWxjaWZlci52MS5SaWNoVGV4dBoVLmNhbGNpZmVyLnYxLlJpY2hUZXh0MpkBCg1TZWFyY2hTZXJ2aWNlEkEKBlNlYXJjaBIaLmNhbGNpZmVyLnYxLlNlYXJjaFJlcXVlc3QaGy5jYWxjaWZlci52MS5TZWFyY2hSZXNwb25zZRJFCghSZXRyaWV2ZRIcLmNhbGNpZmVyLnYxLlJldHJpZXZlUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlMmMKEFN0cnVjdHVyZVNlcnZpY2USTwoETGlzdBIiLmNhbGNpZmVyLnYxLkxpc3RTdHJ1Y3R1cmVzUmVxdWVzdBojLmNhbGNpZmVyLnYxLkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2ViBnByb3RvMw", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiVAoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDRIlCgRtb2RlGAMgASgOMhcuY2FsY2lmZXIudjEuU2VhcmNoTW9kZSI2Cg5TZWFyY2hSZXNwb25zZRIkCgRoaXRzGAEgAygLMhYuY2FsY2lmZXIudjEuU2VhcmNoSGl0IigKCk1hdGNoUmFuZ2USDQoFc3RhcnQYASABKA0SCwoDZW5kGAIgASgNInoKCVNlYXJjaEhpdBIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSDwoHc25pcHBldBgCIAEoCRINCgVzY29yZRgDIAEoARIoCgdtYXRjaGVzGAQgAygLMhcuY2FsY2lmZXIudjEuTWF0Y2hSYW5nZSIeChBHZXRFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIi0KE0xpc3RFbnRpdGllc1JlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkiPQoUTGlzdEVudGl0aWVzUmVzcG9uc2USJQoIZW50aXRpZXMYASADKAsyEy5jYWxjaWZlci52MS5FbnRpdHki7AEKE0NyZWF0ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYAiABKAkSEQoEbmFtZRgDIAEoCUgAiAEBEkQKCnByb3BlcnRpZXMYBCADKAsyMC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0LlByb3BlcnRpZXNFbnRyeRpNCg9Qcm9wZXJ0aWVzRW50cnkSCwoDa2V5GAEgASgJEikKBXZhbHVlGAIgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZToCOAFCBwoFX25hbWVKBAgBEAJSBmVudGl0eSIvChNSZW5hbWVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkiIQoTRGVsZXRlRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSJnChJTZXRQcm9wZXJ0eVJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJEikKBXZhbHVlGAMgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZSIOCgxXYXRjaFJlcXVlc3QiFwoVTGlzdFN0cnVjdHVyZXNSZXF1ZXN0IkcKFkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2USLQoKc3RydWN0dXJlcxgBIAMoCzIZLmNhbGNpZmVyLnYxLlN0cnVjdHVyZURlZiJwChRSZXNvbHZlRW50aXR5UmVxdWVzdBIWCg5zdHJ1Y3R1cmVfdHlwZRgBIAEoCRIOCgRuYW1lGAIgASgJSAASDgoEZGF0ZRgDIAEoCUgAEhkKEWNyZWF0ZV9pZl9taXNzaW5nGAQgASgIQgUKA2tleSJNChVSZXNvbHZlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB2NyZWF0ZWQYAiABKAgiNwoORW50aXR5U25hcHNob3QSJQoIZW50aXRpZXMYASADKAsyEy5jYWxjaWZlci52MS5FbnRpdHkizAEKC0VudGl0eUV2ZW50EicKCHVwc2VydGVkGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5SAASFAoKZGVsZXRlZF9pZBgCIAEoCUgAEjIKEXJpY2hfdGV4dF9jaGFuZ2VkGAMgASgLMhUuY2FsY2lmZXIudjEuUmljaFRleHRIABIvCghzbmFwc2hvdBgEIAEoCzIbLmNhbGNpZmVyLnYxLkVudGl0eVNuYXBzaG90SAASEAoIcmV2aXNpb24YDyABKARCBwoFZXZlbnQqdAoKU2VhcmNoTW9kZRIbChdTRUFSQ0hfTU9ERV9VTlNQRUNJRklFRBAAEhcKE1NFQVJDSF9NT0RFX0xFWElDQUwQARIYChRTRUFSQ0hfTU9ERV9TRU1BTlRJQxACEhYKElNFQVJDSF9NT0RFX0hZQlJJRBADMoAFCg1FbnRpdHlTZXJ2aWNlEjkKA0dldBIdLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSSwoETGlzdBIgLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1JlcXVlc3QaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZRI/CgZDcmVhdGUSIC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5Ej8KBlJlbmFtZRIgLmNhbGNpZmVyLnYxLlJlbmFtZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSQwoLU2V0UHJvcGVydHkSHy5jYWxjaWZlci52MS5TZXRQcm9wZXJ0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSQgoGRGVsZXRlEiAuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRI+CgVXYXRjaBIZLmNhbGNpZmVyLnYxLldhdGNoUmVxdWVzdBoYLmNhbGNpZmVyLnYxLkVudGl0eUV2ZW50MAESUAoHUmVzb2x2ZRIhLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXF1ZXN0GiIuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlc3BvbnNlEkoKDUxpc3RCYWNrbGlua3MSFi5jYWxjaWZlci52MS5FbnRpdHlSZWYaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZTJ+Cg9SaWNoVGV4dFNlcnZpY2USNgoDR2V0EhguY2FsY2lmZXIudjEuUmljaFRleHRSZWYaFS5jYWxjaWZlci52MS5SaWNoVGV4dBIzCgNQdXQSFS5jYWxjaWZlci52MS5SaWNoVGV4dBoVLmNhbGNpZmVyLnYxLlJpY2hUZXh0MlIKDVNlYXJjaFNlcnZpY2USQQoGU2VhcmNoEhouY2FsY2lmZXIudjEuU2VhcmNoUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlMmMKEFN0cnVjdHVyZVNlcnZpY2USTwoETGlzdBIiLmNhbGNpZmVyLnYxLkxpc3RTdHJ1Y3R1cmVzUmVxdWVzdBojLmNhbGNpZmVyLnYxLkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2ViBnByb3RvMw", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
 
 /**
  * @generated from message calcifer.v1.SearchRequest
@@ -29,9 +29,16 @@ export type SearchRequest = Message<"calcifer.v1.SearchRequest"> & {
   query: string;
 
   /**
+   * 0 => server default (10)
+   *
    * @generated from field: uint32 limit = 2;
    */
   limit: number;
+
+  /**
+   * @generated from field: calcifer.v1.SearchMode mode = 3;
+   */
+  mode: SearchMode;
 };
 
 /**
@@ -40,37 +47,6 @@ export type SearchRequest = Message<"calcifer.v1.SearchRequest"> & {
  */
 export const SearchRequestSchema: GenMessage<SearchRequest> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_services, 0);
-
-/**
- * @generated from message calcifer.v1.RetrieveRequest
- */
-export type RetrieveRequest = Message<"calcifer.v1.RetrieveRequest"> & {
-  /**
-   * @generated from field: string query = 1;
-   */
-  query: string;
-
-  /**
-   * number of hits to return (0 => server default)
-   *
-   * @generated from field: uint32 k = 2;
-   */
-  k: number;
-
-  /**
-   * true: RRF-fuse vector + FTS5; false: pure vector KNN
-   *
-   * @generated from field: bool hybrid = 3;
-   */
-  hybrid: boolean;
-};
-
-/**
- * Describes the message calcifer.v1.RetrieveRequest.
- * Use `create(RetrieveRequestSchema)` to create a new message.
- */
-export const RetrieveRequestSchema: GenMessage<RetrieveRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 1);
 
 /**
  * @generated from message calcifer.v1.SearchResponse
@@ -87,6 +63,30 @@ export type SearchResponse = Message<"calcifer.v1.SearchResponse"> & {
  * Use `create(SearchResponseSchema)` to create a new message.
  */
 export const SearchResponseSchema: GenMessage<SearchResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 1);
+
+/**
+ * A half-open [start, end) range of UTF-16 code units into `SearchHit.snippet`.
+ *
+ * @generated from message calcifer.v1.MatchRange
+ */
+export type MatchRange = Message<"calcifer.v1.MatchRange"> & {
+  /**
+   * @generated from field: uint32 start = 1;
+   */
+  start: number;
+
+  /**
+   * @generated from field: uint32 end = 2;
+   */
+  end: number;
+};
+
+/**
+ * Describes the message calcifer.v1.MatchRange.
+ * Use `create(MatchRangeSchema)` to create a new message.
+ */
+export const MatchRangeSchema: GenMessage<MatchRange> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_services, 2);
 
 /**
@@ -99,14 +99,26 @@ export type SearchHit = Message<"calcifer.v1.SearchHit"> & {
   entity?: Entity | undefined;
 
   /**
+   * Plain text around the best lexical match, with no markup; `matches` says
+   * where the query terms are. Empty for a hit that only the vector side found.
+   *
    * @generated from field: string snippet = 2;
    */
   snippet: string;
 
   /**
+   * Higher is better. Only comparable within one response.
+   *
    * @generated from field: double score = 3;
    */
   score: number;
+
+  /**
+   * The matched terms in `snippet`, in order. Empty when `snippet` is.
+   *
+   * @generated from field: repeated calcifer.v1.MatchRange matches = 4;
+   */
+  matches: MatchRange[];
 };
 
 /**
@@ -457,6 +469,48 @@ export const EntityEventSchema: GenMessage<EntityEvent> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_services, 17);
 
 /**
+ * How Search ranks. With embeddings off (the model failed to load), SEMANTIC and
+ * HYBRID behave exactly as LEXICAL.
+ *
+ * @generated from enum calcifer.v1.SearchMode
+ */
+export enum SearchMode {
+  /**
+   * the server treats it as HYBRID
+   *
+   * @generated from enum value: SEARCH_MODE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * FTS5 prefix match over name + body, bm25 order
+   *
+   * @generated from enum value: SEARCH_MODE_LEXICAL = 1;
+   */
+  LEXICAL = 1,
+
+  /**
+   * vector KNN only
+   *
+   * @generated from enum value: SEARCH_MODE_SEMANTIC = 2;
+   */
+  SEMANTIC = 2,
+
+  /**
+   * vector KNN and FTS5, fused by reciprocal rank
+   *
+   * @generated from enum value: SEARCH_MODE_HYBRID = 3;
+   */
+  HYBRID = 3,
+}
+
+/**
+ * Describes the enum calcifer.v1.SearchMode.
+ */
+export const SearchModeSchema: GenEnum<SearchMode> = /*@__PURE__*/
+  enumDesc(file_calcifer_v1_services, 0);
+
+/**
  * @generated from service calcifer.v1.EntityService
  */
 export const EntityService: GenService<{
@@ -612,9 +666,9 @@ export const RichTextService: GenService<{
   serviceDesc(file_calcifer_v1_services, 1);
 
 /**
- * Search over note names + bodies. `Search` is lexical (SQLite FTS5); `Retrieve`
- * is semantic — embeds the query and runs vector KNN over chunk embeddings
- * (sqlite-vec), optionally fused with FTS5 via reciprocal-rank fusion.
+ * Search over note names + bodies: lexical (SQLite FTS5), semantic (embeds the
+ * query and runs vector KNN over chunk embeddings via sqlite-vec), or hybrid
+ * (both, fused by reciprocal-rank fusion).
  *
  * @generated from service calcifer.v1.SearchService
  */
@@ -627,17 +681,6 @@ export const SearchService: GenService<{
   search: {
     methodKind: "unary";
     input: typeof SearchRequestSchema;
-    output: typeof SearchResponseSchema;
-  },
-  /**
-   * Semantic retrieval. With hybrid=true, fuses vector KNN + FTS5 via RRF;
-   * otherwise pure vector KNN. Falls back to lexical when embeddings are off.
-   *
-   * @generated from rpc calcifer.v1.SearchService.Retrieve
-   */
-  retrieve: {
-    methodKind: "unary";
-    input: typeof RetrieveRequestSchema;
     output: typeof SearchResponseSchema;
   },
 }> = /*@__PURE__*/

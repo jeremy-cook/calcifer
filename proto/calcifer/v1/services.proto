@@ -68,15 +68,12 @@ service RichTextService {
   rpc Put(RichText) returns (RichText);
 }
 
-// Search over note names + bodies. `Search` is lexical (SQLite FTS5); `Retrieve`
-// is semantic — embeds the query and runs vector KNN over chunk embeddings
-// (sqlite-vec), optionally fused with FTS5 via reciprocal-rank fusion.
+// Search over note names + bodies: lexical (SQLite FTS5), semantic (embeds the
+// query and runs vector KNN over chunk embeddings via sqlite-vec), or hybrid
+// (both, fused by reciprocal-rank fusion).
 service SearchService {
   // For the agent: the frontend doesn't call it (ADR 9).
   rpc Search(SearchRequest) returns (SearchResponse);
-  // Semantic retrieval. With hybrid=true, fuses vector KNN + FTS5 via RRF;
-  // otherwise pure vector KNN. Falls back to lexical when embeddings are off.
-  rpc Retrieve(RetrieveRequest) returns (SearchResponse);
 }
 
 // The structure registry (ADR 7). Authored in server/src/structures.rs; clients
@@ -86,17 +83,37 @@ service StructureService {
   rpc List(ListStructuresRequest) returns (ListStructuresResponse);
 }
 
-message SearchRequest  { string query = 1; uint32 limit = 2; }
-message RetrieveRequest {
+// How Search ranks. With embeddings off (the model failed to load), SEMANTIC and
+// HYBRID behave exactly as LEXICAL.
+enum SearchMode {
+  SEARCH_MODE_UNSPECIFIED = 0;  // the server treats it as HYBRID
+  SEARCH_MODE_LEXICAL = 1;      // FTS5 prefix match over name + body, bm25 order
+  SEARCH_MODE_SEMANTIC = 2;     // vector KNN only
+  SEARCH_MODE_HYBRID = 3;       // vector KNN and FTS5, fused by reciprocal rank
+}
+
+message SearchRequest {
   string query = 1;
-  uint32 k = 2;       // number of hits to return (0 => server default)
-  bool hybrid = 3;    // true: RRF-fuse vector + FTS5; false: pure vector KNN
+  uint32 limit = 2;  // 0 => server default (10)
+  SearchMode mode = 3;
 }
 message SearchResponse { repeated SearchHit hits = 1; }
+
+// A half-open [start, end) range of UTF-16 code units into `SearchHit.snippet`.
+message MatchRange {
+  uint32 start = 1;
+  uint32 end = 2;
+}
+
 message SearchHit {
   Entity entity = 1;
+  // Plain text around the best lexical match, with no markup; `matches` says
+  // where the query terms are. Empty for a hit that only the vector side found.
   string snippet = 2;
+  // Higher is better. Only comparable within one response.
   double score = 3;
+  // The matched terms in `snippet`, in order. Empty when `snippet` is.
+  repeated MatchRange matches = 4;
 }
 
 message GetEntityRequest      { string id = 1; }

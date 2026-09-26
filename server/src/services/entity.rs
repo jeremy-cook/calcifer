@@ -335,10 +335,35 @@ pub(crate) async fn load_entities(
     pool: &SqlitePool,
     structure_type: Option<&str>,
 ) -> Result<Vec<Entity>, AppError> {
-    // Two literal queries rather than `? IS NULL OR …`, so each keeps the plan
-    // (and the tie order within equal `updated_at`s) that List has always had.
-    let rows = match structure_type {
-        None => {
+    load_entities_where(pool, structure_type, None).await
+}
+
+/// Hydrate the entities whose ids are in `ids`, as `load_entities` does, in four
+/// queries. Ids with no entity are left out; the result is most recently updated
+/// first, not in `ids` order.
+pub(crate) async fn load_entities_by_id(
+    pool: &SqlitePool,
+    ids: &[String],
+) -> Result<Vec<Entity>, AppError> {
+    if ids.is_empty() {
+        return Ok(vec![]);
+    }
+    let ids = serde_json::to_string(ids).map_err(|e| AppError::Invalid(e.to_string()))?;
+    load_entities_where(pool, None, Some(&ids)).await
+}
+
+/// The body of `load_entities` and `load_entities_by_id`. `ids_json`, when set,
+/// is a JSON array of entity ids to restrict to (read with `json_each`).
+async fn load_entities_where(
+    pool: &SqlitePool,
+    structure_type: Option<&str>,
+    ids_json: Option<&str>,
+) -> Result<Vec<Entity>, AppError> {
+    // Literal queries per filter rather than `? IS NULL OR …`, so the List ones
+    // keep the plan (and the tie order within equal `updated_at`s) that List has
+    // always had.
+    let rows = match (structure_type, ids_json) {
+        (None, None) => {
             sqlx::query_as!(
                 EntityRow,
                 r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
@@ -348,12 +373,27 @@ pub(crate) async fn load_entities(
             .fetch_all(pool)
             .await?
         }
-        Some(structure_type) => {
+        (Some(structure_type), None) => {
             sqlx::query_as!(
                 EntityRow,
                 r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
                           created_at AS "created_at!", updated_at AS "updated_at!"
                    FROM entities WHERE structure_type = ? ORDER BY updated_at DESC"#,
+                structure_type
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        (_, Some(ids_json)) => {
+            sqlx::query_as!(
+                EntityRow,
+                r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
+                          created_at AS "created_at!", updated_at AS "updated_at!"
+                   FROM entities
+                   WHERE id IN (SELECT value FROM json_each(?1))
+                     AND (?2 IS NULL OR structure_type = ?2)
+                   ORDER BY updated_at DESC"#,
+                ids_json,
                 structure_type
             )
             .fetch_all(pool)
@@ -386,9 +426,12 @@ pub(crate) async fn load_entities(
         r#"SELECT entity_id AS "entity_id!", property_id AS "property_id!",
                   value_blob AS "value_blob!"
            FROM properties
-           WHERE entity_id IN (SELECT id FROM entities WHERE ?1 IS NULL OR structure_type = ?1)
+           WHERE entity_id IN (SELECT id FROM entities
+                               WHERE (?1 IS NULL OR structure_type = ?1)
+                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))
            ORDER BY entity_id, property_id"#,
-        structure_type
+        structure_type,
+        ids_json
     )
     .fetch_all(pool)
     .await?;
@@ -405,9 +448,12 @@ pub(crate) async fn load_entities(
                   target_structure AS "target_structure!",
                   source_property_id AS "source_property_id!", created_at AS "created_at!"
            FROM links
-           WHERE entity_id IN (SELECT id FROM entities WHERE ?1 IS NULL OR structure_type = ?1)
+           WHERE entity_id IN (SELECT id FROM entities
+                               WHERE (?1 IS NULL OR structure_type = ?1)
+                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))
            ORDER BY entity_id, link_id"#,
-        structure_type
+        structure_type,
+        ids_json
     )
     .fetch_all(pool)
     .await?;
@@ -429,9 +475,12 @@ pub(crate) async fn load_entities(
     let date_rows = sqlx::query!(
         r#"SELECT entity_id AS "entity_id!", iso_date AS "iso_date!"
            FROM referenced_dates
-           WHERE entity_id IN (SELECT id FROM entities WHERE ?1 IS NULL OR structure_type = ?1)
+           WHERE entity_id IN (SELECT id FROM entities
+                               WHERE (?1 IS NULL OR structure_type = ?1)
+                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))
            ORDER BY entity_id, iso_date"#,
-        structure_type
+        structure_type,
+        ids_json
     )
     .fetch_all(pool)
     .await?;
@@ -2451,6 +2500,20 @@ mod tests {
         }
         let all = load_entities(&pool, None).await.expect("load entities");
         assert_eq!(all.len(), 7);
+
+        // By id: only the named entities that exist, each as `load_entity` has it.
+        let ids = [ideas.id.clone(), "missing".to_string(), plants.id.clone(), day.id.clone()];
+        let by_id = load_entities_by_id(&pool, &ids).await.expect("load by id");
+        let mut expected: Vec<&Entity> = all
+            .iter()
+            .filter(|e| [&ideas.id, &plants.id, &day.id].contains(&&e.id))
+            .collect();
+        expected.sort_by_key(|e| e.id.clone());
+        let mut got: Vec<&Entity> = by_id.iter().collect();
+        got.sort_by_key(|e| e.id.clone());
+        assert_eq!(got, expected);
+        assert!(load_entities_by_id(&pool, &[]).await.expect("empty").is_empty());
+
         let ideas = all.iter().find(|e| e.id == ideas.id).expect("ideas");
         assert_eq!(ideas.links.len(), 3);
         assert_eq!(ideas.referenced_dates, ["2026-01-02", "2026-09-01"]);

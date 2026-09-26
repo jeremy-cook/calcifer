@@ -9,11 +9,11 @@
 //! re-embeds, and delete-then-inserts that entity's `chunks`/`entity_vec` rows
 //! (wholesale per entity, mirroring how `entity_fts` is owned by the writers).
 //!
-//! `EmbedHandle` also exposes `embed_query` so `SearchService.Retrieve` can embed
-//! the search string through the same model. When the embedder failed to
-//! initialise (e.g. no network on a cold model cache) the handle is inert:
-//! `enqueue` is a no-op and `embed_query` returns None, so retrieval degrades to
-//! lexical-only and the rest of the server is unaffected.
+//! `EmbedHandle` also exposes `embed_query` so `SearchService.Search` (semantic
+//! and hybrid modes) can embed the search string through the same model. When
+//! the embedder failed to initialise (e.g. no network on a cold model cache) the
+//! handle is inert: `enqueue` is a no-op and `embed_query` returns None, so
+//! retrieval degrades to lexical-only and the rest of the server is unaffected.
 
 use std::sync::Arc;
 
@@ -40,6 +40,16 @@ impl EmbedHandle {
     /// Disabled handle: enqueue is a no-op, query embedding yields None.
     pub fn disabled() -> Self {
         Self { inner: None }
+    }
+
+    /// A handle that embeds queries with `embedder` and runs no worker, so
+    /// `enqueue` is a no-op. For tests that search against hand-written vectors.
+    #[cfg(test)]
+    pub(crate) fn with_embedder(embedder: Arc<dyn Embedder>) -> Self {
+        let (tx, _rx) = mpsc::unbounded_channel::<String>();
+        Self {
+            inner: Some(Arc::new(HandleInner { tx, embedder })),
+        }
     }
 
     /// Queue an entity for (re)embedding. Returns immediately; never blocks the
@@ -74,7 +84,7 @@ pub fn spawn(pool: SqlitePool) -> EmbedHandle {
         Ok(e) => Arc::new(e) as Arc<dyn Embedder>,
         Err(e) => {
             tracing::warn!(
-                "semantic embeddings disabled: {e}. Retrieve falls back to lexical search."
+                "semantic embeddings disabled: {e}. Semantic and hybrid search fall back to lexical."
             );
             return EmbedHandle::disabled();
         }
@@ -181,7 +191,7 @@ async fn reembed_entity(
 }
 
 /// Encode a query embedding as the little-endian f32 blob sqlite-vec's MATCH
-/// expects. Shared with `SearchService.Retrieve`.
+/// expects. Shared with `SearchService.Search`.
 pub fn vector_blob(embedding: &[f32]) -> Vec<u8> {
     embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
 }
