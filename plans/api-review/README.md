@@ -222,8 +222,8 @@ user after Phase 2.
 | **Phase 4: message shapes and naming** |||||
 | T16 | [Properties as a map](tasks/T16-properties-map.md) | all | T15 | none | done (5f839c9, 4e00f38) |
 | T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | done (c6ca637, 7e3ad21, ce9591f) |
-| T18 | [ListBacklinks request/response and self-link rule](tasks/T18-backlinks.md) | proto, server, mcp | T17 | none | in progress (engineer: T18 engineer) |
-| T19 | [buf naming and lint](tasks/T19-buf-naming.md) | all | T18 | none | todo |
+| T18 | [ListBacklinks request/response and self-link rule](tasks/T18-backlinks.md) | proto, server, mcp | T17 | none | done (6b22f57, c8b858a, 3d8f8e8, 9feaedc) |
+| T19 | [buf naming and lint](tasks/T19-buf-naming.md) | all | T18 | none | in progress (engineer: T19 engineer) |
 | T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | todo |
 | **Phase 5: frontend cleanup** |||||
 | T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | todo |
