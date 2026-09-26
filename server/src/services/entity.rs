@@ -716,8 +716,13 @@ impl EntityServiceTrait for EntityService {
     // The name (and its FTS row) and updated_at only: properties are untouched,
     // so a rename doesn't undo a concurrent SetProperty (I-15). A structure with
     // `name_editable = false` (a DailyNote, named for its date) can't be renamed.
+    // The name is trimmed, as Create trims it, and can't be blank.
     async fn rename(&self, req: Request<RenameEntityRequest>) -> Result<Response<Entity>, Status> {
         let RenameEntityRequest { id, name } = req.into_inner();
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(Status::invalid_argument("name can't be blank"));
+        }
         let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
@@ -740,8 +745,8 @@ impl EntityServiceTrait for EntityService {
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| map_unique_violation(AppError::from(e), &name, None))?;
-        fts_upsert_name(&mut tx, &id, &name)
+        .map_err(|e| map_unique_violation(AppError::from(e), name, None))?;
+        fts_upsert_name(&mut tx, &id, name)
             .await
             .map_err(Status::from)?;
         tx.commit().await.map_err(AppError::from)?;
@@ -1149,6 +1154,35 @@ mod tests {
         assert_eq!(stored, renamed);
         assert_eq!(fts_name(&pool, &entity.id).await, "After");
         assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+    }
+
+    #[tokio::test]
+    async fn rename_trims_the_name() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let entity = create(&svc, note("Before")).await;
+
+        let renamed = rename(&svc, &entity.id, "  After \n").await.expect("rename");
+
+        assert_eq!(renamed.name, "After");
+        assert_eq!(fts_name(&pool, &entity.id).await, "After");
+    }
+
+    #[tokio::test]
+    async fn rename_to_a_blank_name_is_invalid() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let entity = create(&svc, note("Kept")).await;
+
+        for blank in ["", "   ", "\t\n"] {
+            let err = rename(&svc, &entity.id, blank)
+                .await
+                .expect_err("blank name");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{blank:?}");
+        }
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored, entity);
+        assert_eq!(fts_name(&pool, &entity.id).await, "Kept");
     }
 
     // I-8: an unknown id is NotFound, and nothing is written for it.
