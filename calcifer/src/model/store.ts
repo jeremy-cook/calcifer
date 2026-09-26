@@ -12,17 +12,15 @@ import {
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
+import { entitiesQuery } from '~/model/sync'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 // --- Queries ---
 
+// The Watch replica (`model/sync.ts`): empty until the first snapshot arrives.
 export function useAllEntities(): Entity[] {
-  const { data } = useQuery({
-    queryKey: qk.entities(),
-    queryFn: async () => (await entityClient.list({ structureType: '' })).entities,
-  })
-  return data ?? []
+  return useQuery(entitiesQuery).data ?? []
 }
 
 export function useEntity(id: string) {
@@ -231,7 +229,7 @@ export function useDeleteEntity() {
 // --- Imperative (non-hook) helpers for the editor mention flow + cleanup ---
 
 export function getEntitiesSnapshot(): Entity[] {
-  return queryClient.getQueryData<Entity[]>(qk.entities()) ?? []
+  return queryClient.getQueryData(entitiesQuery.queryKey) ?? []
 }
 
 export async function getOrCreateEntityForMention(
