@@ -58,24 +58,6 @@ covers it.
 
 ---
 
-### I-22 · A rich-text ref stored as a property value adds nothing · medium · confirmed
-
-**Where:** `proto/calcifer/v1/entities.proto:23` (`PropertyValue.richtext`), `calcifer/src/routes/e.$id.tsx:209`, `calcifer/src/components/calendar/DailyNoteSection.tsx:91,148-152`
-
-**Problem:** A `RichTextRef` is just (entity.id, property.id), both already known from
-context, and the registry already says which properties are rich text. Because the value
-is stored anyway, it has to be created on every new entity (I-21), the server never
-checks that its `entity_id` matches the owning entity, and if the row is missing the
-editor renders nothing.
-
-**Fix:** Drop the `richtext` case from `PropertyValue` and address a document by
-(entity_id, declared property_id).
-
-**Done when:** no `richtext` property value is stored or sent, and the editor renders for
-every declared rich-text property.
-
----
-
 ### I-26 · Unused property kinds, and structure flags only the frontend enforces · low · confirmed
 
 **Where:** `server/src/structures.rs` (registry), `calcifer/src/routes/e.$id.tsx:257`
@@ -405,6 +387,7 @@ missing name is `FailedPrecondition`, and a test covers it.
 
 ## Resolved
 
+- **I-22 · A rich-text ref stored as a property value adds nothing.** Fixed 2026-09-26. `PropertyValue.richtext` is gone (field 6 and the name reserved); a document is addressed by (entity id, declared rich-text property id). `new_entity` stores no value for rich-text properties, and `Create` and `SetProperty` reject any value on one with `INVALID_ARGUMENT` (superseding I-16's `richtext`-ref case). Migration `20260926000000_drop_richtext_property_values` deletes the stored `content` rows of Note, DailyNote and Todo, chosen by the registry, and nothing else (D5). The browser builds each ref with `richTextRef(entity.id, propertyId)` from the registry's declared rich-text properties (`richTextPropertyIds`), so an editor renders for every declared one; the MCP server already addressed `content` directly. Covered by `rich_text_properties_take_no_value`, `create_by_intent_mints_id_defaults_and_name`, `drop_richtext_migration_deletes_exactly_the_richtext_rows` and `drop_richtext_migration_lists_every_declared_richtext_property`. Not yet observed in the browser or run against the live DB.
 - **I-16 · Property values aren't checked against their declared kind (except select).** Fixed 2026-09-26. `validate_property` (replacing `validate_select`) requires every declared property's value case to match its `PropertyKind`, in `Create`, `Resolve` and `SetProperty`; a rich-text property takes only a `richtext` ref. Undeclared property ids still take any value except `select`. Covered by `values_must_match_the_declared_kind`.
 - **I-24 · Looking up an entity by name isn't reliable for most structures.** Fixed 2026-09-26. `find_by_name` orders by `created_at, id`, so of several same-named entities the oldest wins and the lowest id breaks ties (D2; documented on `Resolve`). `Create`, `Resolve` by name and a non-empty `List` filter return `INVALID_ARGUMENT` for a structure type not in the registry. Covered by `resolve_by_name_with_duplicates_returns_the_oldest` and `unknown_structure_types_are_rejected`.
 - **I-25 · Wrong error message on a unique-name clash.** Fixed 2026-09-26. `map_unique_violation` branches on the column SQLite reports (`entities.date_key` or `entities.name`) and returns "a DailyNote for <date> already exists" or `a Tag named "<name>" already exists`, for `Create`, `Rename`, `Resolve` and `SetProperty(date)`. Covered by `create_onto_a_taken_tag_name_is_already_exists`, `rename_onto_a_taken_tag_name_is_already_exists` and `set_property_date_onto_existing_day_is_already_exists`.
