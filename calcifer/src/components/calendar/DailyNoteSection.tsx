@@ -17,6 +17,7 @@ import { PlusIcon } from '@phosphor-icons/react'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import {
   dailyNoteByDate,
+  deleteEntityIfRichTextEmpty,
   deleteEntityImperative,
   getEntitiesSnapshot,
   useCreateDailyNote,
@@ -24,7 +25,6 @@ import {
   type Entity,
 } from '~/model/store'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
-import { getRichTextSnapshot, isRichTextEmpty } from '~/model/richtext'
 import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 interface DailyNoteSectionProps {
@@ -44,14 +44,12 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
 
   useEffect(() => {
     return () => {
-      // Prune an empty daily note when leaving its day (reads the live cache).
+      // Prune an empty daily note when leaving its day, re-checking the server's doc.
       const existing = dailyNoteByDate(getEntitiesSnapshot(), iso)
       if (!existing) return
       const ref = contentRichTextRef(existing)
-      const doc = ref ? getRichTextSnapshot(ref)?.doc : undefined
-      if (isRichTextEmpty(doc)) {
-        deleteEntityImperative(existing.id)
-      }
+      if (ref) deleteEntityIfRichTextEmpty(existing.id, ref)
+      else deleteEntityImperative(existing.id)
     }
   }, [iso])
 

@@ -9,12 +9,14 @@ import {
   PropertyValueSchema,
   RichTextRefSchema,
   type Entity,
+  type RichTextRef,
   type Property,
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { PropertyKind, getStructure } from '~/model/structures'
 import { formatLongDate } from '~/model/dates'
 import { entityClient, qk, queryClient } from '~/model/api'
+import { fetchRichText, isRichTextEmpty } from '~/model/richtext'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -309,6 +311,17 @@ export function deleteEntityImperative(id: string): void {
       void queryClient.invalidateQueries({ queryKey: ['entities'] })
     })
     .catch((err) => console.error('delete failed', err))
+}
+
+// Deletes the entity only if the server's copy of `ref` is empty; reads the
+// server, not the cache, so a stale cache can't discard an outside write.
+export function deleteEntityIfRichTextEmpty(id: string, ref: RichTextRef): void {
+  void fetchRichText(ref)
+    .then(({ doc }) => {
+      // Small race left: a write landing between this Get and the Delete is lost.
+      if (isRichTextEmpty(doc)) deleteEntityImperative(id)
+    })
+    .catch((err) => console.error('empty check before delete failed', err))
 }
 
 // --- Pure derivations over an entity array (consumers pass useAllEntities()) ---
