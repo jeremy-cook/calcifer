@@ -16,26 +16,6 @@ running app. Nothing below has been reproduced yet.
 
 ## Open
 
-### I-13 · `buf lint` reports RPC naming errors in `services.proto` · low · confirmed
-
-**Where:** `proto/calcifer/v1/services.proto`
-
-**Problem:** `buf lint` (`pnpm proto:lint` in `calcifer/`) fails with 32 findings, all
-from the default RPC rules: request/response types not named `<Rpc>Request` /
-`<Rpc>Response` (e.g. `ListEntitiesRequest`, `ListStructuresRequest`), and messages such
-as `RichText`, `SearchResponse` and `EntityRef` reused as the request or response of
-several RPCs. 30 predate I-10; I-10 added two by following the file's existing naming.
-Nothing runs `buf lint` today, so this is invisible.
-
-**Fix:** Either rename to the buf convention (a wire-compatible but source-breaking
-change for all three consumers), or configure `buf.yaml` to except
-`RPC_REQUEST_STANDARD_NAME`, `RPC_RESPONSE_STANDARD_NAME` and
-`RPC_REQUEST_RESPONSE_UNIQUE`, documenting the chosen naming convention instead.
-
-**Done when:** `pnpm proto:lint` exits 0.
-
----
-
 ### I-14 · Deleting an entity leaves dead refs in other entities' relation values · medium · confirmed
 
 **Where:** `server/src/services/entity.rs` (`delete`), `calcifer/src/components/entity/EntityRelationsField.tsx`
@@ -366,6 +346,7 @@ published last.
 
 ## Resolved
 
+- **I-13 · `buf lint` reports RPC naming errors in `services.proto`.** Fixed 2026-09-26. Adopted buf's standard naming (D7, variant A): every RPC is a verb and noun (`GetEntity`, `ListEntities`, `CreateEntity`, `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `WatchEntities`, `ResolveEntity`, `GetRichText`, `PutRichText`, `ListStructures`), takes `<Rpc>Request` and returns its own `<Rpc>Response`, which wraps the entity or doc (`GetEntityResponse { Entity entity = 1; }`, `PutRichTextResponse { RichText rich_text = 1; }`, `DeleteEntityResponse {}`). `EntityEvent` is `WatchEntitiesResponse` (same fields and numbers), `SetPropertyRequest` is `SetEntityPropertyRequest`, and `GetRichTextRequest` / `PutRichTextRequest` carry `entity_id` and `property_id` flat; `expected_updated_at` moved from `RichText` (field 4 reserved) to `PutRichTextRequest`. `RichTextRef`, `EntityRef` and `EntityRefList` stay, still used by `RichText.ref` and relations. Server, browser and MCP updated mechanically; `buf.yaml` stays on the default rules and `pnpm proto:lint` exits 0. Nothing runs it automatically: the README's proto dev loop now lists it first.
 - **I-30 · `ListBacklinks` takes the wrong request and returns too little.** Fixed 2026-09-26. `ListBacklinks` takes `ListBacklinksRequest { entity_id }` and returns one `Backlink { source, source_property_id, created_at }` per link row, newest `created_at` first (then source id, then link id), and is documented as agent-only. Self-links are excluded on the server as in the frontend's `selectBacklinks`; an unknown `entity_id` is `NOT_FOUND`. Sources are hydrated in one batch (`load_entities_by_id`) instead of `load_entity` per source. The MCP server folds rows into one entry per source and `get_backlinks` names the linking properties when any isn't `content`. Covered by `list_backlinks_excludes_self_links`, `list_backlinks_reports_property_and_time_newest_first` and `list_backlinks_of_missing_entity_is_not_found`. Observed 2026-09-26 against a scratch DB through the MCP server's `getBacklinks`: a body link lists plainly, an ad-hoc `related` relation lists as `(via related)`, newest first, and a note mentioning itself doesn't list itself.
 - **I-29 · Search has two RPCs for one job.** Fixed 2026-09-26. `Retrieve` and `RetrieveRequest` are gone; `Search` takes a `SearchMode` (lexical, semantic, hybrid; unspecified means hybrid, the MCP tool's default), and semantic or hybrid with embeddings off behave as lexical. Snippets are plain text: FTS5 marks matches with private-use code points, which the server strips into `SearchHit.matches`, half-open UTF-16 ranges; a vector-only hit has no snippet and no matches. `search_notes` makes one `Search` call and bolds matches with `**`. Hits are hydrated in one batch (`load_entities_by_id`, four queries) instead of `load_entity` per hit. Covered by `search_dispatches_on_mode`, `semantic_and_hybrid_fall_back_to_lexical_without_embeddings`, `match_ranges_count_utf16_units_after_non_ascii_text`, `snippets_carry_no_bracket_markers` and `hits_hydrate_as_load_entity_in_rank_order_and_skip_stale_rows`. Observed 2026-09-26 against a scratch DB through the MCP server's `searchNotes`: lexical and hybrid snippets are plain text with `**bold**` matches, and semantic mode ranks the right note first for a paraphrase.
 - **I-28 · `repeated Property` should be `map<string, PropertyValue>`.** Fixed 2026-09-26. `Entity.properties` and `CreateEntityRequest.properties` are `map<string, PropertyValue>` (same field number, wire-compatible) and the `Property` message is gone, so an entity can't carry two values for one id. The server reads and writes the map (prost `HashMap`); nothing depended on property order, and `sync_relation_links` visits ad-hoc relation properties in id order. A `Create` map entry whose value has no case is `INVALID_ARGUMENT` ("property missing value"), as an entry with no value was before (`create_with_an_empty_property_value_is_invalid_argument`). The browser reads `entity.properties[id]` (the MCP server reads no entity properties); `withProperty` copies the map before setting or deleting a key. No consumer scans an entity's properties any more.

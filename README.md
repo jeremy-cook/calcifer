@@ -12,7 +12,7 @@ as a first-class writer, not a bolted-on sidebar.
 
 The frontend talks to the server over **gRPC-Web** (Vite proxies `/api` → `:8080`).
 Links and date references are derived **server-side** from rich-text content inside
-`RichTextService.Put` — no client authors links directly, so every writer (browser or
+`RichTextService.PutRichText` — no client authors links directly, so every writer (browser or
 MCP agent) produces an identical, honest graph.
 
 Why the architecture is the way it is: [`docs/adr/`](docs/adr/).
@@ -41,13 +41,18 @@ cd mcp-server && pnpm test:tools   # smoke test
 cd mcp-server && pnpm start        # stdio MCP server (registered with Claude Code as `calcifer`)
 ```
 
-Regenerate protobuf bindings after editing anything under `proto/` — **both** TS
-consumers, they currently have separate generated stubs:
+After editing anything under `proto/`, lint it and regenerate the bindings — **both**
+TS consumers, they currently have separate generated stubs:
 
 ```bash
+cd calcifer && pnpm proto:lint   # buf lint, default rules; must exit 0 (nothing in CI runs it)
 cd calcifer && pnpm proto:gen
 cd mcp-server && pnpm proto:gen
 ```
+
+`buf lint` enforces buf's RPC naming: a verb-and-noun RPC name (`GetEntity`), a
+`<Rpc>Request` / `<Rpc>Response` pair unique to that RPC, and wrapped responses
+(`GetEntityResponse { Entity entity = 1; }`).
 
 Rust regen is automatic on `cargo build` (tonic-build).
 
@@ -62,7 +67,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
   (apply new migrations before/at build; the binary also runs `migrate!` on boot).
   `server/src/links.rs::extract_doc_references` walks TipTap JSON. Timestamps via
   `ts_from_millis`.
-- **Proto:** edit `proto/calcifer/v1/services.proto`, then regen both TS consumers
+- **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen both TS consumers
   (above). Note the `ref` field generates as `r#ref` in Rust.
 - **mcp-server (Node/TS):** ops in `src/tools.ts`, MCP wrapper in `src/server.ts`;
   scripts run via `tsx`. Has its OWN proto stubs in `src/gen/` (gitignored) to avoid
@@ -78,7 +83,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
 
 ```bash
 grpcurl -plaintext -import-path proto -proto calcifer/v1/services.proto \
-  -d '{}' localhost:8080 calcifer.v1.EntityService/List   # hangs
+  -d '{}' localhost:8080 calcifer.v1.EntityService/ListEntities   # hangs
 ```
 
 The browser gRPC-Web path works fine, so the likely cause is
