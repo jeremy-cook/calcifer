@@ -10,10 +10,11 @@ use crate::error::AppError;
 use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
-    resolve_entity_request, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
-    EntityRef, EntitySnapshot, GetEntityRequest, LinkRef, ListEntitiesRequest,
-    ListEntitiesResponse, PropertyValue, RenameEntityRequest, ResolveEntityRequest,
-    ResolveEntityResponse, SetPropertyRequest, WatchRequest,
+    resolve_entity_request, Backlink, CreateEntityRequest, DeleteEntityRequest, Entity,
+    EntityEvent, EntityRef, EntitySnapshot, GetEntityRequest, LinkRef, ListBacklinksRequest,
+    ListBacklinksResponse, ListEntitiesRequest, ListEntitiesResponse, PropertyValue,
+    RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse, SetPropertyRequest,
+    WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
 use crate::watch::WatchHub;
@@ -1116,31 +1117,60 @@ impl EntityServiceTrait for EntityService {
 
     async fn list_backlinks(
         &self,
-        req: Request<EntityRef>,
-    ) -> Result<Response<ListEntitiesResponse>, Status> {
-        let target_id = req.into_inner().id;
+        req: Request<ListBacklinksRequest>,
+    ) -> Result<Response<ListBacklinksResponse>, Status> {
+        let target_id = req.into_inner().entity_id;
+        let exists = sqlx::query_scalar!(
+            r#"SELECT id AS "id!" FROM entities WHERE id = ?"#,
+            target_id
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(AppError::from)?
+        .is_some();
+        if !exists {
+            return Err(AppError::NotFound(format!("entity {target_id}")).into());
+        }
 
-        let ids: Vec<String> = sqlx::query_scalar!(
-            r#"SELECT DISTINCT entity_id AS "entity_id!" FROM links WHERE target_id = ?"#,
+        // Self-links are left out, matching the frontend's backlinks panel.
+        let rows = sqlx::query!(
+            r#"SELECT entity_id AS "entity_id!", source_property_id AS "source_property_id!",
+                      created_at AS "created_at!"
+               FROM links
+               WHERE target_id = ?1 AND entity_id != ?1
+               ORDER BY created_at DESC, entity_id, link_id"#,
             target_id
         )
         .fetch_all(&self.pool)
         .await
         .map_err(AppError::from)?;
 
-        let mut entities = Vec::with_capacity(ids.len());
-        for id in ids {
-            entities.push(self.load_entity(&id).await.map_err(Status::from)?);
-        }
+        let mut source_ids: Vec<String> = rows.iter().map(|r| r.entity_id.clone()).collect();
+        source_ids.sort_unstable();
+        source_ids.dedup();
+        let sources: HashMap<String, Entity> = load_entities_by_id(&self.pool, &source_ids)
+            .await?
+            .into_iter()
+            .map(|e| (e.id.clone(), e))
+            .collect();
 
-        Ok(Response::new(ListEntitiesResponse { entities }))
+        // A source deleted between the two reads has no entity; its rows are skipped.
+        let backlinks = rows
+            .into_iter()
+            .filter_map(|r| {
+                Some(Backlink {
+                    source: Some(sources.get(&r.entity_id)?.clone()),
+                    source_property_id: r.source_property_id,
+                    created_at: Some(ts_from_millis(r.created_at)),
+                })
+            })
+            .collect();
+
+        Ok(Response::new(ListBacklinksResponse { backlinks }))
     }
 
     type WatchStream = BoxStream<'static, Result<EntityEvent, Status>>;
-    async fn watch(
-        &self,
-        _: Request<WatchRequest>,
-    ) -> Result<Response<Self::WatchStream>, Status> {
+    async fn watch(&self, _: Request<WatchRequest>) -> Result<Response<Self::WatchStream>, Status> {
         // Subscribe now, before the stream reads a revision (see `watch_stream`).
         let rx = self.hub.subscribe();
         Ok(Response::new(watch_stream(
@@ -2517,6 +2547,118 @@ mod tests {
         let ideas = all.iter().find(|e| e.id == ideas.id).expect("ideas");
         assert_eq!(ideas.links.len(), 3);
         assert_eq!(ideas.referenced_dates, ["2026-01-02", "2026-09-01"]);
+    }
+
+    async fn list_backlinks_of(svc: &EntityService, id: &str) -> Result<Vec<Backlink>, Status> {
+        svc.list_backlinks(Request::new(ListBacklinksRequest {
+            entity_id: id.to_string(),
+        }))
+        .await
+        .map(|r| r.into_inner().backlinks)
+    }
+
+    /// Pin the created_at of `source`'s link rows from `property_id`.
+    async fn set_link_created_at(pool: &SqlitePool, source: &str, property_id: &str, millis: i64) {
+        sqlx::query(
+            "UPDATE links SET created_at = ? WHERE entity_id = ? AND source_property_id = ?",
+        )
+        .bind(millis)
+        .bind(source)
+        .bind(property_id)
+        .execute(pool)
+        .await
+        .expect("set link created_at");
+    }
+
+    /// (source id, source property id, created_at millis) of each backlink, in order.
+    fn backlink_rows(backlinks: &[Backlink]) -> Vec<(String, String, i64)> {
+        backlinks
+            .iter()
+            .map(|b| {
+                (
+                    b.source.as_ref().expect("source").id.clone(),
+                    b.source_property_id.clone(),
+                    millis(b.created_at),
+                )
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn list_backlinks_excludes_self_links() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let target = create(&svc, note("Target")).await;
+        let source = create(&svc, note("Source")).await;
+        put_content(&pool, &target.id, &[mention("mention", &target)]).await;
+        put_content(&pool, &source.id, &[mention("mention", &target)]).await;
+
+        let backlinks = list_backlinks_of(&svc, &target.id)
+            .await
+            .expect("backlinks");
+
+        let ids: Vec<&str> = backlinks
+            .iter()
+            .map(|b| b.source.as_ref().expect("source").id.as_str())
+            .collect();
+        assert_eq!(ids, [source.id.as_str()]);
+    }
+
+    #[tokio::test]
+    async fn list_backlinks_reports_property_and_time_newest_first() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let target = create(&svc, note("Target")).await;
+        let source = create(&svc, note("Source")).await;
+        put_content(&pool, &source.id, &[mention("mention", &target)]).await;
+        let chore = create(
+            &svc,
+            with_relations(todo("Chore"), "related", &[(&target.id, "Note")]),
+        )
+        .await;
+        // The chore also mentions the target in its content: a second row.
+        put_content(&pool, &chore.id, &[mention("mention", &target)]).await;
+        set_link_created_at(&pool, &source.id, "content", 1_000).await;
+        set_link_created_at(&pool, &chore.id, "related", 2_000).await;
+        set_link_created_at(&pool, &chore.id, "content", 3_000).await;
+
+        let backlinks = list_backlinks_of(&svc, &target.id)
+            .await
+            .expect("backlinks");
+
+        assert_eq!(
+            backlink_rows(&backlinks),
+            [
+                (chore.id.clone(), "content".to_string(), 3_000),
+                (chore.id.clone(), "related".to_string(), 2_000),
+                (source.id.clone(), "content".to_string(), 1_000),
+            ]
+        );
+        // Each source is the full entity, as Get returns it.
+        let loaded_source = load_entity(&pool, &source.id).await.expect("load source");
+        assert_eq!(backlinks[2].source.as_ref(), Some(&loaded_source));
+
+        // Equal times: the lower source id first.
+        set_link_created_at(&pool, &source.id, "content", 5_000).await;
+        set_link_created_at(&pool, &chore.id, "content", 5_000).await;
+        set_link_created_at(&pool, &chore.id, "related", 5_000).await;
+        let backlinks = list_backlinks_of(&svc, &target.id)
+            .await
+            .expect("backlinks");
+        let first = backlink_rows(&backlinks)[0].0.clone();
+        assert_eq!(first, source.id.clone().min(chore.id.clone()));
+    }
+
+    #[tokio::test]
+    async fn list_backlinks_of_missing_entity_is_not_found() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = list_backlinks_of(&svc, "missing")
+            .await
+            .expect_err("unknown entity");
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
     }
 
     type EventStream = BoxStream<'static, Result<EntityEvent, Status>>;
