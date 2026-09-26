@@ -79,33 +79,6 @@ rejects creating a non-creatable structure and renaming a non-name-editable enti
 
 ---
 
-### I-27 · Watch isn't built for keeping a full copy in sync · high · confirmed
-
-**Where:** `calcifer/src/App.tsx:11-43` (`useWatchSync`), `server/src/services/entity.rs:858-870` (`watch`), `server/src/watch.rs:24`, `calcifer/src/model/store.ts:109,172,241`
-
-**Problem:** The frontend keeps a full copy of every entity (reasonable for one user, ADR
-5), but Watch doesn't support that:
-- Race at startup: the initial `List` and the Watch subscription start at the same time
-  (`App.tsx:14-21`), so events that land between them are lost.
-- Lost events go unnoticed: the server drops events for a subscriber that falls behind
-  the 256-slot channel (`entity.rs:863-868`), and nothing tells the client to reload.
-- Reconnects: after a reconnect (`App.tsx:32-36`) the client doesn't refetch the list.
-- Refetch storm: every event and every mutation invalidates `['entities']`, so the
-  frontend reloads the full list each time, which the server serves as 1 + 4N queries.
-  Each debounced keystroke save means a full reload, and each `SetProperty` means two
-  (one from `onSettled`, one from the Watch echo).
-
-**Fix:** Make Watch start with a snapshot (or accept a `since` revision) and carry a
-revision number on each event. When a subscriber falls behind, send an explicit resync
-signal instead of dropping events. Have the frontend apply `Upserted`/`Deleted` directly
-to the cached list instead of refetching. State that the filtered `List`,
-`ListBacklinks` and `Search` are there for the agent.
-
-**Done when:** no event is lost between the initial load and the subscription, a lagging
-or reconnecting client resyncs, and an edit no longer triggers a full list refetch.
-
----
-
 ### I-28 · `repeated Property` should be `map<string, PropertyValue>` · medium · confirmed
 
 **Where:** `proto/calcifer/v1/entities.proto:55` (`Entity.properties`), `calcifer/src/model/store.ts:188,332`, `calcifer/src/model/todos.ts:42,49`, `calcifer/src/components/calendar/DailyNoteSection.tsx:149`, `calcifer/src/routes/e.$id.tsx:204`, `mcp-server/src/tools.ts:121`
@@ -210,6 +183,11 @@ exported. Merge the duplicate delete and create paths, use `qk` everywhere, and 
 Watch consumer into `model/`.
 
 **Done when:** each of the above exists once, and no raw `['entities']` key remains.
+
+**Progress:** T15 removed the `List` query functions (the list now comes only from
+Watch, through `entitiesQuery` in `model/sync.ts`), the raw `['entities']` keys, and
+the Watch consumer in `App.tsx`. Left for T22: the three timestamp conversions and the
+duplicate delete and create paths.
 
 ---
 
@@ -429,6 +407,7 @@ published last.
 
 ## Resolved
 
+- **I-27 · Watch isn't built for keeping a full copy in sync.** Fixed 2026-09-26. Watch opens every stream with a snapshot, numbers events with a revision and sends a fresh snapshot to a subscriber that lags (T14, ADR 9). The browser's entity list is a replica fed only by Watch (`model/sync.ts`): `entitiesQuery` resolves with the first snapshot and never calls `List`; later snapshots replace the list, reset cached entities and refetch open rich-text docs; upserts and deletes are applied in place; a reconnect resyncs from its snapshot. Mutations write the server's response through the same `writeEntity` / `removeEntity`, and nothing invalidates the list, so an edit no longer reloads it. `useEntity` seeds from the replica and only calls `Get` before the first snapshot. Not yet observed in the browser. Publish order can still differ from commit order (I-49).
 - **I-38 · Stale comment about which writes publish events.** Fixed 2026-09-26. The `watch.rs` module comment now lists every publishing write, `RichText.Put` included; rewritten with the Watch snapshot and revisions (T14).
 - **I-22 · A rich-text ref stored as a property value adds nothing.** Fixed 2026-09-26. `PropertyValue.richtext` is gone (field 6 and the name reserved); a document is addressed by (entity id, declared rich-text property id). `new_entity` stores no value for rich-text properties, and `Create` and `SetProperty` reject any value on one with `INVALID_ARGUMENT` (superseding I-16's `richtext`-ref case). Migration `20260926000000_drop_richtext_property_values` deletes the stored `content` rows of Note, DailyNote and Todo, chosen by the registry, and nothing else (D5). The browser builds each ref with `richTextRef(entity.id, propertyId)` from the registry's declared rich-text properties (`richTextPropertyIds`), so an editor renders for every declared one; the MCP server already addressed `content` directly. Covered by `rich_text_properties_take_no_value`, `create_by_intent_mints_id_defaults_and_name`, `drop_richtext_migration_deletes_exactly_the_richtext_rows` and `drop_richtext_migration_lists_every_declared_richtext_property`. Observed 2026-09-26 on a scratch DB written before T12: the migration removed its 7 pointer rows and kept every other property and both docs, and the old Note and daily note opened with their content. Not yet run against the live DB (27 rows to delete).
 - **I-16 · Property values aren't checked against their declared kind (except select).** Fixed 2026-09-26. `validate_property` (replacing `validate_select`) requires every declared property's value case to match its `PropertyKind`, in `Create`, `Resolve` and `SetProperty`; a rich-text property takes only a `richtext` ref. Undeclared property ids still take any value except `select`. Covered by `values_must_match_the_declared_kind`.
