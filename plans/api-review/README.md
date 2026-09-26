@@ -182,6 +182,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-43 | Creating a mention or tag sends Resolve twice (found in T07 checks) | low | *unassigned* |
 | I-44 | `test:tools` semantic assertion fails on a cold embedding model (found in T07 checks) | low | *unassigned* |
 | I-45 | Two untitled Tags created at once can pick the same free name (found in T08) | low | deferred (D9) |
+| I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -205,7 +206,7 @@ user after Phase 2.
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06a, T06b | none | done (ffbda48, aa5d882, 3644f2c, b4c3b09, 2391505, c2d4c67) |
 | T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | done (c6ae5ff, 1a8b312, f9b9b0a, 7c5fa96, 6edc2cd); browser checks pending |
-| T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | in progress (engineer: T09 engineer) |
+| T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | done (f79d385, 4daf8b2, 8c640b1, 524d4b9, d1781fc, 959c1aa, 83541fb, fcced6c, 15fa0b2, a63eb20); browser checks pending |
 | T10 | *merged into T07 and T08 (D4)* | | | | n/a |
 | T11 | *merged into T12 (D4)* | | | | n/a |
 | T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | todo |

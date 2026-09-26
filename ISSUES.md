@@ -385,6 +385,24 @@ the insert transaction.
 
 ---
 
+### I-46 · `Resolve` by name can create an undated DailyNote, getting around `creatable` · low · confirmed
+
+**Where:** `server/src/services/entity.rs` (`resolve_name`)
+
+**Problem:** Since T09, `Create` refuses a DailyNote (`creatable = false`) and points at
+`Resolve` by date. `Resolve` by name with `structure_type: "DailyNote"` and
+`create_if_missing` still creates one, with no date. The browser avoids this path
+(`makeSuggestion.ts`), but the server doesn't refuse it. Found during T09 of the API
+review.
+
+**Fix:** In `resolve_name`, return `FailedPrecondition` when it would create an entity
+of a non-creatable structure (a lookup without create still works).
+
+**Done when:** `Resolve { name, structure_type: "DailyNote", create_if_missing }` for a
+missing name is `FailedPrecondition`, and a test covers it.
+
+---
+
 ## Resolved
 
 - **I-16 · Property values aren't checked against their declared kind (except select).** Fixed 2026-09-26. `validate_property` (replacing `validate_select`) requires every declared property's value case to match its `PropertyKind`, in `Create`, `Resolve` and `SetProperty`; a rich-text property takes only a `richtext` ref. Undeclared property ids still take any value except `select`. Covered by `values_must_match_the_declared_kind`.
