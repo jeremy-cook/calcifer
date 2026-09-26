@@ -41,6 +41,8 @@ Code changes, and any schema change.
 ## Done when
 - `richtext-doc.md` exists and every node type in `links.rs` is covered.
 - The proto comments are updated and the stubs regenerated; everything still builds.
+- `docs/specs/` no longer names removed RPCs (e.g. `docs/specs/mentions.md` still says
+  `EntityService.ResolveByName`; it's `Resolve` since T07). Leave ADRs as history.
 - `ISSUES.md`: move I-31 to Resolved.
 
 ## Commits

@@ -71,6 +71,8 @@ server test `update_from_a_stale_snapshot_loses_a_concurrent_edit` shows it.
 **Fix:** Give renames their own path, e.g. a `Rename` RPC or a field mask on `Update`,
 and move daily notes with `SetProperty(date)` plus a rename.
 
+**Progress:** Since T07 of the API review, daily-note moves use `SetProperty(date)` and the server renames the note. Only title renames still use `Update` (T08).
+
 **Done when:** a rename concurrent with a `SetProperty` on the same entity keeps both.
 
 ---
@@ -442,6 +444,37 @@ skip the delete while a doc has an unsaved local change.
 
 **Done when:** typing while the server is down shows the notice, and the text is saved
 once the server returns without further typing.
+
+---
+
+### I-43 · Creating a mention or tag in the editor sends `Resolve` twice · low · confirmed
+
+**Where:** `calcifer/src/editors/tiptap/components/mention/makeSuggestion.ts` (`command` → `resolveMentionItem`)
+
+**Problem:** Picking "Create new Note: …" or "Create new Tag: …" sent two `Resolve`
+calls for one entity (observed in the browser during T07's checks). The server
+dedupes by name, so only one entity is made. The cause wasn't traced; the call path
+predates T07.
+
+**Fix:** Find why the suggestion command runs twice (e.g. Enter handled by both the
+menu and the suggestion plugin) and send one call.
+
+**Done when:** creating a mention or tag sends one `Resolve`.
+
+---
+
+### I-44 · `test:tools` semantic assertion fails on a cold embedding model · low · confirmed
+
+**Where:** `mcp-server/src/tools-test.ts` (semantic retrieval poll, about l.57)
+
+**Problem:** On a fresh server the embedding worker is still loading its model, and
+the test's 15 s poll can run out before both notes are embedded. The first run after a
+server start failed `semantic retrieval surfaces both related notes`; a second run
+passed. Found during T07's integration check.
+
+**Fix:** Poll longer, or wait for the embed queue to drain before asserting.
+
+**Done when:** `pnpm test:tools` passes on the first run against a fresh scratch server.
 
 ---
 
