@@ -58,24 +58,6 @@ covers it.
 
 ---
 
-### I-16 · Property values aren't checked against their declared kind (except select) · low · confirmed
-
-**Where:** `server/src/services/entity.rs` (`validate_select`), `server/src/link_store.rs`
-
-**Problem:** I-9 checks only select properties. Any other declared property accepts
-any value case, e.g. a `relations` value on `content` (declared `richtext`). Relation
-link sync would then scope-replace that property's links, which for `content` are the
-rich-text links owned by `RichTextService.Put`. No current client sends this. Found
-during I-11.
-
-**Fix:** Generalise the per-property check to require the value case to match the
-declared `PropertyKind` for every declared property.
-
-**Done when:** `Create`/`SetProperty` with a value of the wrong kind for a declared
-property is rejected, and a test covers it.
-
----
-
 ### I-22 · A rich-text ref stored as a property value adds nothing · medium · confirmed
 
 **Where:** `proto/calcifer/v1/entities.proto:23` (`PropertyValue.richtext`), `calcifer/src/routes/e.$id.tsx:209`, `calcifer/src/components/calendar/DailyNoteSection.tsx:91,148-152`
@@ -94,41 +76,6 @@ every declared rich-text property.
 
 ---
 
-### I-24 · Looking up an entity by name isn't reliable for most structures · medium · confirmed
-
-**Where:** `server/src/services/entity.rs:61-77` (`find_by_name`), `server/src/services/entity.rs:349-352` (`validate_select`), `server/src/structures.rs:110`
-
-**Problem:** Only Tag has `unique_names`, but `[[wikilinks]]`, @ mentions and the MCP
-`get_note` all look up Notes and Todos by name through `ResolveByName`. `find_by_name`
-uses `LIMIT 1` with no `ORDER BY`, so which of two same-named notes you get is undefined.
-`structure_type` isn't checked (the registry check skips unknown structures), so an empty
-or unknown type creates an entity anyway.
-
-**Fix:** Either make names unique wherever lookup by name is used, or make the lookup
-deterministic and document it. Reject unknown structure types.
-
-**Done when:** a lookup with two same-named entities returns the same one every time (or
-the duplicate can't exist), a create with an unknown or empty structure type is rejected,
-and tests cover both.
-
----
-
-### I-25 · Wrong error message on a unique-name clash · low · confirmed
-
-**Where:** `server/src/services/entity.rs` (`create`, `rename`, `map_unique_violation`)
-
-**Problem:** `Create` maps every unique violation to "a DailyNote for this date already
-exists" (`Rename` uses a neutral "the name … is taken" since T08). Creating or renaming a Tag onto an existing Tag name (which hits
-`one_tag_per_name`) gets that message.
-
-**Fix:** Pick the message from the constraint that failed (`one_daily_note_per_day` vs
-`one_tag_per_name`).
-
-**Done when:** a Tag name clash returns `AlreadyExists` with a Tag message, and a test
-covers it.
-
----
-
 ### I-26 · Unused property kinds, and structure flags only the frontend enforces · low · confirmed
 
 **Where:** `server/src/structures.rs` (registry), `calcifer/src/routes/e.$id.tsx:257`
@@ -142,6 +89,11 @@ doesn't enforce `creatable` or `name_editable`; only the frontend does.
 
 **Done when:** every `PropertyKind` is either used and rendered or removed, and the server
 rejects creating a non-creatable structure and renaming a non-name-editable entity.
+
+**Progress:** The flag half is done (2026-09-26): `Create` of a non-creatable structure and
+`Rename` of a structure with `name_editable: false` return `FAILED_PRECONDITION`, covered by
+`create_of_a_daily_note_is_failed_precondition` and
+`rename_of_a_daily_note_is_failed_precondition`. The unused-kinds half remains.
 
 ---
 
@@ -435,6 +387,9 @@ the insert transaction.
 
 ## Resolved
 
+- **I-16 · Property values aren't checked against their declared kind (except select).** Fixed 2026-09-26. `validate_property` (replacing `validate_select`) requires every declared property's value case to match its `PropertyKind`, in `Create`, `Resolve` and `SetProperty`; a rich-text property takes only a `richtext` ref. Undeclared property ids still take any value except `select`. Covered by `values_must_match_the_declared_kind`.
+- **I-24 · Looking up an entity by name isn't reliable for most structures.** Fixed 2026-09-26. `find_by_name` orders by `created_at, id`, so of several same-named entities the oldest wins and the lowest id breaks ties (D2; documented on `Resolve`). `Create`, `Resolve` by name and a non-empty `List` filter return `INVALID_ARGUMENT` for a structure type not in the registry. Covered by `resolve_by_name_with_duplicates_returns_the_oldest` and `unknown_structure_types_are_rejected`.
+- **I-25 · Wrong error message on a unique-name clash.** Fixed 2026-09-26. `map_unique_violation` branches on the column SQLite reports (`entities.date_key` or `entities.name`) and returns "a DailyNote for <date> already exists" or `a Tag named "<name>" already exists`, for `Create`, `Rename`, `Resolve` and `SetProperty(date)`. Covered by `create_onto_a_taken_tag_name_is_already_exists`, `rename_onto_a_taken_tag_name_is_already_exists` and `set_property_date_onto_existing_day_is_already_exists`.
 - **I-20 · `Entity` is both the write input and the read output.** Fixed 2026-09-26. `Entity` is output-only: `Create` takes `{ structure_type, optional name, properties }` and the server builds the entity with `new_entity` (id, timestamps, defaults), so client links and referenced dates can't reach it; `Update` and `UpdateEntityRequest` are gone. Covered by `create_by_intent_mints_id_defaults_and_name`; the browser and MCP scripts use the id the server returns. Not yet observed in the browser.
 - **I-21 · Default entities are built in four places.** Fixed 2026-09-26. `new_entity` is the only builder and now owns the default name (`Untitled <structure name>`, with the first free `Untitled Tag N` for Tags); the frontend's `buildEntityMessage` and `defaultNameFor` are gone, and the entity page focuses the title from a `justCreated` history state set by "+ New" instead of comparing names. Covered by `create_second_untitled_tag_gets_a_free_name`. Not yet observed in the browser.
 - **I-15 · Renames and daily-note moves still resend every property.** Fixed 2026-09-26. New `EntityService.Rename` writes only the name, its FTS row and `updated_at`; the title input's debounced rename uses `useRenameEntity` (optimistic on `name`, rolled back per entity). Covered by `rename_concurrent_with_set_property_keeps_both`, `rename_changes_only_the_name` and `rename_missing_id_is_not_found`. Not yet observed in the browser.

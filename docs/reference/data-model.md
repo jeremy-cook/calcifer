@@ -105,18 +105,22 @@ message StructureDef {
 | Flag | Meaning |
 |---|---|
 | `mentionable` | Whether bare `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
-| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. `false` means no zero-arg create path; a DailyNote is made by `Resolve` with a date. |
-| `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Softly enforced (plus the `one_tag_per_name` index). |
-| `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. |
+| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. Enforced: `Create` of a non-creatable structure is `FAILED_PRECONDITION`; a DailyNote is made by `Resolve` with a date. |
+| `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Enforced by the `one_tag_per_name` index (`ALREADY_EXISTS`). Other names can repeat; see `Resolve` for which one a name lookup returns. |
+| `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. Enforced: `Rename` of a structure with `name_editable: false` is `FAILED_PRECONDITION`. |
 
 The server derives what its write paths need from the same table: `richtext_properties`
 and `select_defaults` (what `new_entity` in `services/entity.rs` puts on an entity
 `Create` or `Resolve` creates), `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups.
-`Create`, `Resolve` and `SetProperty` check select values against it and return `InvalidArgument` for
-a key that isn't one of the property's options, a `select` value on a property not
-declared as a select, or a non-select value on a declared select. Structures missing
-from the table have no schema and aren't checked; other kinds aren't checked either.
+`Create`, `Resolve` and `SetProperty` check property values against it and return
+`InvalidArgument` for a value whose case isn't the declared property's `PropertyKind`
+(a rich-text property takes only a `richtext` ref), a select key that isn't one of the
+property's options, or a `select` value on a property not declared as a select. Other
+undeclared (ad-hoc) property ids take any value. `Create`, `Resolve` by name and a
+non-empty `List` filter return `InvalidArgument` for a `structure_type` not in the
+table. Entities of such a type written before that check have no schema and their
+properties aren't checked.
 
 The frontend fetches the registry once (TanStack Query, `staleTime: Infinity`) and
 doesn't render the router until it has loaded, so synchronous code reads it from the
@@ -227,34 +231,43 @@ Property edits go through `SetProperty`, which writes only that property's row a
 re-syncs only that property's relation links, so the browser and the agent editing
 different properties of one entity don't overwrite each other. Renames go through
 `Rename`, which writes only the name (and its FTS row) and `updated_at`, so it can't
-undo a concurrent `SetProperty`. A name clash on a `unique_names` structure is
-`ALREADY_EXISTS`. There is no whole-entity write.
+undo a concurrent `SetProperty`. `Rename` trims the name and returns `INVALID_ARGUMENT`
+for a blank one, and `FAILED_PRECONDITION` for a structure with `name_editable: false`
+(DailyNote). A unique-index clash is `ALREADY_EXISTS` with a message for the index
+that failed: `a Tag named "<name>" already exists` or `a DailyNote for <date> already
+exists`. There is no whole-entity write.
 
 `Create` takes intent: `structure_type`, an optional `name` and initial `properties`.
-The server builds the entity with `new_entity` (minted id and timestamps, a
+The `structure_type` must be in the registry (`INVALID_ARGUMENT`) and `creatable`
+(`FAILED_PRECONDITION`, pointing at `Resolve`). The server builds the entity with `new_entity` (minted id and timestamps, a
 `RichTextRef` per declared rich-text property, select defaults, then the request's
 properties laid over them; a request value for a rich-text property is
 `INVALID_ARGUMENT`), saves it, publishes `upserted` and returns it. With no name (or a
 blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled To-do"; for a
 `unique_names` structure (Tag) the server takes the first free one of `Untitled Tag`,
 `Untitled Tag 2`, `Untitled Tag 3`, … (case-insensitive). A given name is trimmed.
-A DailyNote's name always comes from its `date` (see the rule below). A new entity
+A new entity
 has no `referenced_dates`, and its only links are those from relation properties in
 the request.
 
 `Resolve` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
 server). The `name` key trims the name and matches it case-insensitively within
-`structure_type`, which is required. The `date` key takes a canonical ISO day and finds
+`structure_type`, which is required and must be in the registry. Only Tag names are
+unique, so for other structures several entities can share a name: the lookup returns
+the one with the oldest `created_at`, and the lowest `id` breaks ties, so the same
+name always resolves to the same entity. The `date` key takes a canonical ISO day and finds
 the DailyNote whose `date_key` matches. `INVALID_ARGUMENT` for a missing key, an empty
-name or `structure_type` (name), a malformed day, or a `structure_type` other than ""
+name, an empty or unknown `structure_type` (name), a malformed day, or a `structure_type` other than ""
 or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is set, in
 which case the server builds the entity (`new_entity`: minted id, a `RichTextRef` per
 declared rich-text property, select defaults, and for a date the `date` property and
 its name), saves it, publishes `upserted` and returns `created = true`.
 
 **DailyNote name rule.** A DailyNote's name is its `date` as a long date ("June 13,
-2026"), set by the server on every write: `Create`, `SetProperty` and `Resolve`. A client-sent name for a dated DailyNote is overwritten. `SetProperty` of
+2026"), set by the server when `Resolve` creates it and when `SetProperty` changes its
+`date`. `Create` and `Rename` refuse a DailyNote (`creatable` and `name_editable` are
+false). `SetProperty` of
 `date` on a DailyNote moves it: it sets the name, the FTS name row and `date_key` in
 one transaction, and fails with `ALREADY_EXISTS` if that day already has a DailyNote.
 Clearing the date keeps the name it had.
