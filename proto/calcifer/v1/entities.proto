@@ -53,13 +53,15 @@ message LinkRef {
   google.protobuf.Timestamp created_at = 4;
 }
 
+// Output only: no request message carries an Entity (ADR 8). Clients write
+// through Create, Rename, SetProperty and Delete.
 message Entity {
-  string id = 1;
+  string id = 1;                                  // output only
   string structure_type = 2;
   string name = 3;
   repeated Property properties = 4;
-  repeated LinkRef links = 5;
-  google.protobuf.Timestamp created_at = 6;
-  google.protobuf.Timestamp updated_at = 7;
-  repeated string referenced_dates = 8;
+  repeated LinkRef links = 5;                     // output only
+  google.protobuf.Timestamp created_at = 6;       // output only
+  google.protobuf.Timestamp updated_at = 7;       // output only
+  repeated string referenced_dates = 8;           // output only
 }

@@ -5,7 +5,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Entity, EntityRefSchema, EntitySchema, PropertyValue, RichText, RichTextRefSchema, RichTextSchema } from "./entities_pb";
+import type { Entity, EntityRefSchema, EntitySchema, Property, PropertyValue, RichText, RichTextRefSchema, RichTextSchema } from "./entities_pb";
 import { file_calcifer_v1_entities } from "./entities_pb";
 import type { StructureDef } from "./structures_pb";
 import { file_calcifer_v1_structures } from "./structures_pb";
@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE0NyZWF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE1VwZGF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IiEKE0RlbGV0ZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkiZwoSU2V0UHJvcGVydHlSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIpCgV2YWx1ZRgDIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiDgoMV2F0Y2hSZXF1ZXN0IhcKFUxpc3RTdHJ1Y3R1cmVzUmVxdWVzdCJHChZMaXN0U3RydWN0dXJlc1Jlc3BvbnNlEi0KCnN0cnVjdHVyZXMYASADKAsyGS5jYWxjaWZlci52MS5TdHJ1Y3R1cmVEZWYicAoUUmVzb2x2ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkSDgoEbmFtZRgCIAEoCUgAEg4KBGRhdGUYAyABKAlIABIZChFjcmVhdGVfaWZfbWlzc2luZxgEIAEoCEIFCgNrZXkiTQoVUmVzb2x2ZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIokBCgtFbnRpdHlFdmVudBInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SABCBwoFZXZlbnQygAUKDUVudGl0eVNlcnZpY2USOQoDR2V0Eh0uY2FsY2lmZXIudjEuR2V0RW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJLCgRMaXN0EiAuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVxdWVzdBohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlEj8KBkNyZWF0ZRIgLmNhbGNpZmVyLnYxLkNyZWF0ZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSPwoGVXBkYXRlEiAuY2FsY2lmZXIudjEuVXBkYXRlRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJDCgtTZXRQcm9wZXJ0eRIfLmNhbGNpZmVyLnYxLlNldFByb3BlcnR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJCCgZEZWxldGUSIC5jYWxjaWZlci52MS5EZWxldGVFbnRpdHlSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ej4KBVdhdGNoEhkuY2FsY2lmZXIudjEuV2F0Y2hSZXF1ZXN0GhguY2FsY2lmZXIudjEuRW50aXR5RXZlbnQwARJQCgdSZXNvbHZlEiEuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlcXVlc3QaIi5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVzcG9uc2USSgoNTGlzdEJhY2tsaW5rcxIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZhohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlMn4KD1JpY2hUZXh0U2VydmljZRI2CgNHZXQSGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhoVLmNhbGNpZmVyLnYxLlJpY2hUZXh0EjMKA1B1dBIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0GhUuY2FsY2lmZXIudjEuUmljaFRleHQymQEKDVNlYXJjaFNlcnZpY2USQQoGU2VhcmNoEhouY2FsY2lmZXIudjEuU2VhcmNoUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlEkUKCFJldHJpZXZlEhwuY2FsY2lmZXIudjEuUmV0cmlldmVSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2UyYwoQU3RydWN0dXJlU2VydmljZRJPCgRMaXN0EiIuY2FsY2lmZXIudjEuTGlzdFN0cnVjdHVyZXNSZXF1ZXN0GiMuY2FsY2lmZXIudjEuTGlzdFN0cnVjdHVyZXNSZXNwb25zZWIGcHJvdG8z", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IoIBChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARIpCgpwcm9wZXJ0aWVzGAQgAygLMhUuY2FsY2lmZXIudjEuUHJvcGVydHlCBwoFX25hbWVKBAgBEAJSBmVudGl0eSIvChNSZW5hbWVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkiIQoTRGVsZXRlRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSJnChJTZXRQcm9wZXJ0eVJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJEikKBXZhbHVlGAMgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZSIOCgxXYXRjaFJlcXVlc3QiFwoVTGlzdFN0cnVjdHVyZXNSZXF1ZXN0IkcKFkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2USLQoKc3RydWN0dXJlcxgBIAMoCzIZLmNhbGNpZmVyLnYxLlN0cnVjdHVyZURlZiJwChRSZXNvbHZlRW50aXR5UmVxdWVzdBIWCg5zdHJ1Y3R1cmVfdHlwZRgBIAEoCRIOCgRuYW1lGAIgASgJSAASDgoEZGF0ZRgDIAEoCUgAEhkKEWNyZWF0ZV9pZl9taXNzaW5nGAQgASgIQgUKA2tleSJNChVSZXNvbHZlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB2NyZWF0ZWQYAiABKAgiiQEKC0VudGl0eUV2ZW50EicKCHVwc2VydGVkGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5SAASFAoKZGVsZXRlZF9pZBgCIAEoCUgAEjIKEXJpY2hfdGV4dF9jaGFuZ2VkGAMgASgLMhUuY2FsY2lmZXIudjEuUmljaFRleHRIAEIHCgVldmVudDKABQoNRW50aXR5U2VydmljZRI5CgNHZXQSHS5jYWxjaWZlci52MS5HZXRFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EksKBExpc3QSIC5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXF1ZXN0GiEuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVzcG9uc2USPwoGQ3JlYXRlEiAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRI/CgZSZW5hbWUSIC5jYWxjaWZlci52MS5SZW5hbWVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EkMKC1NldFByb3BlcnR5Eh8uY2FsY2lmZXIudjEuU2V0UHJvcGVydHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EkIKBkRlbGV0ZRIgLmNhbGNpZmVyLnYxLkRlbGV0ZUVudGl0eVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSPgoFV2F0Y2gSGS5jYWxjaWZlci52MS5XYXRjaFJlcXVlc3QaGC5jYWxjaWZlci52MS5FbnRpdHlFdmVudDABElAKB1Jlc29sdmUSIS5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVxdWVzdBoiLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXNwb25zZRJKCg1MaXN0QmFja2xpbmtzEhYuY2FsY2lmZXIudjEuRW50aXR5UmVmGiEuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVzcG9uc2UyfgoPUmljaFRleHRTZXJ2aWNlEjYKA0dldBIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmGhUuY2FsY2lmZXIudjEuUmljaFRleHQSMwoDUHV0EhUuY2FsY2lmZXIudjEuUmljaFRleHQaFS5jYWxjaWZlci52MS5SaWNoVGV4dDKZAQoNU2VhcmNoU2VydmljZRJBCgZTZWFyY2gSGi5jYWxjaWZlci52MS5TZWFyY2hSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2USRQoIUmV0cmlldmUSHC5jYWxjaWZlci52MS5SZXRyaWV2ZVJlcXVlc3QaGy5jYWxjaWZlci52MS5TZWFyY2hSZXNwb25zZTJjChBTdHJ1Y3R1cmVTZXJ2aWNlEk8KBExpc3QSIi5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1JlcXVlc3QaIy5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1Jlc3BvbnNlYgZwcm90bzM", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
 
 /**
  * @generated from message calcifer.v1.SearchRequest
@@ -172,9 +172,25 @@ export const ListEntitiesResponseSchema: GenMessage<ListEntitiesResponse> = /*@_
  */
 export type CreateEntityRequest = Message<"calcifer.v1.CreateEntityRequest"> & {
   /**
-   * @generated from field: calcifer.v1.Entity entity = 1;
+   * @generated from field: string structure_type = 2;
    */
-  entity?: Entity | undefined;
+  structureType: string;
+
+  /**
+   * Unset or empty: the server's default name. Ignored for a DailyNote, whose
+   * name is always derived from its `date`.
+   *
+   * @generated from field: optional string name = 3;
+   */
+  name?: string | undefined;
+
+  /**
+   * Initial values, laid over the structure's defaults (the request wins on the
+   * same id). The server mints the id, timestamps and default properties.
+   *
+   * @generated from field: repeated calcifer.v1.Property properties = 4;
+   */
+  properties: Property[];
 };
 
 /**
@@ -185,20 +201,25 @@ export const CreateEntityRequestSchema: GenMessage<CreateEntityRequest> = /*@__P
   messageDesc(file_calcifer_v1_services, 7);
 
 /**
- * @generated from message calcifer.v1.UpdateEntityRequest
+ * @generated from message calcifer.v1.RenameEntityRequest
  */
-export type UpdateEntityRequest = Message<"calcifer.v1.UpdateEntityRequest"> & {
+export type RenameEntityRequest = Message<"calcifer.v1.RenameEntityRequest"> & {
   /**
-   * @generated from field: calcifer.v1.Entity entity = 1;
+   * @generated from field: string id = 1;
    */
-  entity?: Entity | undefined;
+  id: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
 };
 
 /**
- * Describes the message calcifer.v1.UpdateEntityRequest.
- * Use `create(UpdateEntityRequestSchema)` to create a new message.
+ * Describes the message calcifer.v1.RenameEntityRequest.
+ * Use `create(RenameEntityRequestSchema)` to create a new message.
  */
-export const UpdateEntityRequestSchema: GenMessage<UpdateEntityRequest> = /*@__PURE__*/
+export const RenameEntityRequestSchema: GenMessage<RenameEntityRequest> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_services, 8);
 
 /**
@@ -419,6 +440,11 @@ export const EntityService: GenService<{
     output: typeof ListEntitiesResponseSchema;
   },
   /**
+   * Create a new entity from intent. The server mints the id, timestamps,
+   * default properties and default name ("Untitled <structure name>", or for a
+   * unique-names structure the first free "Untitled <name> N"). A DailyNote's
+   * name is always derived from its `date`.
+   *
    * @generated from rpc calcifer.v1.EntityService.Create
    */
   create: {
@@ -427,17 +453,20 @@ export const EntityService: GenService<{
     output: typeof EntitySchema;
   },
   /**
-   * @generated from rpc calcifer.v1.EntityService.Update
+   * Change only an entity's name. Other properties are untouched, so a rename
+   * doesn't overwrite a concurrent SetProperty. NOT_FOUND for an unknown id.
+   *
+   * @generated from rpc calcifer.v1.EntityService.Rename
    */
-  update: {
+  rename: {
     methodKind: "unary";
-    input: typeof UpdateEntityRequestSchema;
+    input: typeof RenameEntityRequestSchema;
     output: typeof EntitySchema;
   },
   /**
    * Write one property without resending the rest of the entity, so concurrent
    * edits to different properties don't overwrite each other. Returns the saved
-   * entity. Use Update for renames and multi-field edits.
+   * entity. Renames go through Rename.
    * A DailyNote's name is derived from its date: setting `date` on a DailyNote
    * also sets its name, and fails with ALREADY_EXISTS if that day already has a
    * DailyNote.

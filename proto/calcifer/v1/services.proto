@@ -9,11 +9,17 @@ import "google/protobuf/empty.proto";
 service EntityService {
   rpc Get(GetEntityRequest) returns (Entity);
   rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);
+  // Create a new entity from intent. The server mints the id, timestamps,
+  // default properties and default name ("Untitled <structure name>", or for a
+  // unique-names structure the first free "Untitled <name> N"). A DailyNote's
+  // name is always derived from its `date`.
   rpc Create(CreateEntityRequest) returns (Entity);
-  rpc Update(UpdateEntityRequest) returns (Entity);
+  // Change only an entity's name. Other properties are untouched, so a rename
+  // doesn't overwrite a concurrent SetProperty. NOT_FOUND for an unknown id.
+  rpc Rename(RenameEntityRequest) returns (Entity);
   // Write one property without resending the rest of the entity, so concurrent
   // edits to different properties don't overwrite each other. Returns the saved
-  // entity. Use Update for renames and multi-field edits.
+  // entity. Renames go through Rename.
   // A DailyNote's name is derived from its date: setting `date` on a DailyNote
   // also sets its name, and fails with ALREADY_EXISTS if that day already has a
   // DailyNote.
@@ -71,8 +77,18 @@ message SearchHit {
 message GetEntityRequest      { string id = 1; }
 message ListEntitiesRequest   { string structure_type = 1; }
 message ListEntitiesResponse  { repeated Entity entities = 1; }
-message CreateEntityRequest   { Entity entity = 1; }
-message UpdateEntityRequest   { Entity entity = 1; }
+message CreateEntityRequest {
+  reserved 1;
+  reserved "entity";
+  string structure_type = 2;
+  // Unset or empty: the server's default name. Ignored for a DailyNote, whose
+  // name is always derived from its `date`.
+  optional string name = 3;
+  // Initial values, laid over the structure's defaults (the request wins on the
+  // same id). The server mints the id, timestamps and default properties.
+  repeated Property properties = 4;
+}
+message RenameEntityRequest   { string id = 1; string name = 2; }
 message DeleteEntityRequest   { string id = 1; }
 message SetPropertyRequest {
   string entity_id = 1;

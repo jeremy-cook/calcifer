@@ -229,10 +229,15 @@ export const LinkRefSchema: GenMessage<LinkRef> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 6);
 
 /**
+ * Output only: no request message carries an Entity (ADR 8). Clients write
+ * through Create, Rename, SetProperty and Delete.
+ *
  * @generated from message calcifer.v1.Entity
  */
 export type Entity = Message<"calcifer.v1.Entity"> & {
   /**
+   * output only
+   *
    * @generated from field: string id = 1;
    */
   id: string;
@@ -253,21 +258,29 @@ export type Entity = Message<"calcifer.v1.Entity"> & {
   properties: Property[];
 
   /**
+   * output only
+   *
    * @generated from field: repeated calcifer.v1.LinkRef links = 5;
    */
   links: LinkRef[];
 
   /**
+   * output only
+   *
    * @generated from field: google.protobuf.Timestamp created_at = 6;
    */
   createdAt?: Timestamp | undefined;
 
   /**
+   * output only
+   *
    * @generated from field: google.protobuf.Timestamp updated_at = 7;
    */
   updatedAt?: Timestamp | undefined;
 
   /**
+   * output only
+   *
    * @generated from field: repeated string referenced_dates = 8;
    */
   referencedDates: string[];
