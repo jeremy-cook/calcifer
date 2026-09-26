@@ -23,6 +23,9 @@ types; writes should go through `model/`.
   fine too.
 - Follow `CLAUDE.md` component style for anything you touch.
 
+- Tech lead note (from T08): `withProperty` in `model/store.ts` is still exported, but
+  its only caller is `useSetProperty`. Make it module-private unless a new helper needs it.
+
 ## Out of scope
 Behaviour changes. Model-layer duplicates (T22).
 

@@ -71,7 +71,7 @@ during I-11.
 **Fix:** Generalise the per-property check to require the value case to match the
 declared `PropertyKind` for every declared property.
 
-**Done when:** `Update`/`SetProperty` with a value of the wrong kind for a declared
+**Done when:** `Create`/`SetProperty` with a value of the wrong kind for a declared
 property is rejected, and a test covers it.
 
 ---
@@ -115,10 +115,10 @@ and tests cover both.
 
 ### I-25 · Wrong error message on a unique-name clash · low · confirmed
 
-**Where:** `server/src/services/entity.rs:523,567` (`create`, `update`), `server/src/services/entity.rs:397` (`map_unique_violation`)
+**Where:** `server/src/services/entity.rs` (`create`, `rename`, `map_unique_violation`)
 
-**Problem:** `Create` and `Update` map every unique violation to "a DailyNote for this
-date already exists". Creating or renaming a Tag onto an existing Tag name (which hits
+**Problem:** `Create` maps every unique violation to "a DailyNote for this date already
+exists" (`Rename` uses a neutral "the name … is taken" since T08). Creating or renaming a Tag onto an existing Tag name (which hits
 `one_tag_per_name`) gets that message.
 
 **Fix:** Pick the message from the constraint that failed (`one_daily_note_per_day` vs
@@ -331,7 +331,7 @@ up.
 
 ### I-40 · Entity write transactions that read first fail with `Internal` under a race · medium · confirmed
 
-**Where:** `server/src/services/entity.rs:538` (`update`), `server/src/services/entity.rs:619` (`set_property`), `server/src/embed/worker.rs:133`
+**Where:** `server/src/services/entity.rs` (`set_property`), `server/src/embed/worker.rs:133`
 
 **Problem:** Same class as I-37. These transactions start DEFERRED, read (the
 structure type, the previous property value, the old chunk ids), then write. If another
@@ -412,6 +412,24 @@ passed. Found during T07's integration check.
 **Fix:** Poll longer, or wait for the embed queue to drain before asserting.
 
 **Done when:** `pnpm test:tools` passes on the first run against a fresh scratch server.
+
+---
+
+### I-45 · Two untitled Tags created at once can pick the same free name · low · confirmed
+
+**Where:** `server/src/services/entity.rs` (`create`, `free_name`)
+
+**Problem:** `free_name` looks up a free `Untitled Tag N` outside the insert
+transaction. Two Creates of an untitled Tag at the same moment can both pick the same
+name, and the loser gets `AlreadyExists`. Found during T08 of the API review;
+confirmed by reading, not reproduced.
+
+**Fix:** Retry with the next free name on a unique violation, or pick the name inside
+the insert transaction.
+
+**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
+
+**Done when:** concurrent untitled Tag creates both succeed with distinct names.
 
 ---
 

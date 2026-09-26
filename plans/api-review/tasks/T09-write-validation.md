@@ -40,6 +40,9 @@ includes decision **D2** (name lookup rule). Recommended: deterministic, oldest
    - Rich-text-kind properties accept only the `richtext` case (until T12 removes it).
    - Undeclared property ids: keep today's behaviour and mention it in your report.
    - Tests: a `relations` value on `content`, and a `date` value on a select.
+7. **Rename name hygiene (tech lead note from T08).** `Create` trims the name and treats
+   a blank one as unset, but `Rename` stores whatever it's given. `Rename` trims too, and
+   returns `InvalidArgument` for a blank name. Test both.
 
 ## Out of scope
 Client changes. Rich-text addressing (T12). Unused kinds (T23).
