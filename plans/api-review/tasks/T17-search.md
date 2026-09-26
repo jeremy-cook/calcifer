@@ -39,6 +39,11 @@ call), which clashes with `[[wikilink]]` syntax. The frontend doesn't call searc
   the tool's text output with a marker that doesn't clash with wikilinks (e.g. `**…**`).
 - Regenerate both TS stubs. `calcifer` must still build.
 
+Tech lead note (from T13): `hydrate` in `server/src/services/search.rs` loads each hit
+with `load_entity`, so it costs about 4 queries per hit. While you're rewriting the
+search path, hydrate the hits with a batch load instead (extend T13's `load_entities`
+with an id-set filter, or add a sibling next to it). Output must not change.
+
 ## Out of scope
 Search ranking changes. FE search UI.
 

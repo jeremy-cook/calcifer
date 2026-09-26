@@ -184,6 +184,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-45 | Two untitled Tags created at once can pick the same free name (found in T08) | low | deferred (D9) |
 | I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | *unassigned* |
 | I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | *unassigned* |
+| I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -212,7 +213,7 @@ user after Phase 2.
 | T11 | *merged into T12 (D4)* | | | | n/a |
 | T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | done (226d0c0, e405428, ffc5fa1, b3bc618, 883c039) |
 | **Phase 3: sync** |||||
-| T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | in progress (engineer: T13 engineer) |
+| T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | done (4cc92ec) |
 | T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | todo |
 | T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | todo |
 | **Phase 4: message shapes and naming** |||||

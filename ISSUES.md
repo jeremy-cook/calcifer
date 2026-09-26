@@ -402,6 +402,22 @@ would break it. Found during T12 of the API review.
 
 ---
 
+### I-48 · Entity ordering relies on the query plan in two places · low · confirmed
+
+**Where:** `server/src/services/entity.rs` (`load_entity`, `load_entities`)
+
+**Problem:** `load_entity` has no `ORDER BY`, so the order of an entity's properties,
+links and referenced dates comes from the primary-key index the plan happens to use.
+`load_entities` (T13) orders them explicitly and matches it today. Also, `List` orders
+by `updated_at DESC` with no tie-breaker, so entities written in the same millisecond
+come back in plan order. Found during T13 of the API review.
+
+**Fix:** Add the same explicit `ORDER BY`s to `load_entity`, and `, id` to List's order.
+
+**Done when:** both loaders order explicitly and a List tie is broken by id.
+
+---
+
 ## Resolved
 
 - **I-22 · A rich-text ref stored as a property value adds nothing.** Fixed 2026-09-26. `PropertyValue.richtext` is gone (field 6 and the name reserved); a document is addressed by (entity id, declared rich-text property id). `new_entity` stores no value for rich-text properties, and `Create` and `SetProperty` reject any value on one with `INVALID_ARGUMENT` (superseding I-16's `richtext`-ref case). Migration `20260926000000_drop_richtext_property_values` deletes the stored `content` rows of Note, DailyNote and Todo, chosen by the registry, and nothing else (D5). The browser builds each ref with `richTextRef(entity.id, propertyId)` from the registry's declared rich-text properties (`richTextPropertyIds`), so an editor renders for every declared one; the MCP server already addressed `content` directly. Covered by `rich_text_properties_take_no_value`, `create_by_intent_mints_id_defaults_and_name`, `drop_richtext_migration_deletes_exactly_the_richtext_rows` and `drop_richtext_migration_lists_every_declared_richtext_property`. Observed 2026-09-26 on a scratch DB written before T12: the migration removed its 7 pointer rows and kept every other property and both docs, and the old Note and daily note opened with their content. Not yet run against the live DB (27 rows to delete).

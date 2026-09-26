@@ -37,6 +37,10 @@
   self-link rule matches the server's.
 - Regenerate both TS stubs.
 
+Tech lead note (from T13): `list_backlinks` in `server/src/services/entity.rs` loads each
+source with `load_entity` (1 + 4N queries). Load them with a batch load instead, sharing
+whatever id-set loader T17 added (or adding one next to `load_entities`).
+
 ## Out of scope
 Moving the FE onto this RPC. Relation dead refs (I-14).
 
