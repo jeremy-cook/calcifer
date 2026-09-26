@@ -4,6 +4,7 @@ import { create as createMessage } from '@bufbuild/protobuf'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   EntityRefListSchema,
+  EntityRefSchema,
   EntitySchema,
   PropertyValueSchema,
   type Entity,
@@ -206,9 +207,15 @@ export interface RelationTarget {
 }
 
 export interface PropertyWriters {
+  // `null` clears the text.
+  setText: (entity: Entity, propertyId: string, text: string | null) => void
+  // `null` clears the number.
+  setNumber: (entity: Entity, propertyId: string, n: number | null) => void
   // `null` clears the date.
   setDate: (entity: Entity, propertyId: string, iso: string | null) => void
   setSelect: (entity: Entity, propertyId: string, key: string) => void
+  // `null` clears the relation.
+  setRelation: (entity: Entity, propertyId: string, target: RelationTarget | null) => void
   // An empty list clears the property.
   setRelations: (entity: Entity, propertyId: string, targets: readonly RelationTarget[]) => void
 }
@@ -218,9 +225,24 @@ export function usePropertyWriters(options: UseSetPropertyOptions = {}): Propert
   const setProperty = useSetProperty(options)
   return useMemo(
     () => ({
+      setText: (entity, propertyId, text) =>
+        setProperty(entity, propertyId, text === null ? null : { case: 'text', value: text }),
+      setNumber: (entity, propertyId, n) =>
+        setProperty(entity, propertyId, n === null ? null : { case: 'number', value: n }),
       setDate: (entity, propertyId, iso) =>
         setProperty(entity, propertyId, iso === null ? null : { case: 'date', value: iso }),
       setSelect: (entity, propertyId, key) => setProperty(entity, propertyId, { case: 'select', value: key }),
+      setRelation: (entity, propertyId, target) =>
+        setProperty(
+          entity,
+          propertyId,
+          target === null
+            ? null
+            : {
+                case: 'relation',
+                value: createMessage(EntityRefSchema, { id: target.id, structureType: target.structureType }),
+              },
+        ),
       setRelations: (entity, propertyId, targets) =>
         setProperty(
           entity,

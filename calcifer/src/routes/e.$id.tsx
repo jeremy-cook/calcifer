@@ -17,7 +17,9 @@ import { Input } from '~/components/ui/input'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityDateField } from '~/components/entity/EntityDateField'
 import { EntitySelectField } from '~/components/entity/EntitySelectField'
+import { EntityRelationField } from '~/components/entity/EntityRelationField'
 import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
+import { EntityTextField } from '~/components/entity/EntityTextField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
@@ -183,7 +185,7 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
-  const { setDate, setSelect, setRelations } = usePropertyWriters()
+  const { setText, setNumber, setDate, setSelect, setRelation, setRelations } = usePropertyWriters()
   const structure = useStructure(entity.structureType)
   if (!structure || structure.properties.length === 0) return null
 
@@ -202,6 +204,33 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     switch (def.kind) {
       case PropertyKind.RICHTEXT:
         return <EntityRichTextField key={def.id} entityId={entity.id} propertyId={def.id} />
+      case PropertyKind.TEXT:
+        return (
+          <EntityTextField
+            key={def.id}
+            label={def.label || def.id}
+            value={value?.case === 'text' ? value.value : ''}
+            onCommit={(draft) => setText(entity, def.id, draft === '' ? null : draft)}
+          />
+        )
+      case PropertyKind.NUMBER: {
+        const current = value?.case === 'number' ? value.value : undefined
+        // An empty (or, from a number input, unparseable) draft clears the property.
+        const commitNumber = (draft: string) => {
+          const next = draft.trim() === '' ? null : Number(draft)
+          if ((next ?? undefined) === current || (next !== null && !Number.isFinite(next))) return
+          setNumber(entity, def.id, next)
+        }
+        return (
+          <EntityTextField
+            key={def.id}
+            type="number"
+            label={def.label || def.id}
+            value={current === undefined ? '' : String(current)}
+            onCommit={commitNumber}
+          />
+        )
+      }
       case PropertyKind.DATE: {
         const iso = value?.case === 'date' ? value.value : undefined
         return (
@@ -240,6 +269,17 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
           />
         )
       }
+      case PropertyKind.RELATION:
+        return (
+          <EntityRelationField
+            key={def.id}
+            label={def.label || def.id}
+            targetStructure={def.targetStructure}
+            target={value?.case === 'relation' ? value.value : undefined}
+            onChange={(target) => setRelation(entity, def.id, target)}
+          />
+        )
+      // UNSPECIFIED, or a kind added to the server after this build.
       default:
         return null
     }
