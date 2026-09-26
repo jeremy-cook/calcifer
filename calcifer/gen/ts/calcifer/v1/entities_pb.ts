@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/entities.proto.
  */
 export const file_calcifer_v1_entities: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLnAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLAoIcmljaHRleHQYBiABKAsyGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZkgAEi8KCXJlbGF0aW9ucxgHIAEoCzIaLmNhbGNpZmVyLnYxLkVudGl0eVJlZkxpc3RIAEIHCgV2YWx1ZSJBCghQcm9wZXJ0eRIKCgJpZBgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiNQoLUmljaFRleHRSZWYSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJIqcBCghSaWNoVGV4dBIlCgNyZWYYASABKAsyGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhILCgNkb2MYAiABKAkSLgoKdXBkYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNwoTZXhwZWN0ZWRfdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiiQEKB0xpbmtSZWYSCgoCaWQYASABKAkSJgoGdGFyZ2V0GAIgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmEhoKEnNvdXJjZV9wcm9wZXJ0eV9pZBgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKEAgoGRW50aXR5EgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEgwKBG5hbWUYAyABKAkSKQoKcHJvcGVydGllcxgEIAMoCzIVLmNhbGNpZmVyLnYxLlByb3BlcnR5EiMKBWxpbmtzGAUgAygLMhQuY2FsY2lmZXIudjEuTGlua1JlZhIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIYChByZWZlcmVuY2VkX2RhdGVzGAggAygJYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLJAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLwoJcmVsYXRpb25zGAcgASgLMhouY2FsY2lmZXIudjEuRW50aXR5UmVmTGlzdEgAQgcKBXZhbHVlSgQIBhAHUghyaWNodGV4dCJBCghQcm9wZXJ0eRIKCgJpZBgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiNQoLUmljaFRleHRSZWYSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJIqcBCghSaWNoVGV4dBIlCgNyZWYYASABKAsyGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhILCgNkb2MYAiABKAkSLgoKdXBkYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNwoTZXhwZWN0ZWRfdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiiQEKB0xpbmtSZWYSCgoCaWQYASABKAkSJgoGdGFyZ2V0GAIgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmEhoKEnNvdXJjZV9wcm9wZXJ0eV9pZBgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKEAgoGRW50aXR5EgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEgwKBG5hbWUYAyABKAkSKQoKcHJvcGVydGllcxgEIAMoCzIVLmNhbGNpZmVyLnYxLlByb3BlcnR5EiMKBWxpbmtzGAUgAygLMhQuY2FsY2lmZXIudjEuTGlua1JlZhIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIYChByZWZlcmVuY2VkX2RhdGVzGAggAygJYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message calcifer.v1.EntityRef
@@ -55,6 +55,9 @@ export const EntityRefListSchema: GenMessage<EntityRefList> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 1);
 
 /**
+ * A rich-text property has no PropertyValue: its document is addressed by
+ * (entity id, declared property id) through RichTextService (ADR 8, I-22).
+ *
  * @generated from message calcifer.v1.PropertyValue
  */
 export type PropertyValue = Message<"calcifer.v1.PropertyValue"> & {
@@ -91,12 +94,6 @@ export type PropertyValue = Message<"calcifer.v1.PropertyValue"> & {
      */
     value: EntityRef;
     case: "relation";
-  } | {
-    /**
-     * @generated from field: calcifer.v1.RichTextRef richtext = 6;
-     */
-    value: RichTextRef;
-    case: "richtext";
   } | {
     /**
      * multi-target relation; server derives links from it
@@ -138,6 +135,9 @@ export const PropertySchema: GenMessage<Property> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 3);
 
 /**
+ * RichTextService's address for one document: an entity and one of its
+ * structure's declared rich-text property ids.
+ *
  * @generated from message calcifer.v1.RichTextRef
  */
 export type RichTextRef = Message<"calcifer.v1.RichTextRef"> & {

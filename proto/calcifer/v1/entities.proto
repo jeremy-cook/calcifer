@@ -13,14 +13,17 @@ message EntityRefList {
   repeated EntityRef refs = 1;
 }
 
+// A rich-text property has no PropertyValue: its document is addressed by
+// (entity id, declared property id) through RichTextService (ADR 8, I-22).
 message PropertyValue {
+  reserved 6;
+  reserved "richtext";
   oneof value {
     string text = 1;
     double number = 2;
     string date = 3;
     string select = 4;
     EntityRef relation = 5;
-    RichTextRef richtext = 6;
     EntityRefList relations = 7;   // multi-target relation; server derives links from it
   }
 }
@@ -30,6 +33,8 @@ message Property {
   PropertyValue value = 2;
 }
 
+// RichTextService's address for one document: an entity and one of its
+// structure's declared rich-text property ids.
 message RichTextRef {
   string entity_id = 1;
   string property_id = 2;
