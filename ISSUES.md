@@ -130,6 +130,11 @@ frontend builders go away.
 **Done when:** `buildEntityMessage` and `buildDailyNoteMessage` are gone, and the default
 name is defined only on the server.
 
+**Progress:** 2026-09-25 (I-23): the server builds new entities in one place,
+`new_entity` in `services/entity.rs` (used by `Resolve`); `build_resolved_entity`,
+`build_daily_note` and the frontend's `buildDailyNoteMessage` are gone. The frontend's
+`buildEntityMessage` and `defaultNameFor` remain until `Create` takes intent (T08).
+
 ---
 
 ### I-22 · A rich-text ref stored as a property value adds nothing · medium · confirmed
@@ -147,27 +152,6 @@ editor renders nothing.
 
 **Done when:** no `richtext` property value is stored or sent, and the editor renders for
 every declared rich-text property.
-
----
-
-### I-23 · Daily notes are created and moved differently by each client · medium · confirmed
-
-**Where:** `calcifer/src/model/store.ts:124-130,271-273` (`useCreateDailyNote`, `withDailyNoteDate`), `mcp-server/src/tools.ts:113-126` (`resolveDailyNote`), `server/src/services/entity.rs:687-698` (`set_property`), `server/src/structures.rs:126`
-
-**Problem:** The frontend creates daily notes with `Create`, naming them with
-`formatLongDate` on the client, and moves them with `Update` plus a client-side rename.
-The MCP server calls `CreateDailyNote` and, on `AlreadyExists`, lists every DailyNote and
-scans their properties. `SetProperty(date)` updates `date_key` but not the name, so a
-client using the single-property path ends up with a name that no longer matches the
-date. The server doesn't enforce `name_editable = false` either.
-
-**Fix:** The server derives a DailyNote's name from its date on every write. Merge
-`ResolveByName` and `CreateDailyNote` into one get-or-create RPC:
-`Resolve { oneof key { name, date }, create_if_missing } → { entity, created }`. Moving a
-daily note then becomes a plain `SetProperty(date)`.
-
-**Done when:** `SetProperty(date)` on a DailyNote also renames it, both clients get-or-create
-daily notes through `Resolve`, and tests cover both.
 
 ---
 
@@ -463,6 +447,7 @@ once the server returns without further typing.
 
 ## Resolved
 
+- **I-23 · Daily notes are created and moved differently by each client.** Fixed 2026-09-25. `EntityService.Resolve` (a `name` or `date` key, `create_if_missing`, returns `created`) replaces `ResolveByName` and `CreateDailyNote`; the browser and the MCP server both get-or-create daily notes through it, and the MCP list-and-scan fallback is gone. The server names a DailyNote for its date on Create, Update, SetProperty and Resolve, so the browser moves a note with a plain `SetProperty(date)` and shows its inline error on `ALREADY_EXISTS`. Covered by `set_property_date_renames_daily_note`, `resolve_by_date_gets_or_creates` and nine more tests. Not yet observed in the browser. `name_editable` is still not enforced (I-26).
 - **I-37 · A racing `RichText.Put` fails with `Internal`, not `FailedPrecondition`.** Fixed 2026-09-25. `Put` opens its transaction with `BEGIN IMMEDIATE`, so a racing `Put` waits on `busy_timeout` and then fails the expectation check. A file-backed race test fails without the fix (checked 5 of 5 runs) and passes with it; three simultaneous MCP appends to one note all landed.
 - **I-39 · Leaving a new daily note within the save debounce deletes what was typed.** Fixed 2026-09-25. The editor sends a pending debounced save when it unmounts, and the prune waits for that doc's outstanding saves before checking the server. Observed in the browser against a scratch DB: typing and leaving the day at once kept the note and its text; an empty note was still pruned.
 - **I-17 · `RichText.Put` sends no Watch event and has no conflict check.** Fixed 2026-09-25. `Put` checks the entity and declared property, takes `expected_updated_at` (mismatch is `FailedPrecondition`) and publishes `rich_text_changed` plus `upserted`; covered by server tests. The MCP append sends the expectation and retries on conflict. The browser writes Watch's `rich_text_changed` to the cache, loads newer versions into an open editor when no local save is pending, sends `expected_updated_at` on serialised saves, and on a conflict reloads the server's doc with an inline notice (D3, no merge). Browser behaviour observed 2026-09-25 against a scratch DB: live append, conflict reload with notice, prune kept a note the agent wrote to.

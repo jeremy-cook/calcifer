@@ -99,12 +99,13 @@ message StructureDef {
 | Flag | Meaning |
 |---|---|
 | `mentionable` | Whether bare `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
-| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. `false` means no zero-arg create path; e.g. `createDailyNote(iso)` requires a date. |
+| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. `false` means no zero-arg create path; a DailyNote is made by `Resolve` with a date. |
 | `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Softly enforced (plus the `one_tag_per_name` index). |
 | `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. |
 
 The server derives what its write paths need from the same table: `richtext_properties`
-and `select_defaults` (what `ResolveByName` puts on a new entity), `relation_properties`
+and `select_defaults` (what `new_entity` in `services/entity.rs` puts on an entity
+`Resolve` creates), `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups.
 `Create`, `Update` and `SetProperty` check select values against it and return `InvalidArgument` for
 a key that isn't one of the property's options, a `select` value on a property not
@@ -125,10 +126,10 @@ Current shape:
 - **`Note`** — properties: `content` (richtext).
 - **`Tag`** — no properties; `mentionable: false` (reached via `#`), `unique_names: true`.
 - **`DailyNote`** — properties: `date` (date), `content` (richtext); `creatable: false`,
-  `mentionable: false`, `name_editable: false`. Name is set to the long-form date at
-  creation; the entity page edits `date` through `DailyNoteDateField`, which moves the
-  note and renames it. Uniqueness per day is enforced by the `date_key` column and the
-  `one_daily_note_per_day` index.
+  `mentionable: false`, `name_editable: false`. The server names it for its date (see
+  the DailyNote name rule under RPC surface); the entity page moves a note by setting
+  `date` through `DailyNoteDateField`. Uniqueness per day is enforced by the `date_key`
+  column and the `one_daily_note_per_day` index.
 - **`Todo`** — properties: `status` (select: `open`/`done`, default `open`), `priority`
   (select: `none`/`low`/`medium`/`high`, default `none`), `due` (date), `tags`
   (relations → `Tag`), `content` (richtext). `creatable` and `mentionable`, unlike
@@ -177,10 +178,20 @@ service EntityService {
   // One property of an existing entity; an unset value clears it. Returns the entity.
   rpc SetProperty(SetPropertyRequest) returns (Entity);  // entity_id, property_id, value
   rpc Watch(WatchRequest) returns (stream EntityEvent);
-  rpc ResolveByName(...)     // get-or-create by (structure_type, name), case-insensitive
+  // Get-or-create by a name or a day; see below.
+  rpc Resolve(ResolveEntityRequest) returns (ResolveEntityResponse);
   rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);
-  rpc CreateDailyNote(CreateDailyNoteRequest) returns (Entity);
 }
+
+message ResolveEntityRequest {
+  string structure_type = 1;   // required for `name`; must be "" or "DailyNote" for `date`
+  oneof key {
+    string name = 2;           // case-insensitive
+    string date = 3;           // ISO yyyy-MM-dd; finds the day's DailyNote
+  }
+  bool create_if_missing = 4;  // false and missing => NOT_FOUND
+}
+message ResolveEntityResponse { Entity entity = 1; bool created = 2; }
 
 // Separate service so list responses stay lean and editor autosave doesn't ship
 // the whole entity on every keystroke.
@@ -205,9 +216,26 @@ service StructureService {
 Property edits go through `SetProperty`, which writes only that property's row and
 re-syncs only that property's relation links, so the browser and the agent editing
 different properties of one entity don't overwrite each other. `Update` replaces all
-of an entity's properties and stays for renames and multi-field edits (moving a
-DailyNote, which also renames it, uses `Update`); it can still overwrite a concurrent
-`SetProperty` from a stale copy.
+of an entity's properties and stays for renames and multi-field edits; it can still
+overwrite a concurrent `SetProperty` from a stale copy.
+
+`Resolve` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
+mentions and `#tags` in the browser; every name lookup and daily note in the MCP
+server). The `name` key trims the name and matches it case-insensitively within
+`structure_type`, which is required. The `date` key takes a canonical ISO day and finds
+the DailyNote whose `date_key` matches. `INVALID_ARGUMENT` for a missing key, an empty
+name or `structure_type` (name), a malformed day, or a `structure_type` other than ""
+or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is set, in
+which case the server builds the entity (`new_entity`: minted id, a `RichTextRef` per
+declared rich-text property, select defaults, and for a date the `date` property and
+its name), saves it, publishes `upserted` and returns `created = true`.
+
+**DailyNote name rule.** A DailyNote's name is its `date` as a long date ("June 13,
+2026"), set by the server on every write: `Create`, `Update`, `SetProperty` and
+`Resolve`. A client-sent name for a dated DailyNote is overwritten. `SetProperty` of
+`date` on a DailyNote moves it: it sets the name, the FTS name row and `date_key` in
+one transaction, and fails with `ALREADY_EXISTS` if that day already has a DailyNote.
+Clearing the date keeps the name it had.
 
 `RichTextService` only addresses declared rich-text properties. Both `Get` and `Put`
 return `NOT_FOUND` if the entity doesn't exist and `INVALID_ARGUMENT` if the property
@@ -259,5 +287,7 @@ description and properties (kinds, select options and defaults, relation targets
 
 Writes go through the same RPCs the browser uses. Markdown is converted to TipTap JSON
 in `mcp-server/src/markdown/`, resolving `[[wikilink]]` and `#tag` through
-`ResolveByName`. An agent creates a note with wikilinks, the server derives the graph,
+`Resolve` by name. `create_daily_note` and `append_to_daily_note` get-or-create the
+day's note with `Resolve` by date; `create_daily_note` says whether it was created or
+already existed. An agent creates a note with wikilinks, the server derives the graph,
 and open browser tabs update live over `Watch`.
