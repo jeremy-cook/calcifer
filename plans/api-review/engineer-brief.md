@@ -59,6 +59,9 @@ export PATH="/Users/bebop/.nvm/versions/node/v24.12.0/bin:$PATH"
   export DATABASE_URL=sqlite://$TMPDIR/calcifer-build.db
   sqlx database create && sqlx migrate run && cargo test
   ```
+  The `sqlx` CLI can't load `vec0`, so `sqlx migrate run` stops with an error at the
+  `vec` migration. The migrations before it are enough for the compile-time checks.
+  Test the new migration itself in `cargo test`, whose in-memory pools load `vec0`.
 
 ## Tests
 - Server behaviour changes need a Rust test in the module's `#[cfg(test)] mod tests`,

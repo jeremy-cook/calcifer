@@ -102,19 +102,19 @@ Remember the Node PATH pin before any pnpm command:
 
 ---
 
-## Paused (2026-09-25), resumed 2026-09-26
+## Status (2026-09-26)
 
-Work paused at the user's request after T07 and resumed with T08 on 2026-09-26. The branch is green: `cargo test`,
-`calcifer` build + lint and `mcp-server` typecheck pass, and Phase 1 plus T07 were
-checked in the browser against a scratch DB.
+Phase 2 is closed. The branch is green (`cargo test` 67 passed, `calcifer` build + lint,
+`mcp-server` typecheck), and Phase 1 and Phase 2 were checked in the browser against a
+scratch DB. Next is Phase 3 (T13).
 
-To resume:
-- Dispatch **T08** fresh (a first attempt was stopped before it committed anything;
-  its partial proto edits were discarded).
-- Finnegan (`~/Projects/Finnegan`) was stopped to free `:8080` and `:5173` for the
-  checks. The user restarts it; ask again before stopping it for Phase 2's checks.
-- Before relying on the agent tools against a server built from this branch, restart the
-  Calcifer MCP server. A process started before T07 calls RPCs that no longer exist.
+- **Live DB:** the first start of a server built from this branch against
+  `server/calcifer.db` runs T12's migration. It deletes the 27 rich-text pointer rows
+  (24 Note, 2 Todo, 1 DailyNote; counted read-only 2026-09-26) and leaves the other 8
+  `properties` rows. The user approved it without a backup (D5).
+- **Ports:** Finnegan (`~/Projects/Finnegan`) was stopped for the Phase 2 checks and
+  the ports were freed afterwards. Ask before stopping it again for Phase 3's checks.
+- The Calcifer MCP server works against this branch; no restart was needed.
 - Open questions for the user: none. D9 (defer rare concurrency) applies to triage.
 
 ---
@@ -183,6 +183,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-44 | `test:tools` semantic assertion fails on a cold embedding model (found in T07 checks) | low | *unassigned* |
 | I-45 | Two untitled Tags created at once can pick the same free name (found in T08) | low | deferred (D9) |
 | I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | *unassigned* |
+| I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -209,7 +210,7 @@ user after Phase 2.
 | T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | done (f79d385, 4daf8b2, 8c640b1, 524d4b9, d1781fc, 959c1aa, 83541fb, fcced6c, 15fa0b2, a63eb20) |
 | T10 | *merged into T07 and T08 (D4)* | | | | n/a |
 | T11 | *merged into T12 (D4)* | | | | n/a |
-| T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | in progress (engineer: T12 engineer) |
+| T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | done (226d0c0, e405428, ffc5fa1, b3bc618, 883c039) |
 | **Phase 3: sync** |||||
 | T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | todo |
 | T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | todo |

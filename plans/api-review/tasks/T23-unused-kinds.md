@@ -12,6 +12,10 @@ link sync in `link_store.rs`), and the FE silently renders nothing for them
 Your prompt includes decision **D6**, and says whether the tech lead confirmed that the
 live DB holds no values of these kinds.
 
+
+Tech lead note (from T12): `kind_name` in `server/src/services/entity.rs` keeps a
+`PropertyKind::Richtext` arm that no value case can reach any more. Tidy it while you're
+in the kind code.
 ## Variant "remove" (recommended)
 - **Proto:** delete `PROPERTY_KIND_TEXT`, `PROPERTY_KIND_NUMBER` and
   `PROPERTY_KIND_RELATION` and add `reserved` for their numbers and names. Delete the
