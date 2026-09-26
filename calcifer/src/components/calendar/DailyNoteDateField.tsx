@@ -1,20 +1,21 @@
 import { useState } from 'react'
 import { Code, ConnectError } from '@connectrpc/connect'
 import { EntityDateField } from '~/components/entity/EntityDateField'
-import { dailyNoteByDate, dailyNoteDate, useAllEntities, useUpdateEntity, withDailyNoteDate, type Entity } from '~/model/store'
+import { dailyNoteByDate, dailyNoteDate, useAllEntities, useSetProperty, type Entity } from '~/model/store'
 
 export interface DailyNoteDateFieldProps {
   entity: Entity
 }
 
-// Moving a daily note renames it, and a day can hold only one daily note.
+// A day can hold only one daily note. Moving one is a plain `date` write; the
+// server renames it for the new day, and the saved entity carries the new name.
 export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
   const entities = useAllEntities()
   // Keyed by entity id so an error doesn't follow the field to another note.
   const [serverError, setServerError] = useState<{ id: string; message: string } | null>(null)
   // validate uses the cached list, which can be stale; the server's unique
   // date index is the real check and answers AlreadyExists on a collision.
-  const updateEntity = useUpdateEntity({
+  const setProperty = useSetProperty({
     onError: (err, failed) => {
       const collided = err instanceof ConnectError && err.code === Code.AlreadyExists
       const message = collided
@@ -33,7 +34,7 @@ export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
 
   const handleChange = (next: string) => {
     setServerError(null)
-    updateEntity(withDailyNoteDate(entity, next))
+    setProperty(entity, 'date', { case: 'date', value: next })
   }
 
   const error = serverError?.id === entity.id ? serverError.message : null

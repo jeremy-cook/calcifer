@@ -14,7 +14,6 @@ import {
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { PropertyKind, getStructure } from '~/model/structures'
-import { formatLongDate } from '~/model/dates'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
 
@@ -60,32 +59,6 @@ function buildEntityMessage(structureType: string, name?: string): Entity {
   })
 }
 
-function buildDailyNoteMessage(iso: string): Entity {
-  const id = crypto.randomUUID()
-  const now = timestampNow()
-  const ref = createMessage(RichTextRefSchema, { entityId: id, propertyId: 'content' })
-  const properties: Property[] = [
-    createMessage(PropertySchema, {
-      id: 'date',
-      value: createMessage(PropertyValueSchema, { value: { case: 'date', value: iso } }),
-    }),
-    createMessage(PropertySchema, {
-      id: 'content',
-      value: createMessage(PropertyValueSchema, { value: { case: 'richtext', value: ref } }),
-    }),
-  ]
-  return createMessage(EntitySchema, {
-    id,
-    structureType: 'DailyNote',
-    name: formatLongDate(iso),
-    properties,
-    links: [],
-    referencedDates: [],
-    createdAt: now,
-    updatedAt: now,
-  })
-}
-
 // --- Queries ---
 
 export function useAllEntities(): Entity[] {
@@ -123,12 +96,20 @@ export function useCreateEntity() {
   )
 }
 
-export function useCreateDailyNote() {
+// Get-or-create the day's DailyNote. The server builds it and names it for the day.
+export function useResolveDailyNote() {
   const m = useMutation({
-    mutationFn: (entity: Entity) => entityClient.create({ entity }),
+    mutationFn: async (iso: string) => {
+      const { entity } = await entityClient.resolve({
+        key: { case: 'date', value: iso },
+        createIfMissing: true,
+      })
+      if (!entity) throw new Error(`resolve returned no daily note for ${iso}`)
+      return entity
+    },
     onSuccess: onEntityWritten,
   })
-  return useCallback((iso: string) => m.mutateAsync(buildDailyNoteMessage(iso)), [m])
+  return useCallback((iso: string) => m.mutateAsync(iso), [m])
 }
 
 export interface UseUpdateEntityOptions {
@@ -136,10 +117,10 @@ export interface UseUpdateEntityOptions {
   onError?: (err: ConnectError | Error, entity: Entity) => void
 }
 
-// Whole-entity write, for renames and multi-field edits (e.g. moving a daily
-// note, which also renames it). Optimistic on both the entity cache and the list
-// cache, rolled back on error. Sends every property, so it can overwrite a
-// concurrent writer's edit; single-property edits go through useSetProperty.
+// Whole-entity write, for renames and multi-field edits. Optimistic on both the
+// entity cache and the list cache, rolled back on error. Sends every property, so
+// it can overwrite a concurrent writer's edit; single-property edits go through
+// useSetProperty.
 export function useUpdateEntity({ onError }: UseUpdateEntityOptions = {}) {
   const qc = useQueryClient()
   // Latest callback without re-creating the mutation on every render.
@@ -196,7 +177,9 @@ function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['val
 // Optimistic on both caches, applied to the entity as currently cached (not the
 // caller's possibly stale copy) so quick successive edits all show. On error
 // only this property is restored, on the current cached entity: restoring a
-// whole-entity snapshot would undo a concurrent edit to another property.
+// whole-entity snapshot would undo a concurrent edit to another property. On
+// success the server's entity replaces the cached one, carrying anything the
+// server derived from the write (e.g. a moved daily note's new name).
 export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
   const qc = useQueryClient()
   // Latest callback without re-creating the mutation on every render.
@@ -225,6 +208,9 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
         list?.map((e) => (e.id === entity.id ? withProperty(e, propertyId, value) : e)),
       )
       return { prevEntityValue, prevListValue }
+    },
+    onSuccess: (saved) => {
+      qc.setQueryData(qk.entity(saved.id), saved)
     },
     onError: (err, { entity, propertyId }, ctx) => {
       if (ctx?.prevEntityValue !== undefined) {
@@ -269,11 +255,6 @@ export function withProperty(entity: Entity, propertyId: string, value: Property
   return createMessage(EntitySchema, { ...entity, properties })
 }
 
-// A daily note's name is derived from its date, so moving it renames it too.
-export function withDailyNoteDate(entity: Entity, iso: string): Entity {
-  return withName(withProperty(entity, 'date', { case: 'date', value: iso }), formatLongDate(iso))
-}
-
 export function useDeleteEntity() {
   const m = useMutation({
     mutationFn: (id: string) => entityClient.delete({ id }),
@@ -297,8 +278,12 @@ export async function getOrCreateEntityForMention(
 ): Promise<{ id: string; name: string; structureType: string }> {
   // Server-authoritative get-or-create so the browser and the MCP agent share
   // one identity path. The server dedupes by (structureType, name).
-  const { entity } = await entityClient.resolveByName({ structureType, name, createIfMissing: true })
-  if (!entity) throw new Error(`resolveByName returned no entity for ${structureType} "${name}"`)
+  const { entity } = await entityClient.resolve({
+    structureType,
+    key: { case: 'name', value: name },
+    createIfMissing: true,
+  })
+  if (!entity) throw new Error(`resolve returned no entity for ${structureType} "${name}"`)
   onEntityWritten(entity)
   return { id: entity.id, name: entity.name, structureType: entity.structureType }
 }

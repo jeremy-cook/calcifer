@@ -20,7 +20,7 @@ import {
   deleteEntityIfRichTextEmpty,
   deleteEntityImperative,
   getEntitiesSnapshot,
-  useCreateDailyNote,
+  useResolveDailyNote,
   useDeleteEntity,
   type Entity,
 } from '~/model/store'
@@ -33,12 +33,12 @@ interface DailyNoteSectionProps {
 
 export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
   const dailyNote = itemsOn(useCalendarIndex(), iso, 'dailyNote')[0]?.entity
-  const createDailyNote = useCreateDailyNote()
+  const resolveDailyNote = useResolveDailyNote()
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null)
   if (autoFocusKey !== null && autoFocusKey !== iso) setAutoFocusKey(null)
 
   const handleCreate = () => {
-    void createDailyNote(iso)
+    void resolveDailyNote(iso)
     setAutoFocusKey(iso)
   }
 
