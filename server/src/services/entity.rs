@@ -215,13 +215,13 @@ impl EntityService {
     }
 
     /// Replace an entity's properties wholesale inside a transaction, after
-    /// checking select values against the structure (see `validate_selects`).
+    /// checking them against the structure (see `validate_properties`).
     async fn replace_properties(
         &self,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         entity: &Entity,
     ) -> Result<(), AppError> {
-        validate_selects(entity)?;
+        validate_properties(entity)?;
         sqlx::query!("DELETE FROM properties WHERE entity_id = ?", entity.id)
             .execute(&mut **tx)
             .await?;
@@ -396,54 +396,99 @@ fn date_key_from(structure_type: &str, prop: &Property) -> Option<String> {
     }
 }
 
-/// Reject select values the structure doesn't allow (I-9), for every property
-/// of an entity. See `validate_select`.
-fn validate_selects(entity: &Entity) -> Result<(), AppError> {
+/// Check every property of an entity against its structure. See
+/// `validate_property`.
+fn validate_properties(entity: &Entity) -> Result<(), AppError> {
     for prop in &entity.properties {
-        validate_select(&entity.structure_type, prop)?;
+        validate_property(&entity.structure_type, prop)?;
     }
     Ok(())
 }
 
-/// Reject a select value the structure doesn't allow (I-9): a property declared as
-/// a select must hold a `select` value naming one of its options, and a `select`
-/// value is only allowed on a declared select. Structures missing from the
-/// registry have no schema and pass unchecked; other kinds aren't checked.
-/// Shared by Create and Resolve (via `validate_selects`) and SetProperty.
-fn validate_select(structure_type: &str, prop: &Property) -> Result<(), AppError> {
+/// Reject a property value that doesn't fit the structure's declaration: a
+/// declared property must hold a value of its declared `PropertyKind` (I-16; a
+/// rich-text property only a `richtext` ref), a declared select one of its
+/// options, and a `select` value is only allowed on a declared select (I-9).
+/// Other undeclared (ad-hoc) properties take any value. Structures missing from
+/// the registry (rows written before unknown types were rejected, I-24) have no
+/// schema and pass unchecked. Shared by Create and Resolve (via
+/// `validate_properties`) and SetProperty.
+fn validate_property(structure_type: &str, prop: &Property) -> Result<(), AppError> {
     if structures::structure(structure_type).is_none() {
         return Ok(());
     }
-    let def = structures::property(structure_type, &prop.id)
-        .filter(|d| d.kind == PropertyKind::Select);
     let value = prop.value.as_ref().and_then(|v| v.value.as_ref());
-    match (def, value) {
-        (None, Some(property_value::Value::Select(key))) => Err(AppError::Invalid(format!(
-            "{structure_type}.{} is not a select property (got select {key:?})",
-            prop.id
-        ))),
-        (None, _) => Ok(()),
-        (Some(def), value) => {
-            let allowed: Vec<&str> = def.options.iter().map(|o| o.key).collect();
-            let key = match value {
-                Some(property_value::Value::Select(key)) => key.as_str(),
-                _ => {
-                    return Err(AppError::Invalid(format!(
-                        "{structure_type}.{} must be a select value, one of: {}",
-                        prop.id,
-                        allowed.join(", ")
-                    )));
-                }
-            };
-            if !allowed.contains(&key) {
-                return Err(AppError::Invalid(format!(
-                    "invalid value {key:?} for {structure_type}.{}; allowed: {}",
-                    prop.id,
-                    allowed.join(", ")
-                )));
-            }
-            Ok(())
-        }
+    let Some(def) = structures::property(structure_type, &prop.id) else {
+        return match value {
+            Some(property_value::Value::Select(key)) => Err(AppError::Invalid(format!(
+                "{structure_type}.{} is not a select property (got select {key:?})",
+                prop.id
+            ))),
+            _ => Ok(()),
+        };
+    };
+    if def.kind == PropertyKind::Select {
+        return validate_select(structure_type, def, value);
+    }
+    let got = value.map(value_kind);
+    if got != Some(def.kind) {
+        return Err(AppError::Invalid(format!(
+            "{structure_type}.{} must be a {} value, got {}",
+            prop.id,
+            kind_name(def.kind),
+            got.map_or("no value", kind_name)
+        )));
+    }
+    Ok(())
+}
+
+/// A declared select's value must be a `select` naming one of its options (I-9).
+fn validate_select(
+    structure_type: &str,
+    def: &structures::PropertyDef,
+    value: Option<&property_value::Value>,
+) -> Result<(), AppError> {
+    let allowed: Vec<&str> = def.options.iter().map(|o| o.key).collect();
+    let Some(property_value::Value::Select(key)) = value else {
+        return Err(AppError::Invalid(format!(
+            "{structure_type}.{} must be a select value, one of: {}",
+            def.id,
+            allowed.join(", ")
+        )));
+    };
+    if !allowed.contains(&key.as_str()) {
+        return Err(AppError::Invalid(format!(
+            "invalid value {key:?} for {structure_type}.{}; allowed: {}",
+            def.id,
+            allowed.join(", ")
+        )));
+    }
+    Ok(())
+}
+
+/// The `PropertyKind` a value's case belongs to.
+fn value_kind(value: &property_value::Value) -> PropertyKind {
+    match value {
+        property_value::Value::Text(_) => PropertyKind::Text,
+        property_value::Value::Number(_) => PropertyKind::Number,
+        property_value::Value::Date(_) => PropertyKind::Date,
+        property_value::Value::Select(_) => PropertyKind::Select,
+        property_value::Value::Relation(_) => PropertyKind::Relation,
+        property_value::Value::Richtext(_) => PropertyKind::Richtext,
+        property_value::Value::Relations(_) => PropertyKind::Relations,
+    }
+}
+
+/// A kind's name as its `PropertyValue` case is spelled in the proto.
+fn kind_name(kind: PropertyKind) -> &'static str {
+    match kind {
+        PropertyKind::Richtext => "richtext",
+        PropertyKind::Text => "text",
+        PropertyKind::Number => "number",
+        PropertyKind::Date => "date",
+        PropertyKind::Select => "select",
+        PropertyKind::Relation => "relation",
+        PropertyKind::Relations => "relations",
     }
 }
 
@@ -710,7 +755,7 @@ impl EntityServiceTrait for EntityService {
 
     // One property row, not the whole entity, so writers editing different
     // properties of the same entity don't undo each other (I-11). Validates the
-    // property with the same checks Create uses: `validate_select` (I-9)
+    // property with the same checks Create uses: `validate_property` (I-9, I-16)
     // and, through `sync_relation_property`, `check_relation_targets` (I-2).
     // Only a DailyNote's `date` changes the name (and so the FTS name row).
     async fn set_property(
@@ -745,7 +790,7 @@ impl EntityServiceTrait for EntityService {
 
         // Clearing is allowed on any property.
         if prop.value.is_some() {
-            validate_select(&structure_type, &prop).map_err(Status::from)?;
+            validate_property(&structure_type, &prop).map_err(Status::from)?;
         }
 
         let previous = sqlx::query_scalar!(
@@ -1522,6 +1567,81 @@ mod tests {
         let stored = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(stored.properties, entity.properties);
         assert_eq!(stored.updated_at, entity.updated_at);
+    }
+
+    // I-16: every declared property takes only its declared kind.
+    #[tokio::test]
+    async fn values_must_match_the_declared_kind() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let target = create(&svc, note("Target")).await;
+        let entity = create(&svc, todo("Water plants")).await;
+
+        // A `relations` value on `content` (declared richtext).
+        let err = set_property(
+            &svc,
+            &entity.id,
+            "content",
+            tags_value(&[(&target.id, "Note")]),
+        )
+        .await
+        .expect_err("relations on a rich-text property");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("richtext"), "{}", err.message());
+
+        // A `date` value on a select, through SetProperty and Create.
+        let err = set_property(&svc, &entity.id, "status", date("2026-06-13"))
+            .await
+            .expect_err("date on a select");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let err = try_create(
+            &svc,
+            with_value(
+                todo("Dated"),
+                "priority",
+                property_value::Value::Date("2026-06-13".to_string()),
+            ),
+        )
+        .await
+        .expect_err("date on a select");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        // A `text` value on a declared date.
+        let err = set_property(
+            &svc,
+            &entity.id,
+            "due",
+            Some(property_value::Value::Text("tomorrow".to_string())),
+        )
+        .await
+        .expect_err("text on a date property");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(stored.properties, entity.properties);
+        assert_eq!(stored.links, entity.links);
+        assert_eq!(entity_count(&pool).await, 2);
+
+        // The matching kinds are accepted: a richtext ref on `content` (until
+        // T12 drops the case), a date on `due`, and anything on an undeclared id.
+        let content = Some(property_value::Value::Richtext(RichTextRef {
+            entity_id: entity.id.clone(),
+            property_id: "content".to_string(),
+        }));
+        set_property(&svc, &entity.id, "content", content)
+            .await
+            .expect("richtext on content");
+        set_property(&svc, &entity.id, "due", date("2026-06-13"))
+            .await
+            .expect("date on due");
+        set_property(
+            &svc,
+            &entity.id,
+            "mood",
+            Some(property_value::Value::Number(3.0)),
+        )
+        .await
+        .expect("undeclared property is unchecked");
     }
 
     #[tokio::test]
