@@ -389,27 +389,6 @@ test covers it.
 
 ---
 
-### I-37 · A racing `RichText.Put` fails with `Internal`, not `FailedPrecondition` · medium · confirmed
-
-**Where:** `server/src/services/richtext.rs` (`put`, `self.pool.begin()`), `server/src/db.rs:35-43`
-
-**Problem:** `Put` reads the stored `updated_at` and then writes, inside a DEFERRED
-transaction. The pool runs WAL with a `busy_timeout`, but a deferred transaction that
-has read can't upgrade to a writer once another connection has committed since its read
-began. SQLite returns `SQLITE_BUSY` at once, and the timeout doesn't help. So when two
-`Put`s race, the loser gets `Internal` instead of `FailedPrecondition`. No write is lost,
-but clients that react to a conflict (the MCP append retry, the editor's "changed
-elsewhere" reload) don't see one. Found during T04 of the API review; confirmed by
-reading, not reproduced.
-
-**Fix:** Start `Put`'s transaction with `BEGIN IMMEDIATE` so the write lock is taken
-before the read, or map a busy error on this path to `FailedPrecondition`.
-
-**Done when:** two concurrent conditional `Put`s on the same doc give one success and
-one `FailedPrecondition`, and a test covers it.
-
----
-
 ### I-38 · Stale comment about which writes publish events · low · confirmed
 
 **Where:** `server/src/watch.rs:2`
@@ -425,26 +404,61 @@ up.
 
 ---
 
-### I-39 · Leaving a new daily note within the save debounce deletes what was typed · medium · confirmed
+### I-40 · Entity write transactions that read first fail with `Internal` under a race · medium · confirmed
 
-**Where:** `calcifer/src/components/calendar/DailyNoteSection.tsx:45-54` (prune on unmount), `calcifer/src/components/entity/EntityRichTextField.tsx` (`RICHTEXT_DEBOUNCE_MS` timer)
+**Where:** `server/src/services/entity.rs:538` (`update`), `server/src/services/entity.rs:619` (`set_property`), `server/src/embed/worker.rs:133`
 
-**Problem:** The editor saves 300 ms after the last keystroke. If you type into an empty
-daily note and leave the day inside that window, the prune's server check still sees an
-empty doc and deletes the note. The pending save then fires against a deleted entity
-and fails, so the typed text is lost. The old cache-based check had the same race.
-Found during T06 of the API review; confirmed by reading, not reproduced.
+**Problem:** Same class as I-37. These transactions start DEFERRED, read (the
+structure type, the previous property value, the old chunk ids), then write. If another
+connection commits in between, the upgrade to a writer fails with `SQLITE_BUSY` right
+away, ignoring `busy_timeout`. The caller gets `Internal`, or the embed worker drops a
+batch. Found during T06a of the API review; confirmed by reading, not reproduced.
 
-**Fix:** Flush the pending save when the editor unmounts, and have the prune wait for
-that doc's save queue to settle before checking the server.
+**Fix:** Open them with `begin_with("BEGIN IMMEDIATE")`, as `RichText.Put` does since
+I-37.
 
-**Done when:** typing into a new daily note and navigating away immediately keeps the
-note and its text.
+**Done when:** each one takes the write lock before its first read, and a race test
+covers `set_property`.
+
+---
+
+### I-41 · `cargo fmt --check` fails on committed server code · low · confirmed
+
+**Where:** `server/src/services/entity.rs`, `search.rs`, `link_store.rs`, `embed/chunk.rs`, parts of `services/richtext.rs`
+
+**Problem:** Several committed files aren't rustfmt-clean, so any engineer who runs
+`cargo fmt` produces unrelated churn. Nothing checks formatting today. Found during
+T06a of the API review.
+
+**Fix:** One `cargo fmt` commit with no other changes, then optionally a check.
+
+**Done when:** `cargo fmt --check` passes.
+
+---
+
+### I-42 · A rich-text save that fails for a non-conflict reason is dropped silently · medium · confirmed
+
+**Where:** `calcifer/src/model/richtext.ts` (`putOnce`, the non-`FailedPrecondition` branch)
+
+**Problem:** If a `Put` fails for any reason other than a conflict (the server is
+down, a network error), the saver logs to the console and moves on. The editor shows
+no error and doesn't retry, so the text is lost unless another edit follows once the
+server is back. If that editor was a daily note being left, the prune then sees an empty
+doc and deletes the note. Found during T06b of the API review; confirmed by reading.
+
+**Fix:** Keep the unsaved doc and retry with backoff, and show an inline "not saved"
+notice (the same slot as the conflict notice) until a save succeeds. The prune should
+skip the delete while a doc has an unsaved local change.
+
+**Done when:** typing while the server is down shows the notice, and the text is saved
+once the server returns without further typing.
 
 ---
 
 ## Resolved
 
+- **I-37 · A racing `RichText.Put` fails with `Internal`, not `FailedPrecondition`.** Fixed 2026-09-25. `Put` opens its transaction with `BEGIN IMMEDIATE`, so a racing `Put` waits on `busy_timeout` and then fails the expectation check. A file-backed race test fails without the fix (checked 5 of 5 runs) and passes with it; three simultaneous MCP appends to one note all landed.
+- **I-39 · Leaving a new daily note within the save debounce deletes what was typed.** Fixed 2026-09-25. The editor sends a pending debounced save when it unmounts, and the prune waits for that doc's outstanding saves before checking the server. Observed in the browser against a scratch DB: typing and leaving the day at once kept the note and its text; an empty note was still pruned.
 - **I-17 · `RichText.Put` sends no Watch event and has no conflict check.** Fixed 2026-09-25. `Put` checks the entity and declared property, takes `expected_updated_at` (mismatch is `FailedPrecondition`) and publishes `rich_text_changed` plus `upserted`; covered by server tests. The MCP append sends the expectation and retries on conflict. The browser writes Watch's `rich_text_changed` to the cache, loads newer versions into an open editor when no local save is pending, sends `expected_updated_at` on serialised saves, and on a conflict reloads the server's doc with an inline notice (D3, no merge). Browser behaviour observed 2026-09-25 against a scratch DB: live append, conflict reload with notice, prune kept a note the agent wrote to.
 - **I-18 · `RichText.Get` uses `NotFound` for "nothing saved yet".** Fixed 2026-09-25. `Get` returns an empty doc at the epoch for a declared, unsaved property and `NotFound` only for a missing entity or undeclared property; neither client treats `NotFound` as an empty doc any more.
 - **I-35 · Pruning an empty daily note can delete content the agent just appended.** Fixed 2026-09-25. The prune fetches the doc from the server (`deleteEntityIfRichTextEmpty`) and deletes only if it's empty; a write landing between that Get and the Delete can still be lost. Not yet observed in the browser.

@@ -158,6 +158,9 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-37 | A racing RichText.Put fails with Internal, not FailedPrecondition (found in T04) | medium | T06a |
 | I-38 | Stale comment in watch.rs (found in T04; richtext.ts half fixed in T06) | low | T14 (note) |
 | I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | T06b |
+| I-40 | Entity write transactions that read first fail with Internal under a race (found in T06a) | medium | T09 |
+| I-41 | `cargo fmt --check` fails on committed server code (found in T06a) | low | *unassigned* |
+| I-42 | A rich-text save that fails for a non-conflict reason is dropped silently (found in T06b) | medium | *unassigned; raise with the user* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -176,8 +179,8 @@ user after Phase 2.
 | T04 | [RichText Put: validate, conflict-check, publish events; Get returns empty](tasks/T04-richtext-put-server.md) | proto, server | T01, G1 | none (touches proto) | done (4dea7a7, d68bb41, 81f1605) |
 | T05 | [MCP: conflict-safe appends](tasks/T05-mcp-conflict-safe-append.md) | mcp | T04 | T06 | done (b5ec83e) |
 | T06 | [FE: live rich text, conflict handling, safe prune](tasks/T06-fe-live-richtext.md) | fe | T04 | T05 | done (17b38cc, 20dc58d, 62775de, 971e98a) |
-| T06a | [RichText Put takes the write lock first (racing save → FailedPrecondition)](tasks/T06a-richtext-put-immediate.md) | server | T06 | T06b | in progress (engineer: T06a) |
-| T06b | [FE: flush pending saves before pruning a daily note](tasks/T06b-flush-before-prune.md) | fe | T06 | T06a | in progress (engineer: T06b) |
+| T06a | [RichText Put takes the write lock first (racing save → FailedPrecondition)](tasks/T06a-richtext-put-immediate.md) | server | T06 | T06b | done (a3ba247) |
+| T06b | [FE: flush pending saves before pruning a daily note](tasks/T06b-flush-before-prune.md) | fe | T06 | T06a | done (75815ae) |
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06a, T06b | none | todo |
 | T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | todo |
