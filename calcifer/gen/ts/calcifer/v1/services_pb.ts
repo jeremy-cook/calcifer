@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE0NyZWF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE1VwZGF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IiEKE0RlbGV0ZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkiZwoSU2V0UHJvcGVydHlSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIpCgV2YWx1ZRgDIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiDgoMV2F0Y2hSZXF1ZXN0IhcKFUxpc3RTdHJ1Y3R1cmVzUmVxdWVzdCJHChZMaXN0U3RydWN0dXJlc1Jlc3BvbnNlEi0KCnN0cnVjdHVyZXMYASADKAsyGS5jYWxjaWZlci52MS5TdHJ1Y3R1cmVEZWYiJgoWQ3JlYXRlRGFpbHlOb3RlUmVxdWVzdBIMCgRkYXRlGAEgASgJIlcKFFJlc29sdmVCeU5hbWVSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJEgwKBG5hbWUYAiABKAkSGQoRY3JlYXRlX2lmX21pc3NpbmcYAyABKAgiTQoVUmVzb2x2ZUJ5TmFtZVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIokBCgtFbnRpdHlFdmVudBInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SABCBwoFZXZlbnQy0wUKDUVudGl0eVNlcnZpY2USOQoDR2V0Eh0uY2FsY2lmZXIudjEuR2V0RW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJLCgRMaXN0EiAuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVxdWVzdBohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlEj8KBkNyZWF0ZRIgLmNhbGNpZmVyLnYxLkNyZWF0ZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSPwoGVXBkYXRlEiAuY2FsY2lmZXIudjEuVXBkYXRlRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJDCgtTZXRQcm9wZXJ0eRIfLmNhbGNpZmVyLnYxLlNldFByb3BlcnR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJCCgZEZWxldGUSIC5jYWxjaWZlci52MS5EZWxldGVFbnRpdHlSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ej4KBVdhdGNoEhkuY2FsY2lmZXIudjEuV2F0Y2hSZXF1ZXN0GhguY2FsY2lmZXIudjEuRW50aXR5RXZlbnQwARJWCg1SZXNvbHZlQnlOYW1lEiEuY2FsY2lmZXIudjEuUmVzb2x2ZUJ5TmFtZVJlcXVlc3QaIi5jYWxjaWZlci52MS5SZXNvbHZlQnlOYW1lUmVzcG9uc2USSgoNTGlzdEJhY2tsaW5rcxIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZhohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlEksKD0NyZWF0ZURhaWx5Tm90ZRIjLmNhbGNpZmVyLnYxLkNyZWF0ZURhaWx5Tm90ZVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkyfgoPUmljaFRleHRTZXJ2aWNlEjYKA0dldBIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmGhUuY2FsY2lmZXIudjEuUmljaFRleHQSMwoDUHV0EhUuY2FsY2lmZXIudjEuUmljaFRleHQaFS5jYWxjaWZlci52MS5SaWNoVGV4dDKZAQoNU2VhcmNoU2VydmljZRJBCgZTZWFyY2gSGi5jYWxjaWZlci52MS5TZWFyY2hSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2USRQoIUmV0cmlldmUSHC5jYWxjaWZlci52MS5SZXRyaWV2ZVJlcXVlc3QaGy5jYWxjaWZlci52MS5TZWFyY2hSZXNwb25zZTJjChBTdHJ1Y3R1cmVTZXJ2aWNlEk8KBExpc3QSIi5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1JlcXVlc3QaIy5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1Jlc3BvbnNlYgZwcm90bzM", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE0NyZWF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjoKE1VwZGF0ZUVudGl0eVJlcXVlc3QSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IiEKE0RlbGV0ZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkiZwoSU2V0UHJvcGVydHlSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIpCgV2YWx1ZRgDIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWUiDgoMV2F0Y2hSZXF1ZXN0IhcKFUxpc3RTdHJ1Y3R1cmVzUmVxdWVzdCJHChZMaXN0U3RydWN0dXJlc1Jlc3BvbnNlEi0KCnN0cnVjdHVyZXMYASADKAsyGS5jYWxjaWZlci52MS5TdHJ1Y3R1cmVEZWYicAoUUmVzb2x2ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkSDgoEbmFtZRgCIAEoCUgAEg4KBGRhdGUYAyABKAlIABIZChFjcmVhdGVfaWZfbWlzc2luZxgEIAEoCEIFCgNrZXkiTQoVUmVzb2x2ZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIokBCgtFbnRpdHlFdmVudBInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SABCBwoFZXZlbnQygAUKDUVudGl0eVNlcnZpY2USOQoDR2V0Eh0uY2FsY2lmZXIudjEuR2V0RW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJLCgRMaXN0EiAuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVxdWVzdBohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlEj8KBkNyZWF0ZRIgLmNhbGNpZmVyLnYxLkNyZWF0ZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSPwoGVXBkYXRlEiAuY2FsY2lmZXIudjEuVXBkYXRlRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJDCgtTZXRQcm9wZXJ0eRIfLmNhbGNpZmVyLnYxLlNldFByb3BlcnR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJCCgZEZWxldGUSIC5jYWxjaWZlci52MS5EZWxldGVFbnRpdHlSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ej4KBVdhdGNoEhkuY2FsY2lmZXIudjEuV2F0Y2hSZXF1ZXN0GhguY2FsY2lmZXIudjEuRW50aXR5RXZlbnQwARJQCgdSZXNvbHZlEiEuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlcXVlc3QaIi5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVzcG9uc2USSgoNTGlzdEJhY2tsaW5rcxIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZhohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlMn4KD1JpY2hUZXh0U2VydmljZRI2CgNHZXQSGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhoVLmNhbGNpZmVyLnYxLlJpY2hUZXh0EjMKA1B1dBIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0GhUuY2FsY2lmZXIudjEuUmljaFRleHQymQEKDVNlYXJjaFNlcnZpY2USQQoGU2VhcmNoEhouY2FsY2lmZXIudjEuU2VhcmNoUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlEkUKCFJldHJpZXZlEhwuY2FsY2lmZXIudjEuUmV0cmlldmVSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2UyYwoQU3RydWN0dXJlU2VydmljZRJPCgRMaXN0EiIuY2FsY2lmZXIudjEuTGlzdFN0cnVjdHVyZXNSZXF1ZXN0GiMuY2FsY2lmZXIudjEuTGlzdFN0cnVjdHVyZXNSZXNwb25zZWIGcHJvdG8z", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
 
 /**
  * @generated from message calcifer.v1.SearchRequest
@@ -291,53 +291,56 @@ export const ListStructuresResponseSchema: GenMessage<ListStructuresResponse> = 
   messageDesc(file_calcifer_v1_services, 13);
 
 /**
- * @generated from message calcifer.v1.CreateDailyNoteRequest
+ * @generated from message calcifer.v1.ResolveEntityRequest
  */
-export type CreateDailyNoteRequest = Message<"calcifer.v1.CreateDailyNoteRequest"> & {
+export type ResolveEntityRequest = Message<"calcifer.v1.ResolveEntityRequest"> & {
   /**
-   * @generated from field: string date = 1;
-   */
-  date: string;
-};
-
-/**
- * Describes the message calcifer.v1.CreateDailyNoteRequest.
- * Use `create(CreateDailyNoteRequestSchema)` to create a new message.
- */
-export const CreateDailyNoteRequestSchema: GenMessage<CreateDailyNoteRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 14);
-
-/**
- * @generated from message calcifer.v1.ResolveByNameRequest
- */
-export type ResolveByNameRequest = Message<"calcifer.v1.ResolveByNameRequest"> & {
-  /**
+   * required for `name`; must be "" or "DailyNote" for `date`
+   *
    * @generated from field: string structure_type = 1;
    */
   structureType: string;
 
   /**
-   * @generated from field: string name = 2;
+   * @generated from oneof calcifer.v1.ResolveEntityRequest.key
    */
-  name: string;
+  key: {
+    /**
+     * case-insensitive
+     *
+     * @generated from field: string name = 2;
+     */
+    value: string;
+    case: "name";
+  } | {
+    /**
+     * ISO yyyy-MM-dd; finds the day's DailyNote
+     *
+     * @generated from field: string date = 3;
+     */
+    value: string;
+    case: "date";
+  } | { case: undefined; value?: undefined };
 
   /**
-   * @generated from field: bool create_if_missing = 3;
+   * false and missing => NOT_FOUND
+   *
+   * @generated from field: bool create_if_missing = 4;
    */
   createIfMissing: boolean;
 };
 
 /**
- * Describes the message calcifer.v1.ResolveByNameRequest.
- * Use `create(ResolveByNameRequestSchema)` to create a new message.
+ * Describes the message calcifer.v1.ResolveEntityRequest.
+ * Use `create(ResolveEntityRequestSchema)` to create a new message.
  */
-export const ResolveByNameRequestSchema: GenMessage<ResolveByNameRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 15);
+export const ResolveEntityRequestSchema: GenMessage<ResolveEntityRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 14);
 
 /**
- * @generated from message calcifer.v1.ResolveByNameResponse
+ * @generated from message calcifer.v1.ResolveEntityResponse
  */
-export type ResolveByNameResponse = Message<"calcifer.v1.ResolveByNameResponse"> & {
+export type ResolveEntityResponse = Message<"calcifer.v1.ResolveEntityResponse"> & {
   /**
    * @generated from field: calcifer.v1.Entity entity = 1;
    */
@@ -352,11 +355,11 @@ export type ResolveByNameResponse = Message<"calcifer.v1.ResolveByNameResponse">
 };
 
 /**
- * Describes the message calcifer.v1.ResolveByNameResponse.
- * Use `create(ResolveByNameResponseSchema)` to create a new message.
+ * Describes the message calcifer.v1.ResolveEntityResponse.
+ * Use `create(ResolveEntityResponseSchema)` to create a new message.
  */
-export const ResolveByNameResponseSchema: GenMessage<ResolveByNameResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 16);
+export const ResolveEntityResponseSchema: GenMessage<ResolveEntityResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 15);
 
 /**
  * @generated from message calcifer.v1.EntityEvent
@@ -393,7 +396,7 @@ export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
  * Use `create(EntityEventSchema)` to create a new message.
  */
 export const EntityEventSchema: GenMessage<EntityEvent> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 17);
+  messageDesc(file_calcifer_v1_services, 16);
 
 /**
  * @generated from service calcifer.v1.EntityService
@@ -435,6 +438,9 @@ export const EntityService: GenService<{
    * Write one property without resending the rest of the entity, so concurrent
    * edits to different properties don't overwrite each other. Returns the saved
    * entity. Use Update for renames and multi-field edits.
+   * A DailyNote's name is derived from its date: setting `date` on a DailyNote
+   * also sets its name, and fails with ALREADY_EXISTS if that day already has a
+   * DailyNote.
    *
    * @generated from rpc calcifer.v1.EntityService.SetProperty
    */
@@ -460,15 +466,17 @@ export const EntityService: GenService<{
     output: typeof EntityEventSchema;
   },
   /**
-   * Get-or-create an entity by (structure_type, name), case-insensitive.
-   * The single server-authoritative identity path for [[wikilinks]] / #tags.
+   * Get-or-create one entity by a key: a (structure_type, name) pair for
+   * [[wikilinks]], mentions and #tags, or a calendar day for its DailyNote. The
+   * single server-authoritative identity path for every client. The server
+   * builds a created entity's defaults and, for a DailyNote, its name.
    *
-   * @generated from rpc calcifer.v1.EntityService.ResolveByName
+   * @generated from rpc calcifer.v1.EntityService.Resolve
    */
-  resolveByName: {
+  resolve: {
     methodKind: "unary";
-    input: typeof ResolveByNameRequestSchema;
-    output: typeof ResolveByNameResponseSchema;
+    input: typeof ResolveEntityRequestSchema;
+    output: typeof ResolveEntityResponseSchema;
   },
   /**
    * Entities whose link graph points AT this entity (server-side backlink scan).
@@ -479,17 +487,6 @@ export const EntityService: GenService<{
     methodKind: "unary";
     input: typeof EntityRefSchema;
     output: typeof ListEntitiesResponseSchema;
-  },
-  /**
-   * Server-authoritative creation of the one DailyNote for a calendar day.
-   * Returns already_exists if a DailyNote for that date already exists.
-   *
-   * @generated from rpc calcifer.v1.EntityService.CreateDailyNote
-   */
-  createDailyNote: {
-    methodKind: "unary";
-    input: typeof CreateDailyNoteRequestSchema;
-    output: typeof EntitySchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_calcifer_v1_services, 0);

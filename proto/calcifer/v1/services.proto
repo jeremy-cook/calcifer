@@ -14,17 +14,19 @@ service EntityService {
   // Write one property without resending the rest of the entity, so concurrent
   // edits to different properties don't overwrite each other. Returns the saved
   // entity. Use Update for renames and multi-field edits.
+  // A DailyNote's name is derived from its date: setting `date` on a DailyNote
+  // also sets its name, and fails with ALREADY_EXISTS if that day already has a
+  // DailyNote.
   rpc SetProperty(SetPropertyRequest) returns (Entity);
   rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
   rpc Watch(WatchRequest) returns (stream EntityEvent);
-  // Get-or-create an entity by (structure_type, name), case-insensitive.
-  // The single server-authoritative identity path for [[wikilinks]] / #tags.
-  rpc ResolveByName(ResolveByNameRequest) returns (ResolveByNameResponse);
+  // Get-or-create one entity by a key: a (structure_type, name) pair for
+  // [[wikilinks]], mentions and #tags, or a calendar day for its DailyNote. The
+  // single server-authoritative identity path for every client. The server
+  // builds a created entity's defaults and, for a DailyNote, its name.
+  rpc Resolve(ResolveEntityRequest) returns (ResolveEntityResponse);
   // Entities whose link graph points AT this entity (server-side backlink scan).
   rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);
-  // Server-authoritative creation of the one DailyNote for a calendar day.
-  // Returns already_exists if a DailyNote for that date already exists.
-  rpc CreateDailyNote(CreateDailyNoteRequest) returns (Entity);
 }
 
 service RichTextService {
@@ -82,16 +84,17 @@ message WatchRequest          {}
 message ListStructuresRequest  {}
 message ListStructuresResponse { repeated StructureDef structures = 1; }
 
-message CreateDailyNoteRequest { string date = 1; }  // ISO calendar day, e.g. "2026-06-13"
-
-message ResolveByNameRequest {
-  string structure_type = 1;
-  string name = 2;
-  bool create_if_missing = 3;
+message ResolveEntityRequest {
+  string structure_type = 1;          // required for `name`; must be "" or "DailyNote" for `date`
+  oneof key {
+    string name = 2;                  // case-insensitive
+    string date = 3;                  // ISO yyyy-MM-dd; finds the day's DailyNote
+  }
+  bool create_if_missing = 4;         // false and missing => NOT_FOUND
 }
-message ResolveByNameResponse {
+message ResolveEntityResponse {
   Entity entity = 1;
-  bool created = 2;   // true if this call minted the entity
+  bool created = 2;                   // true if this call minted the entity
 }
 
 message EntityEvent {
