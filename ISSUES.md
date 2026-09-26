@@ -417,6 +417,8 @@ batch. Found during T06a of the API review; confirmed by reading, not reproduced
 **Fix:** Open them with `begin_with("BEGIN IMMEDIATE")`, as `RichText.Put` does since
 I-37.
 
+**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
+
 **Done when:** each one takes the write lock before its first read, and a race test
 covers `set_property`.
 
@@ -449,6 +451,8 @@ doc and deletes the note. Found during T06b of the API review; confirmed by read
 **Fix:** Keep the unsaved doc and retry with backoff, and show an inline "not saved"
 notice (the same slot as the conflict notice) until a save succeeds. The prune should
 skip the delete while a doc has an unsaved local change.
+
+**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
 
 **Done when:** typing while the server is down shows the notice, and the text is saved
 once the server returns without further typing.

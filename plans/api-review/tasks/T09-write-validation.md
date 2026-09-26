@@ -41,14 +41,6 @@ includes decision **D2** (name lookup rule). Recommended: deterministic, oldest
    - Undeclared property ids: keep today's behaviour and mention it in your report.
    - Tests: a `relations` value on `content`, and a `date` value on a select.
 
-### Write transactions take the lock first (I-40)
-- Open `update` (or whatever replaces it after T08), `set_property` and the embed
-  worker's chunk replace (`server/src/embed/worker.rs`) with
-  `begin_with("BEGIN IMMEDIATE")`, as `RichText.Put` does (see its comment).
-- Add a file-backed race test for `set_property`, following
-  `racing_conditional_puts_give_one_success_and_one_conflict` in `services/richtext.rs`.
-- Move I-40 to Resolved along with the others.
-
 ## Out of scope
 Client changes. Rich-text addressing (T12). Unused kinds (T23).
 

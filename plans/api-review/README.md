@@ -126,6 +126,7 @@ answer and the date.
 | D6 | Unused property kinds `text`, `number`, `relation` (C3): remove or render? | Remove them, and reserve their enum values and field numbers. Re-add them when a structure needs one. | **Render them** (not the recommendation): keep `text`, `number`, `relation` and add FE rendering. T23 runs variant "render"; G4 doesn't apply. 2026-09-25 |
 | D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | Adopt buf naming, T19 variant A (as recommended). 2026-09-25 |
 | D8 | Phase 1 check-in: fix I-37 and I-39 now or later? | Now, as a short task before T07 (both lose data) | Fix both in Phase 1, as T06a (server) and T06b (fe), run in parallel. The tech lead resolves both in `ISSUES.md` at integration. 2026-09-25 |
+| D9 | Phase 1 close: fix I-40 and I-42 (rare races and failure paths)? | Park I-42 until after Phase 2 | **Defer both, and don't treat rare concurrency as work** (user, 2026-09-25): Calcifer is a single-user local app, so clashes are very unlikely. The tech lead logs such findings as deferred and doesn't add them to task scope. 2026-09-25 |
 
 ---
 
@@ -158,9 +159,9 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-37 | A racing RichText.Put fails with Internal, not FailedPrecondition (found in T04) | medium | T06a |
 | I-38 | Stale comment in watch.rs (found in T04; richtext.ts half fixed in T06) | low | T14 (note) |
 | I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | T06b |
-| I-40 | Entity write transactions that read first fail with Internal under a race (found in T06a) | medium | T09 |
+| I-40 | Entity write transactions that read first fail with Internal under a race (found in T06a) | medium | deferred (D9) |
 | I-41 | `cargo fmt --check` fails on committed server code (found in T06a) | low | *unassigned* |
-| I-42 | A rich-text save that fails for a non-conflict reason is dropped silently (found in T06b) | medium | *unassigned; raise with the user* |
+| I-42 | A rich-text save that fails for a non-conflict reason is dropped silently (found in T06b) | medium | deferred (D9) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
