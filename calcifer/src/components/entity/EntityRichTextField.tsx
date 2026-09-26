@@ -14,12 +14,13 @@ export interface EntityRichTextFieldProps {
 }
 
 export function EntityRichTextField({ propertyId, propertyRef, autoFocus, hideToolbar }: EntityRichTextFieldProps) {
-  const { data, isPending, isError } = useRichText(propertyRef)
+  const { data, isError } = useRichText(propertyRef)
 
   // The editor needs the saved doc and its version before it mounts (the key
-  // remounts cleanly per entity/property).
-  if (isPending) return <div className="flex h-full w-full flex-col border border-border" />
-  if (isError || !data) return <p className="p-4 text-sm text-muted-foreground">Couldn't load this text.</p>
+  // remounts cleanly per entity/property). Once it has data, a failed background
+  // refetch keeps that data, so the open editor stays mounted.
+  if (!data && isError) return <p className="p-4 text-sm text-muted-foreground">Couldn't load this text.</p>
+  if (!data) return <div className="flex h-full w-full flex-col border border-border" />
 
   return (
     <LiveRichTextEditor
