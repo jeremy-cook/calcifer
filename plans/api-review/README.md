@@ -205,7 +205,7 @@ user after Phase 2.
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06a, T06b | none | done (ffbda48, aa5d882, 3644f2c, b4c3b09, 2391505, c2d4c67) |
 | T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | done (c6ae5ff, 1a8b312, f9b9b0a, 7c5fa96, 6edc2cd); browser checks pending |
-| T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | todo |
+| T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | in progress (engineer: T09 engineer) |
 | T10 | *merged into T07 and T08 (D4)* | | | | n/a |
 | T11 | *merged into T12 (D4)* | | | | n/a |
 | T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | todo |
