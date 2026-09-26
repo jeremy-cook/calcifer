@@ -16,6 +16,13 @@ running app. Nothing below has been reproduced yet.
 
 ## Open
 
+> **RPC names.** Entries written before 2026-09-26 use the RPC names from before I-13's
+> buf rename. Read `Get`/`List`/`Create`/`Rename`/`SetProperty`/`Delete`/`Watch`/`Resolve`
+> as `GetEntity`/`ListEntities`/`CreateEntity`/`RenameEntity`/`SetEntityProperty`/
+> `DeleteEntity`/`WatchEntities`/`ResolveEntity`, and `RichText.Get`/`Put` as
+> `GetRichText`/`PutRichText`. Server handlers follow the same names in snake_case
+> (e.g. `delete_entity`). `ResolveByName` was replaced by `ResolveEntity` in T07.
+
 ### I-14 · Deleting an entity leaves dead refs in other entities' relation values · medium · confirmed
 
 **Where:** `server/src/services/entity.rs` (`delete`), `calcifer/src/components/entity/EntityRelationsField.tsx`
