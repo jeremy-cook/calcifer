@@ -66,25 +66,6 @@ rejects creating a non-creatable structure and renaming a non-name-editable enti
 
 ---
 
-### I-31 · The API contract is undocumented · low · confirmed
-
-**Where:** `proto/calcifer/v1/entities.proto`, `server/src/links.rs:30,52-70`, `mcp-server/src/markdown/` (TipTap conversion)
-
-**Problem:** The proto doesn't say that date values are ISO `yyyy-MM-dd` (only
-`CreateDailyNoteRequest` does), that links, referenced_dates and `RichText.updated_at`
-are output-only, or that relation values only need the target id. `RichText.doc` is
-TipTap JSON that the server parses, so the editor's node types (`mention`, `hashtag`,
-`dateChip` and their attributes) are part of the API, but the proto says nothing about
-them, and the MCP server had to reimplement them.
-
-**Fix:** Document these in the proto comments and in `docs/reference/data-model.md`,
-including the rich-text node types the server reads.
-
-**Done when:** every field above has a proto comment, and the rich-text node types the
-server parses are documented.
-
----
-
 ### I-32 · Proto and Connect details leak into components · low · confirmed
 
 **Where:** `calcifer/src/routes/e.$id.tsx:251`, `calcifer/src/components/entity/EntityRelationsField.tsx:2,37`, `calcifer/src/components/calendar/DailyNoteDateField.tsx:2,19`, `calcifer/src/model/api.ts:28`
@@ -369,6 +350,7 @@ T19 of the API review.
 
 ## Resolved
 
+- **I-31 · The API contract is undocumented.** Fixed 2026-09-26. Proto comments now say that `PropertyValue.date` and `referenced_dates` are ISO `yyyy-MM-dd` days, that `RichTextRef`, `LinkRef`, `RichText.updated_at` and `Entity.referenced_dates` are output-only, that a relation value's `EntityRef` needs only `id` (a non-empty `structure_type` must match the target), and that `SearchHit.snippet` loses U+E000/U+E001. `RichText.doc` and `PutRichTextRequest.doc` point to the new [`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md), which specifies the nodes the server reads (`mention`/`hashtag` `id` and `structureType`, `dateChip` `date`, every `text`), what it derives from each (links, `referenced_dates`, FTS text, embedding chunks) and what it ignores, with an example and what each client writes. Linked from `data-model.md` and the README; `docs/specs/mentions.md` names `ResolveEntity` instead of `ResolveByName`. Comments and docs only.
 - **I-13 · `buf lint` reports RPC naming errors in `services.proto`.** Fixed 2026-09-26. Adopted buf's standard naming (D7, variant A): every RPC is a verb and noun (`GetEntity`, `ListEntities`, `CreateEntity`, `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `WatchEntities`, `ResolveEntity`, `GetRichText`, `PutRichText`, `ListStructures`), takes `<Rpc>Request` and returns its own `<Rpc>Response`, which wraps the entity or doc (`GetEntityResponse { Entity entity = 1; }`, `PutRichTextResponse { RichText rich_text = 1; }`, `DeleteEntityResponse {}`). `EntityEvent` is `WatchEntitiesResponse` (same fields and numbers), `SetPropertyRequest` is `SetEntityPropertyRequest`, and `GetRichTextRequest` / `PutRichTextRequest` carry `entity_id` and `property_id` flat; `expected_updated_at` moved from `RichText` (field 4 reserved) to `PutRichTextRequest`. `RichTextRef`, `EntityRef` and `EntityRefList` stay, still used by `RichText.ref` and relations. Server, browser and MCP updated mechanically; `buf.yaml` stays on the default rules and `pnpm proto:lint` exits 0. Nothing runs it automatically: the README's proto dev loop now lists it first.
 - **I-30 · `ListBacklinks` takes the wrong request and returns too little.** Fixed 2026-09-26. `ListBacklinks` takes `ListBacklinksRequest { entity_id }` and returns one `Backlink { source, source_property_id, created_at }` per link row, newest `created_at` first (then source id, then link id), and is documented as agent-only. Self-links are excluded on the server as in the frontend's `selectBacklinks`; an unknown `entity_id` is `NOT_FOUND`. Sources are hydrated in one batch (`load_entities_by_id`) instead of `load_entity` per source. The MCP server folds rows into one entry per source and `get_backlinks` names the linking properties when any isn't `content`. Covered by `list_backlinks_excludes_self_links`, `list_backlinks_reports_property_and_time_newest_first` and `list_backlinks_of_missing_entity_is_not_found`. Observed 2026-09-26 against a scratch DB through the MCP server's `getBacklinks`: a body link lists plainly, an ad-hoc `related` relation lists as `(via related)`, newest first, and a note mentioning itself doesn't list itself.
 - **I-29 · Search has two RPCs for one job.** Fixed 2026-09-26. `Retrieve` and `RetrieveRequest` are gone; `Search` takes a `SearchMode` (lexical, semantic, hybrid; unspecified means hybrid, the MCP tool's default), and semantic or hybrid with embeddings off behave as lexical. Snippets are plain text: FTS5 marks matches with private-use code points, which the server strips into `SearchHit.matches`, half-open UTF-16 ranges; a vector-only hit has no snippet and no matches. `search_notes` makes one `Search` call and bolds matches with `**`. Hits are hydrated in one batch (`load_entities_by_id`, four queries) instead of `load_entity` per hit. Covered by `search_dispatches_on_mode`, `semantic_and_hybrid_fall_back_to_lexical_without_embeddings`, `match_ranges_count_utf16_units_after_non_ascii_text`, `snippets_carry_no_bracket_markers` and `hits_hydrate_as_load_entity_in_rank_order_and_skip_stale_rows`. Observed 2026-09-26 against a scratch DB through the MCP server's `searchNotes`: lexical and hybrid snippets are plain text with `**bold**` matches, and semantic mode ranks the right note first for a paraphrase.
