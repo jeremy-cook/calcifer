@@ -66,23 +66,6 @@ rejects creating a non-creatable structure and renaming a non-name-editable enti
 
 ---
 
-### I-32 · Proto and Connect details leak into components · low · confirmed
-
-**Where:** `calcifer/src/routes/e.$id.tsx:251`, `calcifer/src/components/entity/EntityRelationsField.tsx:2,37`, `calcifer/src/components/calendar/DailyNoteDateField.tsx:2,19`, `calcifer/src/model/api.ts:28`
-
-**Problem:** Components build proto messages directly (`createMessage(EntityRefListSchema,
-…)`, `createMessage(EntityRefSchema, …)`) and branch on `ConnectError` codes, instead of
-going through the model layer.
-
-**Fix:** Keep reading proto types in components, as ADR 2 intends, but route writes
-through model helpers (`setRelations(entity, id, ids)`, `setDate`, `setSelect`) and add
-`isAlreadyExists` next to `isNotFound` in `api.ts`.
-
-**Done when:** nothing under `components/` or `routes/` imports `@bufbuild/protobuf` or
-`@connectrpc`.
-
----
-
 ### I-33 · Duplicated code in the model layer · low · confirmed
 
 **Where:** `calcifer/src/model/backlinks.ts:14`, `calcifer/src/model/store.ts:316`, `calcifer/src/model/todos.ts:117`, `calcifer/src/App.tsx:16`, `calcifer/src/model/store.ts:92,112-130,275-312`
@@ -412,6 +395,7 @@ T19 of the API review.
 
 ## Resolved
 
+- **I-32 · Proto and Connect details leak into components.** Fixed 2026-09-26. Components no longer build proto messages or check `ConnectError` codes. `usePropertyWriters()` in `model/store.ts` wraps `useSetProperty` with `setDate(entity, id, iso | null)`, `setSelect(entity, id, key)` and `setRelations(entity, id, targets)` (an empty list clears the property); `EntityRelationsField` emits plain `{ id, structureType }` targets. `DailyNoteDateField` detects a collision with the new `isAlreadyExists` in `model/api.ts`, and the unused `isNotFound` is gone. `withProperty` is module-private, and property reads in `store.ts` go through an `Object.hasOwn` check. Nothing under `components/`, `routes/` or `layouts/` imports `@bufbuild/protobuf` or `@connectrpc`. Not yet observed in the browser.
 - **I-31 · The API contract is undocumented.** Fixed 2026-09-26. Proto comments now say that `PropertyValue.date` and `referenced_dates` are ISO `yyyy-MM-dd` days, that `RichTextRef`, `LinkRef`, `RichText.updated_at` and `Entity.referenced_dates` are output-only, that a relation value's `EntityRef` needs only `id` (a non-empty `structure_type` must match the target), and that `SearchHit.snippet` loses U+E000/U+E001. `RichText.doc` and `PutRichTextRequest.doc` point to the new [`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md), which specifies the nodes the server reads (`mention`/`hashtag` `id` and `structureType`, `dateChip` `date`, every `text`), what it derives from each (links, `referenced_dates`, FTS text, embedding chunks) and what it ignores, with an example and what each client writes. Linked from `data-model.md` and the README; `docs/specs/mentions.md` names `ResolveEntity` instead of `ResolveByName`. Comments and docs only.
 - **I-13 · `buf lint` reports RPC naming errors in `services.proto`.** Fixed 2026-09-26. Adopted buf's standard naming (D7, variant A): every RPC is a verb and noun (`GetEntity`, `ListEntities`, `CreateEntity`, `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `WatchEntities`, `ResolveEntity`, `GetRichText`, `PutRichText`, `ListStructures`), takes `<Rpc>Request` and returns its own `<Rpc>Response`, which wraps the entity or doc (`GetEntityResponse { Entity entity = 1; }`, `PutRichTextResponse { RichText rich_text = 1; }`, `DeleteEntityResponse {}`). `EntityEvent` is `WatchEntitiesResponse` (same fields and numbers), `SetPropertyRequest` is `SetEntityPropertyRequest`, and `GetRichTextRequest` / `PutRichTextRequest` carry `entity_id` and `property_id` flat; `expected_updated_at` moved from `RichText` (field 4 reserved) to `PutRichTextRequest`. `RichTextRef`, `EntityRef` and `EntityRefList` stay, still used by `RichText.ref` and relations. Server, browser and MCP updated mechanically; `buf.yaml` stays on the default rules and `pnpm proto:lint` exits 0. Nothing runs it automatically: the README's proto dev loop now lists it first.
 - **I-30 · `ListBacklinks` takes the wrong request and returns too little.** Fixed 2026-09-26. `ListBacklinks` takes `ListBacklinksRequest { entity_id }` and returns one `Backlink { source, source_property_id, created_at }` per link row, newest `created_at` first (then source id, then link id), and is documented as agent-only. Self-links are excluded on the server as in the frontend's `selectBacklinks`; an unknown `entity_id` is `NOT_FOUND`. Sources are hydrated in one batch (`load_entities_by_id`) instead of `load_entity` per source. The MCP server folds rows into one entry per source and `get_backlinks` names the linking properties when any isn't `content`. Covered by `list_backlinks_excludes_self_links`, `list_backlinks_reports_property_and_time_newest_first` and `list_backlinks_of_missing_entity_is_not_found`. Observed 2026-09-26 against a scratch DB through the MCP server's `getBacklinks`: a body link lists plainly, an ad-hoc `related` relation lists as `(via related)`, newest first, and a note mentioning itself doesn't list itself.
