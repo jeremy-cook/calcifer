@@ -27,8 +27,6 @@ message PropertyValue {
   }
 }
 
-message Property { string id = 1; PropertyValue value = 2; }
-
 message RichText {
   RichTextRef ref = 1;
   string doc = 2;               // TipTap JSON, inspected as text
@@ -51,7 +49,7 @@ message Entity {
   string id = 1;                              // output only
   string structure_type = 2;    // 'Note' | 'Tag' | 'DailyNote' | ...
   string name = 3;
-  repeated Property properties = 4;
+  map<string, PropertyValue> properties = 4;  // keyed by property id
   repeated LinkRef links = 5;   // output only; outgoing; backlinks are derived
   google.protobuf.Timestamp created_at = 6;   // output only
   google.protobuf.Timestamp updated_at = 7;   // output only
@@ -250,7 +248,9 @@ for a blank one, and `FAILED_PRECONDITION` for a structure with `name_editable: 
 that failed: `a Tag named "<name>" already exists` or `a DailyNote for <date> already
 exists`. There is no whole-entity write.
 
-`Create` takes intent: `structure_type`, an optional `name` and initial `properties`.
+`Create` takes intent: `structure_type`, an optional `name` and initial `properties`
+(the same `map<string, PropertyValue>`, keyed by property id; an entry whose value has
+no case is `INVALID_ARGUMENT`).
 The `structure_type` must be in the registry (`INVALID_ARGUMENT`) and `creatable`
 (`FAILED_PRECONDITION`, pointing at `Resolve`). The server builds the entity with `new_entity` (minted id and timestamps, select
 defaults, then the request's properties laid over them; a request value for a
