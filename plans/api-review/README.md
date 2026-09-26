@@ -102,9 +102,9 @@ Remember the Node PATH pin before any pnpm command:
 
 ---
 
-## Paused (2026-09-25)
+## Paused (2026-09-25), resumed 2026-09-26
 
-Work paused at the user's request after T07. The branch is green: `cargo test`,
+Work paused at the user's request after T07 and resumed with T08 on 2026-09-26. The branch is green: `cargo test`,
 `calcifer` build + lint and `mcp-server` typecheck pass, and Phase 1 plus T07 were
 checked in the browser against a scratch DB.
 
@@ -203,7 +203,7 @@ user after Phase 2.
 | T06b | [FE: flush pending saves before pruning a daily note](tasks/T06b-flush-before-prune.md) | fe | T06 | T06a | done (75815ae) |
 | **Phase 2: server owns writes** |||||
 | T07 | [Resolve replaces ResolveByName and CreateDailyNote; server-owned daily-note names](tasks/T07-resolve.md) | proto, server, fe, mcp | T02, T06a, T06b | none | done (ffbda48, aa5d882, 3644f2c, b4c3b09, 2391505, c2d4c67) |
-| T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | todo |
+| T08 | [Create by intent and Rename replace Create({ entity }) and Update](tasks/T08-create-rename.md) | proto, server, fe, mcp | T07 | none | in progress (engineer: T08 engineer) |
 | T09 | [Server write validation (types, flags, lookup order, messages, kinds)](tasks/T09-write-validation.md) | server | T08 | none (regenerates stubs) | todo |
 | T10 | *merged into T07 and T08 (D4)* | | | | n/a |
 | T11 | *merged into T12 (D4)* | | | | n/a |
