@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IoIBChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARIpCgpwcm9wZXJ0aWVzGAQgAygLMhUuY2FsY2lmZXIudjEuUHJvcGVydHlCBwoFX25hbWVKBAgBEAJSBmVudGl0eSIvChNSZW5hbWVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkiIQoTRGVsZXRlRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSJnChJTZXRQcm9wZXJ0eVJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJEikKBXZhbHVlGAMgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZSIOCgxXYXRjaFJlcXVlc3QiFwoVTGlzdFN0cnVjdHVyZXNSZXF1ZXN0IkcKFkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2USLQoKc3RydWN0dXJlcxgBIAMoCzIZLmNhbGNpZmVyLnYxLlN0cnVjdHVyZURlZiJwChRSZXNvbHZlRW50aXR5UmVxdWVzdBIWCg5zdHJ1Y3R1cmVfdHlwZRgBIAEoCRIOCgRuYW1lGAIgASgJSAASDgoEZGF0ZRgDIAEoCUgAEhkKEWNyZWF0ZV9pZl9taXNzaW5nGAQgASgIQgUKA2tleSJNChVSZXNvbHZlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB2NyZWF0ZWQYAiABKAgiiQEKC0VudGl0eUV2ZW50EicKCHVwc2VydGVkGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5SAASFAoKZGVsZXRlZF9pZBgCIAEoCUgAEjIKEXJpY2hfdGV4dF9jaGFuZ2VkGAMgASgLMhUuY2FsY2lmZXIudjEuUmljaFRleHRIAEIHCgVldmVudDKABQoNRW50aXR5U2VydmljZRI5CgNHZXQSHS5jYWxjaWZlci52MS5HZXRFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EksKBExpc3QSIC5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXF1ZXN0GiEuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVzcG9uc2USPwoGQ3JlYXRlEiAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRI/CgZSZW5hbWUSIC5jYWxjaWZlci52MS5SZW5hbWVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EkMKC1NldFByb3BlcnR5Eh8uY2FsY2lmZXIudjEuU2V0UHJvcGVydHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EkIKBkRlbGV0ZRIgLmNhbGNpZmVyLnYxLkRlbGV0ZUVudGl0eVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSPgoFV2F0Y2gSGS5jYWxjaWZlci52MS5XYXRjaFJlcXVlc3QaGC5jYWxjaWZlci52MS5FbnRpdHlFdmVudDABElAKB1Jlc29sdmUSIS5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVxdWVzdBoiLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXNwb25zZRJKCg1MaXN0QmFja2xpbmtzEhYuY2FsY2lmZXIudjEuRW50aXR5UmVmGiEuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVzcG9uc2UyfgoPUmljaFRleHRTZXJ2aWNlEjYKA0dldBIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmGhUuY2FsY2lmZXIudjEuUmljaFRleHQSMwoDUHV0EhUuY2FsY2lmZXIudjEuUmljaFRleHQaFS5jYWxjaWZlci52MS5SaWNoVGV4dDKZAQoNU2VhcmNoU2VydmljZRJBCgZTZWFyY2gSGi5jYWxjaWZlci52MS5TZWFyY2hSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2USRQoIUmV0cmlldmUSHC5jYWxjaWZlci52MS5SZXRyaWV2ZVJlcXVlc3QaGy5jYWxjaWZlci52MS5TZWFyY2hSZXNwb25zZTJjChBTdHJ1Y3R1cmVTZXJ2aWNlEk8KBExpc3QSIi5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1JlcXVlc3QaIy5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1Jlc3BvbnNlYgZwcm90bzM", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiLQoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDSI7Cg9SZXRyaWV2ZVJlcXVlc3QSDQoFcXVlcnkYASABKAkSCQoBaxgCIAEoDRIOCgZoeWJyaWQYAyABKAgiNgoOU2VhcmNoUmVzcG9uc2USJAoEaGl0cxgBIAMoCzIWLmNhbGNpZmVyLnYxLlNlYXJjaEhpdCJQCglTZWFyY2hIaXQSIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB3NuaXBwZXQYAiABKAkSDQoFc2NvcmUYAyABKAEiHgoQR2V0RW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IoIBChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARIpCgpwcm9wZXJ0aWVzGAQgAygLMhUuY2FsY2lmZXIudjEuUHJvcGVydHlCBwoFX25hbWVKBAgBEAJSBmVudGl0eSIvChNSZW5hbWVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkiIQoTRGVsZXRlRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSJnChJTZXRQcm9wZXJ0eVJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJEikKBXZhbHVlGAMgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZSIOCgxXYXRjaFJlcXVlc3QiFwoVTGlzdFN0cnVjdHVyZXNSZXF1ZXN0IkcKFkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2USLQoKc3RydWN0dXJlcxgBIAMoCzIZLmNhbGNpZmVyLnYxLlN0cnVjdHVyZURlZiJwChRSZXNvbHZlRW50aXR5UmVxdWVzdBIWCg5zdHJ1Y3R1cmVfdHlwZRgBIAEoCRIOCgRuYW1lGAIgASgJSAASDgoEZGF0ZRgDIAEoCUgAEhkKEWNyZWF0ZV9pZl9taXNzaW5nGAQgASgIQgUKA2tleSJNChVSZXNvbHZlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB2NyZWF0ZWQYAiABKAgiNwoORW50aXR5U25hcHNob3QSJQoIZW50aXRpZXMYASADKAsyEy5jYWxjaWZlci52MS5FbnRpdHkizAEKC0VudGl0eUV2ZW50EicKCHVwc2VydGVkGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5SAASFAoKZGVsZXRlZF9pZBgCIAEoCUgAEjIKEXJpY2hfdGV4dF9jaGFuZ2VkGAMgASgLMhUuY2FsY2lmZXIudjEuUmljaFRleHRIABIvCghzbmFwc2hvdBgEIAEoCzIbLmNhbGNpZmVyLnYxLkVudGl0eVNuYXBzaG90SAASEAoIcmV2aXNpb24YDyABKARCBwoFZXZlbnQygAUKDUVudGl0eVNlcnZpY2USOQoDR2V0Eh0uY2FsY2lmZXIudjEuR2V0RW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJLCgRMaXN0EiAuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVxdWVzdBohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlEj8KBkNyZWF0ZRIgLmNhbGNpZmVyLnYxLkNyZWF0ZUVudGl0eVJlcXVlc3QaEy5jYWxjaWZlci52MS5FbnRpdHkSPwoGUmVuYW1lEiAuY2FsY2lmZXIudjEuUmVuYW1lRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJDCgtTZXRQcm9wZXJ0eRIfLmNhbGNpZmVyLnYxLlNldFByb3BlcnR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRJCCgZEZWxldGUSIC5jYWxjaWZlci52MS5EZWxldGVFbnRpdHlSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ej4KBVdhdGNoEhkuY2FsY2lmZXIudjEuV2F0Y2hSZXF1ZXN0GhguY2FsY2lmZXIudjEuRW50aXR5RXZlbnQwARJQCgdSZXNvbHZlEiEuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlcXVlc3QaIi5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVzcG9uc2USSgoNTGlzdEJhY2tsaW5rcxIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZhohLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1Jlc3BvbnNlMn4KD1JpY2hUZXh0U2VydmljZRI2CgNHZXQSGC5jYWxjaWZlci52MS5SaWNoVGV4dFJlZhoVLmNhbGNpZmVyLnYxLlJpY2hUZXh0EjMKA1B1dBIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0GhUuY2FsY2lmZXIudjEuUmljaFRleHQymQEKDVNlYXJjaFNlcnZpY2USQQoGU2VhcmNoEhouY2FsY2lmZXIudjEuU2VhcmNoUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlEkUKCFJldHJpZXZlEhwuY2FsY2lmZXIudjEuUmV0cmlldmVSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2UyYwoQU3RydWN0dXJlU2VydmljZRJPCgRMaXN0EiIuY2FsY2lmZXIudjEuTGlzdFN0cnVjdHVyZXNSZXF1ZXN0GiMuY2FsY2lmZXIudjEuTGlzdFN0cnVjdHVyZXNSZXNwb25zZWIGcHJvdG8z", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty]);
 
 /**
  * @generated from message calcifer.v1.SearchRequest
@@ -383,6 +383,25 @@ export const ResolveEntityResponseSchema: GenMessage<ResolveEntityResponse> = /*
   messageDesc(file_calcifer_v1_services, 15);
 
 /**
+ * Every entity, sent by Watch at the start of a stream and after a lag.
+ *
+ * @generated from message calcifer.v1.EntitySnapshot
+ */
+export type EntitySnapshot = Message<"calcifer.v1.EntitySnapshot"> & {
+  /**
+   * @generated from field: repeated calcifer.v1.Entity entities = 1;
+   */
+  entities: Entity[];
+};
+
+/**
+ * Describes the message calcifer.v1.EntitySnapshot.
+ * Use `create(EntitySnapshotSchema)` to create a new message.
+ */
+export const EntitySnapshotSchema: GenMessage<EntitySnapshot> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 16);
+
+/**
  * @generated from message calcifer.v1.EntityEvent
  */
 export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
@@ -409,7 +428,23 @@ export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
      */
     value: RichText;
     case: "richTextChanged";
+  } | {
+    /**
+     * Replaces the client's whole entity set. Rich-text docs aren't included.
+     *
+     * @generated from field: calcifer.v1.EntitySnapshot snapshot = 4;
+     */
+    value: EntitySnapshot;
+    case: "snapshot";
   } | { case: undefined; value?: undefined };
+
+  /**
+   * Monotonic per server process. A snapshot carries the revision it is
+   * current as of; the events after it carry higher ones.
+   *
+   * @generated from field: uint64 revision = 15;
+   */
+  revision: bigint;
 };
 
 /**
@@ -417,7 +452,7 @@ export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
  * Use `create(EntityEventSchema)` to create a new message.
  */
 export const EntityEventSchema: GenMessage<EntityEvent> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 16);
+  messageDesc(file_calcifer_v1_services, 17);
 
 /**
  * @generated from service calcifer.v1.EntityService
@@ -432,7 +467,8 @@ export const EntityService: GenService<{
     output: typeof EntitySchema;
   },
   /**
-   * An empty structure_type lists every entity; one not in the registry is
+   * For the agent: the frontend's replica comes from Watch (ADR 9). An empty
+   * structure_type lists every entity; one not in the registry is
    * INVALID_ARGUMENT.
    *
    * @generated from rpc calcifer.v1.EntityService.List
@@ -495,6 +531,18 @@ export const EntityService: GenService<{
     output: typeof EmptySchema;
   },
   /**
+   * One-way replication of the whole entity set (ADR 9):
+   * - The first message on every stream is a `snapshot`.
+   * - After it come events with increasing `revision`.
+   * - Whenever the server can't guarantee continuity (the subscriber lagged),
+   *   it sends a fresh `snapshot`, and the client must replace its whole set.
+   * - A snapshot doesn't include rich-text docs; clients refetch any doc they
+   *   hold.
+   * - Revisions restart when the server restarts. Clients never compare
+   *   revisions across streams.
+   * A reconnect is a new stream, so it starts with a snapshot; there is no
+   * resume from a revision.
+   *
    * @generated from rpc calcifer.v1.EntityService.Watch
    */
   watch: {
@@ -521,6 +569,7 @@ export const EntityService: GenService<{
   },
   /**
    * Entities whose link graph points AT this entity (server-side backlink scan).
+   * For the agent: the frontend derives backlinks from its Watch replica.
    *
    * @generated from rpc calcifer.v1.EntityService.ListBacklinks
    */
@@ -569,6 +618,8 @@ export const RichTextService: GenService<{
  */
 export const SearchService: GenService<{
   /**
+   * For the agent: the frontend doesn't call it (ADR 9).
+   *
    * @generated from rpc calcifer.v1.SearchService.Search
    */
   search: {

@@ -8,7 +8,8 @@ import "google/protobuf/empty.proto";
 
 service EntityService {
   rpc Get(GetEntityRequest) returns (Entity);
-  // An empty structure_type lists every entity; one not in the registry is
+  // For the agent: the frontend's replica comes from Watch (ADR 9). An empty
+  // structure_type lists every entity; one not in the registry is
   // INVALID_ARGUMENT.
   rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);
   // Create a new entity from intent. The server mints the id, timestamps,
@@ -32,6 +33,17 @@ service EntityService {
   // DailyNote.
   rpc SetProperty(SetPropertyRequest) returns (Entity);
   rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
+  // One-way replication of the whole entity set (ADR 9):
+  // - The first message on every stream is a `snapshot`.
+  // - After it come events with increasing `revision`.
+  // - Whenever the server can't guarantee continuity (the subscriber lagged),
+  //   it sends a fresh `snapshot`, and the client must replace its whole set.
+  // - A snapshot doesn't include rich-text docs; clients refetch any doc they
+  //   hold.
+  // - Revisions restart when the server restarts. Clients never compare
+  //   revisions across streams.
+  // A reconnect is a new stream, so it starts with a snapshot; there is no
+  // resume from a revision.
   rpc Watch(WatchRequest) returns (stream EntityEvent);
   // Get-or-create one entity by a key: a (structure_type, name) pair for
   // [[wikilinks]], mentions and #tags, or a calendar day for its DailyNote. The
@@ -43,6 +55,7 @@ service EntityService {
   // DailyNote.
   rpc Resolve(ResolveEntityRequest) returns (ResolveEntityResponse);
   // Entities whose link graph points AT this entity (server-side backlink scan).
+  // For the agent: the frontend derives backlinks from its Watch replica.
   rpc ListBacklinks(EntityRef) returns (ListEntitiesResponse);
 }
 
@@ -59,6 +72,7 @@ service RichTextService {
 // is semantic — embeds the query and runs vector KNN over chunk embeddings
 // (sqlite-vec), optionally fused with FTS5 via reciprocal-rank fusion.
 service SearchService {
+  // For the agent: the frontend doesn't call it (ADR 9).
   rpc Search(SearchRequest) returns (SearchResponse);
   // Semantic retrieval. With hybrid=true, fuses vector KNN + FTS5 via RRF;
   // otherwise pure vector KNN. Falls back to lexical when embeddings are off.
@@ -124,11 +138,19 @@ message ResolveEntityResponse {
   bool created = 2;                   // true if this call minted the entity
 }
 
+// Every entity, sent by Watch at the start of a stream and after a lag.
+message EntitySnapshot { repeated Entity entities = 1; }
+
 message EntityEvent {
   oneof event {
     Entity upserted = 1;
     string deleted_id = 2;
     // A RichTextService.Put saved this document (ref, doc, updated_at).
     RichText rich_text_changed = 3;
+    // Replaces the client's whole entity set. Rich-text docs aren't included.
+    EntitySnapshot snapshot = 4;
   }
+  // Monotonic per server process. A snapshot carries the revision it is
+  // current as of; the events after it carry higher ones.
+  uint64 revision = 15;
 }
