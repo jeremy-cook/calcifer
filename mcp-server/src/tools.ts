@@ -4,6 +4,7 @@ import { Code, ConnectError } from '@connectrpc/connect'
 import { timestampFromMs, type Timestamp } from '@bufbuild/protobuf/wkt'
 import { entityClient, richTextClient, searchClient, structureClient } from './calciferClient.js'
 import { PropertyKind, type PropertyDef } from '@calcifer/proto/calcifer/v1/structures_pb'
+import { SearchMode as ProtoSearchMode, type MatchRange } from '@calcifer/proto/calcifer/v1/services_pb'
 import { toTipTap } from './markdown/parse.js'
 import { fromTipTap } from './markdown/serialize.js'
 import type { TTNode } from './markdown/types.js'
@@ -97,22 +98,36 @@ export async function getNote(name: string): Promise<string> {
 
 export type SearchMode = 'lexical' | 'semantic' | 'hybrid'
 
+const searchModes: Record<SearchMode, ProtoSearchMode> = {
+  lexical: ProtoSearchMode.LEXICAL,
+  semantic: ProtoSearchMode.SEMANTIC,
+  hybrid: ProtoSearchMode.HYBRID,
+}
+
+// Bold each matched range of a plain-text snippet. `**` rather than brackets, so
+// a match never reads as [[wikilink]] syntax. Ranges are UTF-16 offsets, which is
+// what JS string indices count.
+function markMatches(snippet: string, matches: MatchRange[]): string {
+  let out = ''
+  let at = 0
+  for (const m of matches) {
+    out += `${snippet.slice(at, m.start)}**${snippet.slice(m.start, m.end)}**`
+    at = m.end
+  }
+  return out + snippet.slice(at)
+}
+
 export async function searchNotes(
   query: string,
   limit = 10,
   mode: SearchMode = 'hybrid',
 ): Promise<string> {
-  // Route by mode: `lexical` hits FTS5 (Search); `semantic`/`hybrid` hit the
-  // embedding-backed Retrieve (pure vector vs RRF-fused with FTS5). Retrieve
-  // degrades to lexical server-side when embeddings are disabled.
-  const res =
-    mode === 'lexical'
-      ? await searchClient.search({ query, limit })
-      : await searchClient.retrieve({ query, k: limit, hybrid: mode === 'hybrid' })
+  // The server falls back to lexical for semantic/hybrid when embeddings are off.
+  const res = await searchClient.search({ query, limit, mode: searchModes[mode] })
   if (res.hits.length === 0) return `No matches for "${query}".`
   return res.hits
     .map((h) => {
-      const detail = h.snippet || `(score ${h.score.toFixed(3)})`
+      const detail = h.snippet ? markMatches(h.snippet, h.matches) : `(score ${h.score.toFixed(3)})`
       return `- [${h.entity!.structureType}] ${h.entity!.name}: ${detail}`
     })
     .join('\n')
