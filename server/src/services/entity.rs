@@ -57,7 +57,10 @@ impl EntityService {
         self.load_entity(&entity.id).await
     }
 
-    /// Case-insensitive lookup of an entity id by (structure_type, name).
+    /// Case-insensitive lookup of an entity id by (structure_type, name). Only
+    /// Tag names are unique, so for other structures several entities can match:
+    /// the oldest `created_at` wins and `id` breaks ties (D2), so a lookup always
+    /// returns the same one.
     async fn find_by_name(
         &self,
         structure_type: &str,
@@ -66,6 +69,7 @@ impl EntityService {
         let row = sqlx::query_scalar!(
             r#"SELECT id AS "id!" FROM entities
                WHERE structure_type = ? AND name = ? COLLATE NOCASE
+               ORDER BY created_at, id
                LIMIT 1"#,
             structure_type,
             name
@@ -1853,6 +1857,48 @@ mod tests {
             .expect("a Note of the same name");
         assert!(note.created);
         assert_ne!(note.entity.expect("entity").id, entity.id);
+    }
+
+    // I-24, D2: with two same-named Notes, the oldest wins, then the lower id.
+    #[tokio::test]
+    async fn resolve_by_name_with_duplicates_returns_the_oldest() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let a = create(&svc, note("Same")).await;
+        let b = create(&svc, note("same")).await;
+        let (low, high) = if a.id < b.id { (&a, &b) } else { (&b, &a) };
+        let set_created_at = |id: String, at: i64| {
+            let pool = pool.clone();
+            async move {
+                sqlx::query("UPDATE entities SET created_at = ? WHERE id = ?")
+                    .bind(at)
+                    .bind(id)
+                    .execute(&pool)
+                    .await
+                    .expect("set created_at");
+            }
+        };
+        let resolved_id = || async {
+            resolve(&svc, "Note", by_name("SAME"), false)
+                .await
+                .expect("resolve")
+                .entity
+                .expect("entity")
+                .id
+        };
+
+        // The higher id is older, so it wins over the lower one.
+        set_created_at(high.id.clone(), 1_000).await;
+        set_created_at(low.id.clone(), 2_000).await;
+        for _ in 0..3 {
+            assert_eq!(resolved_id().await, high.id);
+        }
+
+        // Same created_at: the lower id breaks the tie.
+        set_created_at(high.id.clone(), 2_000).await;
+        for _ in 0..3 {
+            assert_eq!(resolved_id().await, low.id);
+        }
     }
 
     #[tokio::test]
