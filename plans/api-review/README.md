@@ -104,9 +104,11 @@ Remember the Node PATH pin before any pnpm command:
 
 ## Status (2026-09-26)
 
-Phase 3 is closed. The branch is green (`cargo test` 72 passed, `calcifer` build + lint,
-`mcp-server` typecheck), and Phases 1–3 were checked in the browser against a scratch
-DB. Next is Phase 4 (T16).
+Phase 4 is closed. The branch is green (`cargo test` 82 passed, `buf lint`, `calcifer`
+build + lint, `mcp-server` typecheck, and `pnpm smoke` + `pnpm test:tools` against a
+fresh scratch server after T19). Phases 1–3 were checked in the browser. Phase 4's
+frontend changes (T16's map reads were browser-checked; T19's renames were not, because
+the Firefox tools disconnected) still need a browser pass. Next is Phase 5 (T21).
 
 - **Live DB:** the first start of a server built from this branch against
   `server/calcifer.db` runs T12's migration. It deletes the 27 rich-text pointer rows
@@ -189,6 +191,11 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | *unassigned* |
 | I-49 | Two writes to one entity can publish events out of commit order; the browser's replica has the same shape (found in T14, T15) | low | deferred (D9) |
 | I-50 | `PutRichText` with an empty `entity_id` answers `NOT_FOUND` (found in T19) | low | *unassigned* |
+| I-51 | Content mention links trust the doc's `structureType`; null ones are dropped (found in T20) | low | *unassigned* |
+| I-52 | Date strings aren't format-checked (chips, `PropertyValue.date`, MCP parser) (found in T20) | low | *unassigned* |
+| I-53 | `get_note` renders stale mention labels and loses `[[name\|label]]` targets (found in T20) | low | *unassigned* |
+| I-54 | Search text drops chips and splits words across marks (found in T20) | low | *unassigned* |
+| I-55 | `proto:gen` depends on the remote buf plugin and fails under rate limits (found in T20) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -225,7 +232,7 @@ user after Phase 2.
 | T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | done (c6ca637, 7e3ad21, ce9591f) |
 | T18 | [ListBacklinks request/response and self-link rule](tasks/T18-backlinks.md) | proto, server, mcp | T17 | none | done (6b22f57, c8b858a, 3d8f8e8, 9feaedc) |
 | T19 | [buf naming and lint](tasks/T19-buf-naming.md) | all | T18 | none | done (ebeee38, feeea88) |
-| T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | in progress (engineer: T20 engineer) |
+| T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | done (2faa8a4, dcf0625, 95b3325) |
 | **Phase 5: frontend cleanup** |||||
 | T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | todo |
 | T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | todo |

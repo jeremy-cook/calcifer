@@ -176,6 +176,8 @@ T06a of the API review.
 
 **Done when:** `cargo fmt --check` passes.
 
+
+**Also (found in T20):** the module comment at `server/src/links.rs:3-4` points at `extractDocReferences` in `calcifer/src/model/linkSync.ts`, which no longer exists. Fix it in the same pass.
 ---
 
 ### I-42 · A rich-text save that fails for a non-conflict reason is dropped silently · medium · confirmed
@@ -345,6 +347,66 @@ T19 of the API review.
 `GetRichText` and `PutRichText`, before the lookup.
 
 **Done when:** both RPCs answer `INVALID_ARGUMENT` for an empty id, and a test covers it.
+
+---
+
+### I-51 · Content mention links trust the doc's `structureType` · low · confirmed
+
+**Where:** `server/src/link_store.rs` (`replace_scoped_links`), `server/src/links.rs:53-64`
+
+**Problem:** A rich-text `mention` or `hashtag` records `attrs.structureType` as the link's `target.structure_type` without checking the target's real type, so a wrong attribute produces a `LinkRef` that lies (relation links are checked since I-2). A chip whose `structureType` is null is skipped silently: no link and no error. The editor's default for that attribute is `null` (`entityMention.ts:10`), so chips pasted from HTML without `data-structure-type` lose their link. Found during T20 of the API review.
+
+**Fix:** Look up each target's type when deriving content links: use the real type, and drop (or report) a dead target. Don't depend on `structureType` being present.
+
+**Done when:** a mention with a wrong or null `structureType` produces a link with the target's real type, and a test covers both.
+
+---
+
+### I-52 · Date strings aren't format-checked · low · confirmed
+
+**Where:** `server/src/links.rs:66-76` (dateChip), `server/src/services/entity.rs` (`validate_property`, `date_key_from`), `mcp-server/src/markdown/parse.ts:66`
+
+**Problem:** A `dateChip`'s `date` goes into `referenced_dates` unchecked, and `PropertyValue.date` isn't checked in `CreateEntity` or `SetEntityProperty` (only `ResolveEntity`'s date key is). A non-ISO DailyNote `date` becomes its `date_key`, and its name falls back to the raw string. The MCP parser's date regex accepts impossible days such as `2026-13-45`. Found during T20 of the API review.
+
+**Fix:** Validate `yyyy-MM-dd` as a real calendar day in all three server paths (`INVALID_ARGUMENT` for a property; skip a bad chip), and tighten the MCP regex to real days.
+
+**Done when:** a bad date is rejected by `SetEntityProperty` and `CreateEntity`, ignored in a chip, and not produced by the MCP parser, with tests.
+
+---
+
+### I-53 · `get_note` renders stale mention labels and loses `[[name|label]]` targets · low · confirmed
+
+**Where:** `mcp-server/src/markdown/serialize.ts:22-25`
+
+**Problem:** `get_note` writes each mention from its stored `label`, which nothing updates when the target is renamed, so the agent reads old names. A `[[name|label]]` link serializes back as `[[label]]`, so a read-modify-write through the agent can point it at a different note. Found during T20 of the API review.
+
+**Fix:** Serialize mentions from the target entity's current name (the MCP server can resolve ids), and keep the alias form when the label differs.
+
+**Done when:** a renamed target shows its new name in `get_note`, and `[[name|label]]` round-trips.
+
+---
+
+### I-54 · Search text drops chips and splits words across marks · low · confirmed
+
+**Where:** `server/src/links.rs:88-112` (`extract_plain_text`), `server/src/embed/chunk.rs:89-101`
+
+**Problem:** Plain text for FTS and embeddings leaves out chips, so a mention's label, a tag's name and a date in the body aren't searchable. It also joins adjacent text nodes with a space, so `**bold**er` is indexed as `bold er`. Documented in `docs/reference/richtext-doc.md`. Found during T20 of the API review.
+
+**Fix:** Emit chip labels (and dates) into the plain text, and join adjacent inline text nodes without a separator (separate only between blocks).
+
+**Done when:** a note is found by a word split across marks and by a mentioned name, with tests on `extract_plain_text`.
+
+---
+
+### I-55 · `proto:gen` depends on the remote buf plugin and fails under rate limits · low · confirmed
+
+**Where:** `calcifer/buf.gen.yaml`, `mcp-server/buf.gen.yaml`
+
+**Problem:** Both use the remote `buf.build/bufbuild/es` plugin, so `pnpm proto:gen` fails when the BSR rate-limits (T20 needed seven retries). `calcifer` has a local `protoc-gen-es`, but at v2.11.0 against the remote v2.15.0. Found during T20 of the API review.
+
+**Fix:** Use a local `protoc-gen-es` pinned to one version in both packages.
+
+**Done when:** `proto:gen` works offline in both packages and both produce the same generated code version.
 
 ---
 
