@@ -114,7 +114,9 @@ DB. Next is Phase 4 (T16).
   `properties` rows. The user approved it without a backup (D5).
 - **Ports:** Finnegan (`~/Projects/Finnegan`) wasn't running for Phase 3's checks, and the
   ports were freed afterwards. Ask before stopping it for a later phase's checks.
-- The Calcifer MCP server works against this branch; no restart was needed.
+- **MCP server:** since T17 a Calcifer MCP process started before `c6ca637` calls the
+  removed `Retrieve`, so `search_notes` fails against this branch. The user restarts it
+  (`/mcp`) before relying on the agent tools against a server built from this branch.
 - Open questions for the user: none. D9 (defer rare concurrency) applies to triage.
 
 ---
@@ -219,8 +221,8 @@ user after Phase 2.
 | T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | done (bfdf3e1, b0889dc, a2efb11, a1667d9) |
 | **Phase 4: message shapes and naming** |||||
 | T16 | [Properties as a map](tasks/T16-properties-map.md) | all | T15 | none | done (5f839c9, 4e00f38) |
-| T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | in progress (engineer: T17 engineer) |
-| T18 | [ListBacklinks request/response and self-link rule](tasks/T18-backlinks.md) | proto, server, mcp | T17 | none | todo |
+| T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | done (c6ca637, 7e3ad21, ce9591f) |
+| T18 | [ListBacklinks request/response and self-link rule](tasks/T18-backlinks.md) | proto, server, mcp | T17 | none | in progress (engineer: T18 engineer) |
 | T19 | [buf naming and lint](tasks/T19-buf-naming.md) | all | T18 | none | todo |
 | T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | todo |
 | **Phase 5: frontend cleanup** |||||

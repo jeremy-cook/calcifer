@@ -35,6 +35,10 @@ part of the API, but they're undocumented, and the MCP server reimplemented them
 - Link the new doc from `docs/reference/data-model.md` and from the README's
   architecture section.
 
+Tech lead note (from T17): search snippets use U+E000/U+E001 as internal match markers, so
+a document containing those private-use characters loses them from its snippet and can
+shift a match range. Document this on `SearchHit.snippet`.
+
 ## Out of scope
 Code changes, and any schema change.
 
