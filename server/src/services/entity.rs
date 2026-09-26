@@ -8,9 +8,9 @@ use crate::error::AppError;
 use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
-    CreateDailyNoteRequest, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
+    resolve_entity_request, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
     EntityRef, GetEntityRequest, LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property,
-    PropertyValue, RichTextRef, ResolveByNameRequest, ResolveByNameResponse, SetPropertyRequest,
+    PropertyValue, ResolveEntityRequest, ResolveEntityResponse, RichTextRef, SetPropertyRequest,
     UpdateEntityRequest, WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
@@ -28,7 +28,7 @@ impl EntityService {
     }
 
     /// Insert a brand-new entity (row + properties + links + dates) in one tx and
-    /// return the hydrated result. Shared by Create and ResolveByName.
+    /// return the hydrated result. Shared by Create and Resolve.
     async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
         let now = chrono::Utc::now().timestamp_millis();
         let date_key = date_key_for(entity);
@@ -53,7 +53,7 @@ impl EntityService {
         fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
         tx.commit().await?;
         // New entity: queue for embedding (no-op until it has content, but keeps
-        // the path uniform — ResolveByName-create / CreateDailyNote flow here too).
+        // the path uniform — Resolve's creates flow here too).
         self.embed.enqueue(&entity.id);
         self.load_entity(&entity.id).await
     }
@@ -74,6 +74,115 @@ impl EntityService {
         .fetch_optional(&self.pool)
         .await?;
         Ok(row)
+    }
+
+    /// The DailyNote for an ISO day, by its `date_key` mirror.
+    async fn find_daily_note(&self, date: &str) -> Result<Option<String>, AppError> {
+        let row = sqlx::query_scalar!(
+            r#"SELECT id AS "id!" FROM entities
+               WHERE structure_type = 'DailyNote' AND date_key = ?"#,
+            date
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// Resolve's `name` key: get the (structure_type, name) entity, or create it
+    /// with its structure's defaults.
+    async fn resolve_name(
+        &self,
+        structure_type: &str,
+        name: &str,
+        create_if_missing: bool,
+    ) -> Result<ResolveEntityResponse, Status> {
+        let name = name.trim();
+        if structure_type.is_empty() {
+            return Err(Status::invalid_argument(
+                "structure_type is required to resolve by name",
+            ));
+        }
+        if name.is_empty() {
+            return Err(Status::invalid_argument("name is required"));
+        }
+
+        // Get: a case-insensitive name match is the canonical entity.
+        if let Some(id) = self
+            .find_by_name(structure_type, name)
+            .await
+            .map_err(Status::from)?
+        {
+            let entity = self.load_entity(&id).await.map_err(Status::from)?;
+            return Ok(ResolveEntityResponse {
+                entity: Some(entity),
+                created: false,
+            });
+        }
+        if !create_if_missing {
+            return Err(Status::not_found(format!(
+                "{structure_type} named {name:?}"
+            )));
+        }
+
+        let entity = new_entity(structure_type, Some(name), vec![]).map_err(Status::from)?;
+        let saved = self
+            .persist_new_entity(&entity)
+            .await
+            .map_err(Status::from)?;
+        Ok(self.created(saved))
+    }
+
+    /// Resolve's `date` key: get the day's DailyNote, or create it (named for the
+    /// day by `new_entity`).
+    async fn resolve_date(
+        &self,
+        structure_type: &str,
+        date: &str,
+        create_if_missing: bool,
+    ) -> Result<ResolveEntityResponse, Status> {
+        if !structure_type.is_empty() && structure_type != "DailyNote" {
+            return Err(Status::invalid_argument(format!(
+                "resolving by date finds a DailyNote; structure_type must be empty or DailyNote, got {structure_type:?}"
+            )));
+        }
+        // Canonical form only, so one day can't get a second date_key spelling.
+        let date = date.trim();
+        let canonical = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map(|d| d.format("%Y-%m-%d").to_string());
+        if canonical.as_deref() != Ok(date) {
+            return Err(Status::invalid_argument(format!(
+                "date must be an ISO calendar day (yyyy-MM-dd), got {date:?}"
+            )));
+        }
+
+        if let Some(id) = self.find_daily_note(date).await.map_err(Status::from)? {
+            let entity = self.load_entity(&id).await.map_err(Status::from)?;
+            return Ok(ResolveEntityResponse {
+                entity: Some(entity),
+                created: false,
+            });
+        }
+        if !create_if_missing {
+            return Err(Status::not_found(format!("DailyNote for {date}")));
+        }
+
+        let entity =
+            new_entity("DailyNote", None, vec![date_property(date)]).map_err(Status::from)?;
+        let saved = self.persist_new_entity(&entity).await.map_err(|e| {
+            map_unique_violation(e, &format!("a DailyNote for {date} already exists"))
+        })?;
+        Ok(self.created(saved))
+    }
+
+    /// Publish a Resolve-created entity and wrap it in the response.
+    fn created(&self, saved: Entity) -> ResolveEntityResponse {
+        self.hub.publish(EntityEvent {
+            event: Some(entity_event::Event::Upserted(saved.clone())),
+        });
+        ResolveEntityResponse {
+            entity: Some(saved),
+            created: true,
+        }
     }
 
     /// Hydrate a full Entity (metadata + properties + links + referenced_dates).
@@ -797,46 +906,27 @@ impl EntityServiceTrait for EntityService {
         Ok(Response::new(()))
     }
 
-    async fn resolve_by_name(
+    async fn resolve(
         &self,
-        req: Request<ResolveByNameRequest>,
-    ) -> Result<Response<ResolveByNameResponse>, Status> {
-        let r = req.into_inner();
-        let name = r.name.trim();
-        if name.is_empty() {
-            return Err(Status::invalid_argument("name is required"));
-        }
-
-        // Get: a case-insensitive name match is the canonical entity.
-        if let Some(id) = self
-            .find_by_name(&r.structure_type, name)
-            .await
-            .map_err(Status::from)?
-        {
-            let entity = self.load_entity(&id).await.map_err(Status::from)?;
-            return Ok(Response::new(ResolveByNameResponse {
-                entity: Some(entity),
-                created: false,
-            }));
-        }
-
-        if !r.create_if_missing {
-            return Err(Status::not_found(format!(
-                "{} named {:?}",
-                r.structure_type, name
-            )));
-        }
-
-        // Create: a fresh entity carrying its structure's defaults.
-        let entity = new_entity(&r.structure_type, Some(name), vec![]).map_err(Status::from)?;
-        let saved = self.persist_new_entity(&entity).await.map_err(Status::from)?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(saved.clone())),
-        });
-        Ok(Response::new(ResolveByNameResponse {
-            entity: Some(saved),
-            created: true,
-        }))
+        req: Request<ResolveEntityRequest>,
+    ) -> Result<Response<ResolveEntityResponse>, Status> {
+        let ResolveEntityRequest {
+            structure_type,
+            key,
+            create_if_missing,
+        } = req.into_inner();
+        let resolved = match key {
+            Some(resolve_entity_request::Key::Name(name)) => {
+                self.resolve_name(&structure_type, &name, create_if_missing)
+                    .await?
+            }
+            Some(resolve_entity_request::Key::Date(date)) => {
+                self.resolve_date(&structure_type, &date, create_if_missing)
+                    .await?
+            }
+            None => return Err(Status::invalid_argument("key is required: name or date")),
+        };
+        Ok(Response::new(resolved))
     }
 
     async fn list_backlinks(
@@ -859,26 +949,6 @@ impl EntityServiceTrait for EntityService {
         }
 
         Ok(Response::new(ListEntitiesResponse { entities }))
-    }
-
-    async fn create_daily_note(
-        &self,
-        req: Request<CreateDailyNoteRequest>,
-    ) -> Result<Response<Entity>, Status> {
-        let date = req.into_inner().date;
-        let date = date.trim();
-        if date.is_empty() {
-            return Err(Status::invalid_argument("date is required"));
-        }
-
-        let entity = new_entity("DailyNote", None, vec![date_property(date)]).map_err(Status::from)?;
-        let saved = self.persist_new_entity(&entity).await.map_err(|e| {
-            map_unique_violation(e, &format!("a DailyNote for {} already exists", date))
-        })?;
-        self.hub.publish(EntityEvent {
-            event: Some(entity_event::Event::Upserted(saved.clone())),
-        });
-        Ok(Response::new(saved))
     }
 
     type WatchStream = futures::stream::BoxStream<'static, Result<EntityEvent, Status>>;
@@ -1606,14 +1676,170 @@ mod tests {
             .await
             .expect("move to a free day");
         // The old day is free again; the new one is taken.
-        svc.create_daily_note(Request::new(CreateDailyNoteRequest {
-            date: "2026-06-13".to_string(),
-        }))
-        .await
-        .expect("old day is free");
+        let resolved = resolve(&svc, "", by_date("2026-06-13"), true)
+            .await
+            .expect("old day is free");
+        assert!(resolved.created);
         let err = set_property(&svc, &second.id, "date", date("2026-06-15"))
             .await
             .expect_err("day already has a note");
         assert_eq!(err.code(), tonic::Code::AlreadyExists);
+    }
+
+    async fn resolve(
+        svc: &EntityService,
+        structure_type: &str,
+        key: resolve_entity_request::Key,
+        create_if_missing: bool,
+    ) -> Result<ResolveEntityResponse, Status> {
+        svc.resolve(Request::new(ResolveEntityRequest {
+            structure_type: structure_type.to_string(),
+            key: Some(key),
+            create_if_missing,
+        }))
+        .await
+        .map(Response::into_inner)
+    }
+
+    fn by_date(d: &str) -> resolve_entity_request::Key {
+        resolve_entity_request::Key::Date(d.to_string())
+    }
+
+    fn by_name(name: &str) -> resolve_entity_request::Key {
+        resolve_entity_request::Key::Name(name.to_string())
+    }
+
+    /// The ids of the entities Upserted on `rx` so far.
+    fn upserted_ids(rx: &mut tokio::sync::broadcast::Receiver<EntityEvent>) -> Vec<String> {
+        let mut ids = vec![];
+        while let Ok(event) = rx.try_recv() {
+            if let Some(entity_event::Event::Upserted(e)) = event.event {
+                ids.push(e.id);
+            }
+        }
+        ids
+    }
+
+    #[tokio::test]
+    async fn resolve_by_date_gets_or_creates() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let mut rx = svc.hub.subscribe();
+
+        let first = resolve(&svc, "", by_date("2026-06-13"), true)
+            .await
+            .expect("create");
+        assert!(first.created);
+        let entity = first.entity.expect("entity");
+        assert_eq!(entity.structure_type, "DailyNote");
+        assert_eq!(entity.name, "June 13, 2026");
+        assert_eq!(
+            stored_date_key(&pool, &entity.id).await.as_deref(),
+            Some("2026-06-13")
+        );
+        assert!(entity.properties.iter().any(|p| p.id == "content"));
+        assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+
+        // Again, with the structure named: the same note, nothing published.
+        let again = resolve(&svc, "DailyNote", by_date("2026-06-13"), true)
+            .await
+            .expect("get");
+        assert!(!again.created);
+        assert_eq!(again.entity.expect("entity").id, entity.id);
+        assert!(upserted_ids(&mut rx).is_empty());
+    }
+
+    #[tokio::test]
+    async fn resolve_by_date_without_create_is_not_found() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = resolve(&svc, "", by_date("2026-06-13"), false)
+            .await
+            .expect_err("no note for that day");
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entities")
+            .fetch_one(&pool)
+            .await
+            .expect("count entities");
+        assert_eq!(rows, 0);
+    }
+
+    #[tokio::test]
+    async fn resolve_rejects_malformed_requests() {
+        let svc = entity_service(memory_pool().await);
+
+        for (structure_type, key) in [
+            ("Note", by_date("2026-06-13")),
+            ("", by_date("2026-6-13")),
+            ("", by_date("June 13")),
+            ("", by_date("")),
+            ("", by_name("")),
+            ("Note", by_name("  ")),
+            ("", by_name("Orphan")),
+        ] {
+            let err = resolve(&svc, structure_type, key.clone(), true)
+                .await
+                .expect_err("bad request");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{key:?}");
+        }
+        let err = svc
+            .resolve(Request::new(ResolveEntityRequest {
+                structure_type: "Note".to_string(),
+                key: None,
+                create_if_missing: true,
+            }))
+            .await
+            .expect_err("no key");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn resolve_by_name_gets_or_creates() {
+        let svc = entity_service(memory_pool().await);
+        let mut rx = svc.hub.subscribe();
+
+        let first = resolve(&svc, "Todo", by_name("  Water plants "), true)
+            .await
+            .expect("create");
+        assert!(first.created);
+        let entity = first.entity.expect("entity");
+        assert_eq!(entity.structure_type, "Todo");
+        assert_eq!(entity.name, "Water plants");
+        assert_eq!(select_value(&entity, "status").as_deref(), Some("open"));
+        assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+
+        // Case-insensitive, and scoped to the structure.
+        let again = resolve(&svc, "Todo", by_name("WATER PLANTS"), true)
+            .await
+            .expect("get");
+        assert!(!again.created);
+        assert_eq!(again.entity.expect("entity").id, entity.id);
+        assert!(upserted_ids(&mut rx).is_empty());
+
+        let note = resolve(&svc, "Note", by_name("Water plants"), true)
+            .await
+            .expect("a Note of the same name");
+        assert!(note.created);
+        assert_ne!(note.entity.expect("entity").id, entity.id);
+    }
+
+    #[tokio::test]
+    async fn resolve_by_name_without_create_is_not_found() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        create(&svc, tag("ml")).await;
+
+        let err = resolve(&svc, "Note", by_name("ml"), false)
+            .await
+            .expect_err("no Note named ml");
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        let rows: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entities")
+            .fetch_one(&pool)
+            .await
+            .expect("count entities");
+        assert_eq!(rows, 1);
     }
 }

@@ -119,7 +119,8 @@ pub const STRUCTURES: &[StructureDef] = &[
             prop("date", PropertyKind::Date, ""),
             prop("content", PropertyKind::Richtext, ""),
         ],
-        // Created per day by CreateDailyNote, never from "+ New"; the name is the date.
+        // Created per day by Resolve's date key, never from "+ New"; the server
+        // derives the name from the date.
         creatable: false,
         mentionable: false,
         unique_names: false,

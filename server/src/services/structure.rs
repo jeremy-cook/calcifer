@@ -27,7 +27,9 @@ impl StructureServiceTrait for StructureService {
 mod tests {
     use super::*;
     use crate::proto::entity_service_server::EntityService as _;
-    use crate::proto::{property_value, PropertyKind, ResolveByNameRequest, StructureDef};
+    use crate::proto::{
+        property_value, resolve_entity_request, PropertyKind, ResolveEntityRequest, StructureDef,
+    };
     use crate::test_support::{entity_service, memory_pool};
 
     async fn list() -> Vec<StructureDef> {
@@ -179,9 +181,9 @@ mod tests {
     async fn resolved_todo_carries_listed_select_defaults() {
         let svc = entity_service(memory_pool().await);
         let entity = svc
-            .resolve_by_name(Request::new(ResolveByNameRequest {
+            .resolve(Request::new(ResolveEntityRequest {
                 structure_type: "Todo".to_string(),
-                name: "Water plants".to_string(),
+                key: Some(resolve_entity_request::Key::Name("Water plants".to_string())),
                 create_if_missing: true,
             }))
             .await
