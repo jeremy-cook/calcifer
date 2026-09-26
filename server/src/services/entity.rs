@@ -663,13 +663,25 @@ impl EntityServiceTrait for EntityService {
     }
 
     // The name (and its FTS row) and updated_at only: properties are untouched,
-    // so a rename doesn't undo a concurrent SetProperty (I-15).
+    // so a rename doesn't undo a concurrent SetProperty (I-15). A structure with
+    // `name_editable = false` (a DailyNote, named for its date) can't be renamed.
     async fn rename(&self, req: Request<RenameEntityRequest>) -> Result<Response<Entity>, Status> {
         let RenameEntityRequest { id, name } = req.into_inner();
         let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
-        let updated = sqlx::query!(
+        let structure_type =
+            sqlx::query_scalar!("SELECT structure_type FROM entities WHERE id = ?", id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(AppError::from)?
+                .ok_or_else(|| Status::not_found(format!("entity {id}")))?;
+        if structures::structure(&structure_type).is_some_and(|s| !s.name_editable) {
+            return Err(Status::failed_precondition(format!(
+                "a {structure_type}'s name isn't editable"
+            )));
+        }
+        sqlx::query!(
             "UPDATE entities SET name = ?, updated_at = ? WHERE id = ?",
             name,
             now,
@@ -678,9 +690,6 @@ impl EntityServiceTrait for EntityService {
         .execute(&mut *tx)
         .await
         .map_err(|e| map_unique_violation(AppError::from(e), &name, None))?;
-        if updated.rows_affected() == 0 {
-            return Err(Status::not_found(format!("entity {id}")));
-        }
         fts_upsert_name(&mut tx, &id, &name)
             .await
             .map_err(Status::from)?;
@@ -1141,6 +1150,28 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::AlreadyExists);
         assert_eq!(err.message(), r#"a Tag named "Urgent" already exists"#);
         assert_eq!(entity_count(&pool).await, 1);
+    }
+
+    // I-26: a DailyNote is named for its date, so Rename refuses it.
+    #[tokio::test]
+    async fn rename_of_a_daily_note_is_failed_precondition() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let day = resolve(&svc, "", by_date("2026-06-13"), true)
+            .await
+            .expect("create daily note")
+            .entity
+            .expect("entity");
+
+        let err = rename(&svc, &day.id, "Friday")
+            .await
+            .expect_err("DailyNote names aren't editable");
+
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        let stored = svc.load_entity(&day.id).await.expect("load");
+        assert_eq!(stored.name, "June 13, 2026");
+        assert_eq!(stored.updated_at, day.updated_at);
+        assert_eq!(fts_name(&pool, &day.id).await, "June 13, 2026");
     }
 
     // I-15's done-when: the agent sets a to-do's status while the browser renames
