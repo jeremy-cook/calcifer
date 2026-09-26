@@ -196,6 +196,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-53 | `get_note` renders stale mention labels and loses `[[name\|label]]` targets (found in T20) | low | *unassigned* |
 | I-54 | Search text drops chips and splits words across marks (found in T20) | low | *unassigned* |
 | I-55 | `proto:gen` depends on the remote buf plugin and fails under rate limits (found in T20) | low | *unassigned* |
+| I-56 | Create and resolve callbacks are never stable (found in T22) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -235,8 +236,8 @@ user after Phase 2.
 | T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | done (2faa8a4, dcf0625, 95b3325) |
 | **Phase 5: frontend cleanup** |||||
 | T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | done (037f920, 27857fd) |
-| T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | in progress (engineer: T22 engineer) |
-| T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | todo |
+| T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | done (5a14ac1, 42cfb3b) |
+| T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | in progress (engineer: T23 engineer) |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
 

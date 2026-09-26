@@ -367,6 +367,23 @@ T19 of the API review.
 
 ---
 
+### I-56 · Create and resolve callbacks are never stable · low · confirmed
+
+**Where:** `calcifer/src/model/store.ts` (`useCreateEntity`, `useResolveDailyNote`, `dailyNoteDate`)
+
+**Problem:** Both hooks list the whole `useMutation` result in their `useCallback`
+dependencies. That object changes on every render, so the returned callbacks are new on
+every render and anything memoised on them re-runs. Also, `dailyNoteDate` reads
+`entity.properties.date` directly instead of through `propertyValueOf` (safe, since the
+key is fixed, but inconsistent). Found during T22 of the API review.
+
+**Fix:** Depend on `m.mutateAsync` (stable) instead of `m`, and read the date through
+`propertyValueOf`.
+
+**Done when:** both callbacks keep their identity across renders.
+
+---
+
 ## Resolved
 
 - **I-33 · Duplicated code in the model layer.** Fixed 2026-09-26. T15 removed the duplicate `List` query functions, the raw `['entities']` keys and the Watch consumer in `App.tsx` (the list comes only from `entitiesQuery` in `model/sync.ts`). The three hand-written Timestamp-to-milliseconds conversions are gone: `timestampMsOrZero` in `model/dates.ts` wraps `timestampMs` from `@bufbuild/protobuf/wkt` (an unset Timestamp reads as 0) and backs `backlinks.ts`, `listByStructure`, `entityUpdatedAtDate` and the to-do created/updated sorts; `timestampMs` rounds to whole milliseconds, where the old code kept fractions. Delete has one path, `deleteEntity(id)` in `model/store.ts` (fire-and-forget, logs a failure); `useDeleteEntity` and `deleteEntityImperative` are gone. Create has one path per RPC: `useCreateEntity` for `CreateEntity`, and the private `resolveOrCreateEntity` for get-or-create through `ResolveEntity`, which `useResolveDailyNote` and `getOrCreateEntityForMention` both call. `useSetTodoStatus` writes through `usePropertyWriters().setSelect`, and property reads in `todos.ts` and the entity page go through the exported `propertyValueOf` (an `Object.hasOwn` check). Not yet observed in the browser.
