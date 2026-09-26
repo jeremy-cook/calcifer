@@ -144,11 +144,8 @@ async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict
     )
     queue.base = saved.updatedAt
     writeRichTextIfNewer(saved)
-    // Put derived this entity's links + referenced_dates server-side, which
-    // also changes targets' backlinks — refresh the source entity and the
-    // list that backlinks/calendar derive from.
-    void queryClient.invalidateQueries({ queryKey: qk.entity(ref.entityId) })
-    void queryClient.invalidateQueries({ queryKey: ['entities'] })
+    // Put also changed the entity's links, referenced_dates and updated_at on
+    // the server; its Watch `upserted` event brings them into the replica.
     onSaved?.(toState(saved))
   } catch (err) {
     if (!isFailedPrecondition(err)) {

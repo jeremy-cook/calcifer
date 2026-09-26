@@ -12,7 +12,7 @@ import {
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
-import { entitiesQuery } from '~/model/sync'
+import { entitiesQuery, removeEntity, writeEntity } from '~/model/sync'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -23,20 +23,20 @@ export function useAllEntities(): Entity[] {
   return useQuery(entitiesQuery).data ?? []
 }
 
+// Seeded from the replica. `Get` runs only for an entity the replica doesn't
+// hold yet (a deep link before the first snapshot) or doesn't hold at all;
+// after that Watch and the mutations keep it current, so it never refetches.
 export function useEntity(id: string) {
   return useQuery({
     queryKey: qk.entity(id),
     queryFn: () => entityClient.get({ id }),
+    initialData: () => getEntitiesSnapshot().find((e) => e.id === id),
+    staleTime: Infinity,
     enabled: !!id,
   })
 }
 
 // --- Mutations / actions ---
-
-function onEntityWritten(entity: Entity) {
-  queryClient.setQueryData(qk.entity(entity.id), entity)
-  void queryClient.invalidateQueries({ queryKey: ['entities'] })
-}
 
 interface CreateEntityVars {
   structureType: string
@@ -48,7 +48,7 @@ interface CreateEntityVars {
 export function useCreateEntity() {
   const m = useMutation({
     mutationFn: ({ structureType, name }: CreateEntityVars) => entityClient.create({ structureType, name }),
-    onSuccess: onEntityWritten,
+    onSuccess: writeEntity,
   })
   return useCallback(
     (structureType: string, name?: string) => m.mutateAsync({ structureType, name }),
@@ -67,7 +67,7 @@ export function useResolveDailyNote() {
       if (!entity) throw new Error(`resolve returned no daily note for ${iso}`)
       return entity
     },
-    onSuccess: onEntityWritten,
+    onSuccess: writeEntity,
   })
   return useCallback((iso: string) => m.mutateAsync(iso), [m])
 }
@@ -90,19 +90,15 @@ export function useRenameEntity() {
   const { mutate } = useMutation({
     mutationFn: ({ id, name }: RenameEntityVars) => entityClient.rename({ id, name }),
     onMutate: async ({ id, name }) => {
-      await Promise.all([
-        qc.cancelQueries({ queryKey: qk.entity(id) }),
-        qc.cancelQueries({ queryKey: qk.entities() }),
-      ])
+      // The list is never refetched (Watch feeds it), so only a deep link's Get can be in flight.
+      await qc.cancelQueries({ queryKey: qk.entity(id) })
       const prevEntityName = qc.getQueryData<Entity>(qk.entity(id))?.name
       const prevListName = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === id)?.name
       qc.setQueryData<Entity>(qk.entity(id), (e) => e && renamed(e, name))
       qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === id ? renamed(e, name) : e)))
       return { prevEntityName, prevListName }
     },
-    onSuccess: (saved) => {
-      qc.setQueryData(qk.entity(saved.id), saved)
-    },
+    onSuccess: writeEntity,
     onError: (_err, { id }, ctx) => {
       if (ctx?.prevEntityName !== undefined) {
         const prev = ctx.prevEntityName
@@ -112,9 +108,6 @@ export function useRenameEntity() {
         const prev = ctx.prevListName
         qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === id ? renamed(e, prev) : e)))
       }
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['entities'] })
     },
   })
   return useCallback((id: string, name: string) => mutate({ id, name }), [mutate])
@@ -160,10 +153,8 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
         value: value === null ? undefined : createMessage(PropertyValueSchema, { value }),
       }),
     onMutate: async ({ entity, propertyId, value }) => {
-      await Promise.all([
-        qc.cancelQueries({ queryKey: qk.entity(entity.id) }),
-        qc.cancelQueries({ queryKey: qk.entities() }),
-      ])
+      // The list is never refetched (Watch feeds it), so only a deep link's Get can be in flight.
+      await qc.cancelQueries({ queryKey: qk.entity(entity.id) })
       const cachedEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
       const cachedListEntity = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === entity.id)
       const prevEntityValue = cachedEntity && propertyValueOf(cachedEntity, propertyId)
@@ -174,9 +165,7 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
       )
       return { prevEntityValue, prevListValue }
     },
-    onSuccess: (saved) => {
-      qc.setQueryData(qk.entity(saved.id), saved)
-    },
+    onSuccess: writeEntity,
     onError: (err, { entity, propertyId }, ctx) => {
       if (ctx?.prevEntityValue !== undefined) {
         const prev = ctx.prevEntityValue
@@ -189,9 +178,6 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
         )
       }
       onErrorRef.current?.(err, entity)
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['entities'] })
     },
   })
   return useCallback(
@@ -218,10 +204,7 @@ export function withProperty(entity: Entity, propertyId: string, value: Property
 export function useDeleteEntity() {
   const m = useMutation({
     mutationFn: (id: string) => entityClient.delete({ id }),
-    onSuccess: (_r, id) => {
-      queryClient.removeQueries({ queryKey: qk.entity(id) })
-      void queryClient.invalidateQueries({ queryKey: ['entities'] })
-    },
+    onSuccess: (_r, id) => removeEntity(id),
   })
   return useCallback((id: string) => void m.mutateAsync(id), [m])
 }
@@ -244,17 +227,14 @@ export async function getOrCreateEntityForMention(
     createIfMissing: true,
   })
   if (!entity) throw new Error(`resolve returned no entity for ${structureType} "${name}"`)
-  onEntityWritten(entity)
+  writeEntity(entity)
   return { id: entity.id, name: entity.name, structureType: entity.structureType }
 }
 
 export function deleteEntityImperative(id: string): void {
   void entityClient
     .delete({ id })
-    .then(() => {
-      queryClient.removeQueries({ queryKey: qk.entity(id) })
-      void queryClient.invalidateQueries({ queryKey: ['entities'] })
-    })
+    .then(() => removeEntity(id))
     .catch((err) => console.error('delete failed', err))
 }
 
