@@ -403,6 +403,30 @@ come back in plan order. Found during T13 of the API review.
 
 ---
 
+### I-49 · Two writes to one entity can publish their events out of commit order · low · confirmed
+
+**Where:** `server/src/services/entity.rs` (`rename`, `set_property`), `server/src/services/richtext.rs` (`put`), `server/src/watch.rs`
+
+**Problem:** Each write reloads its entity after commit and publishes it afterwards. The
+hub's revision follows publish order, not commit order. If write A reloads, then write B
+commits, reloads and publishes, and only then A publishes, the last `upserted` event
+carries A's older payload. A Watch replica (T15) then shows the entity without B's
+change until its next event or snapshot. The frontend used to refetch on every event,
+which hid this. Related, harmless: after a lag resync, events the new snapshot covers
+stay in the channel until the stream skips them, so a burst that keeps outpacing the
+reader can resync more than once. Found during T14 of the API review; confirmed by
+reading, not reproduced.
+
+**Fix:** Take the revision inside the write transaction (or publish under the write
+lock), so publish order matches commit order.
+
+**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
+
+**Done when:** a test with two interleaved writes to one entity sees the later commit
+published last.
+
+---
+
 ## Resolved
 
 - **I-38 · Stale comment about which writes publish events.** Fixed 2026-09-26. The `watch.rs` module comment now lists every publishing write, `RichText.Put` included; rewritten with the Watch snapshot and revisions (T14).

@@ -185,6 +185,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | *unassigned* |
 | I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | *unassigned* |
 | I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | *unassigned* |
+| I-49 | Two writes to one entity can publish events out of commit order (found in T14) | low | deferred (D9) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -214,8 +215,8 @@ user after Phase 2.
 | T12 | [Address rich text by declared property; drop stored RichTextRefs](tasks/T12-richtext-by-property.md) | proto, server, fe, mcp, docs | T09, G2 | none | done (226d0c0, e405428, ffc5fa1, b3bc618, 883c039) |
 | **Phase 3: sync** |||||
 | T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | done (4cc92ec) |
-| T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | in progress (engineer: T14 engineer) |
-| T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | todo |
+| T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | done (b1cdcda, ed9ee58, 1f9b5a4) |
+| T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | in progress (engineer: T15 engineer) |
 | **Phase 4: message shapes and naming** |||||
 | T16 | [Properties as a map](tasks/T16-properties-map.md) | all | T15 | none | todo |
 | T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | todo |
