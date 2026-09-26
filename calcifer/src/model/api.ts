@@ -29,6 +29,6 @@ export const qk = {
   everyRichtext: () => ['richtext'] as const,
 }
 
-export function isNotFound(err: unknown): boolean {
-  return err instanceof ConnectError && err.code === Code.NotFound
+export function isAlreadyExists(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.AlreadyExists
 }

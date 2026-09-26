@@ -1,19 +1,18 @@
 import { useState } from 'react'
-import { create as createMessage } from '@bufbuild/protobuf'
 import { PlusIcon, XIcon } from '@phosphor-icons/react'
 import { Command } from 'cmdk'
-import { EntityRefSchema, type EntityRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { EntityRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
-import { useAllEntities, getOrCreateEntityForMention } from '~/model/store'
+import { useAllEntities, getOrCreateEntityForMention, type RelationTarget } from '~/model/store'
 import { hasUniqueNames } from '~/model/structures'
 
 export interface EntityRelationsFieldProps {
   label: string
   targetStructure: string
   refs: readonly EntityRef[]
-  onChange: (refs: EntityRef[]) => void
+  onChange: (refs: RelationTarget[]) => void
 }
 
 export function EntityRelationsField({ label, targetStructure, refs, onChange }: EntityRelationsFieldProps) {
@@ -34,7 +33,7 @@ export function EntityRelationsField({ label, targetStructure, refs, onChange }:
   }
 
   const addRef = (id: string, structureType: string) => {
-    onChange([...refs, createMessage(EntityRefSchema, { id, structureType })])
+    onChange([...refs, { id, structureType }])
     setQuery('')
     setOpen(false)
   }

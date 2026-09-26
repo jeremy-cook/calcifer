@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ConnectError } from '@connectrpc/connect'
 import { create as createMessage } from '@bufbuild/protobuf'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  EntityRefListSchema,
   EntitySchema,
   PropertyValueSchema,
   type Entity,
@@ -131,9 +132,15 @@ interface SetPropertyVars {
   value: PropertyValue['value'] | null
 }
 
+// `entity.properties` is a plain-object map, so an ad-hoc id such as
+// `constructor` would otherwise read an `Object.prototype` member.
+function propertyOf(entity: Entity, propertyId: string): PropertyValue | undefined {
+  return Object.hasOwn(entity.properties, propertyId) ? entity.properties[propertyId] : undefined
+}
+
 // A property's current value on `entity`: `null` when it has no such property.
 function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['value'] | null {
-  const property = entity.properties[propertyId]
+  const property = propertyOf(entity, propertyId)
   return property ? property.value : null
 }
 
@@ -195,12 +202,52 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
   )
 }
 
+// A relation target: an `EntityRef`, or a plain `{ id, structureType }`.
+export interface RelationTarget {
+  id: string
+  structureType: string
+}
+
+export interface PropertyWriters {
+  // `null` clears the date.
+  setDate: (entity: Entity, propertyId: string, iso: string | null) => void
+  setSelect: (entity: Entity, propertyId: string, key: string) => void
+  // An empty list clears the property.
+  setRelations: (entity: Entity, propertyId: string, targets: readonly RelationTarget[]) => void
+}
+
+// Typed writes on top of useSetProperty, so callers never build a PropertyValue.
+export function usePropertyWriters(options: UseSetPropertyOptions = {}): PropertyWriters {
+  const setProperty = useSetProperty(options)
+  return useMemo(
+    () => ({
+      setDate: (entity, propertyId, iso) =>
+        setProperty(entity, propertyId, iso === null ? null : { case: 'date', value: iso }),
+      setSelect: (entity, propertyId, key) => setProperty(entity, propertyId, { case: 'select', value: key }),
+      setRelations: (entity, propertyId, targets) =>
+        setProperty(
+          entity,
+          propertyId,
+          targets.length === 0
+            ? null
+            : {
+                case: 'relations',
+                value: createMessage(EntityRefListSchema, {
+                  refs: targets.map(({ id, structureType }) => ({ id, structureType })),
+                }),
+              },
+        ),
+    }),
+    [setProperty],
+  )
+}
+
 // --- Pure edit builder (useSetProperty()'s optimistic apply) ---
 
 // `null` removes the property. The server still clears links for declared
 // relation properties that are absent (SetEntityProperty also for ad-hoc ones), so
 // removing the last ref is safe.
-export function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
+function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
   const properties = { ...entity.properties }
   if (value === null) delete properties[propertyId]
   else properties[propertyId] = createMessage(PropertyValueSchema, { value })

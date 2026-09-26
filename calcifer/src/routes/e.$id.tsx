@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
 import { TrashIcon } from '@phosphor-icons/react'
-import { create as createMessage } from '@bufbuild/protobuf'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,9 +21,8 @@ import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
-import { useDeleteEntity, useEntity, useRenameEntity, useSetProperty, type Entity } from '~/model/store'
+import { useDeleteEntity, useEntity, usePropertyWriters, useRenameEntity, type Entity } from '~/model/store'
 import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/model/structures'
-import { EntityRefListSchema, type PropertyValue } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
@@ -179,12 +177,9 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
-  const setEntityProperty = useSetProperty()
+  const { setDate, setSelect, setRelations } = usePropertyWriters()
   const structure = useStructure(entity.structureType)
   if (!structure || structure.properties.length === 0) return null
-
-  const setProperty = (propertyId: string, value: PropertyValue['value'] | null) =>
-    setEntityProperty(entity, propertyId, value)
 
   // Properties whose editor isn't the generic one for their type, keyed "Structure.propertyId".
   const overrides: Record<string, () => React.ReactNode> = {
@@ -208,8 +203,8 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
             key={def.id}
             label={def.label || 'Date'}
             iso={iso}
-            onChange={(next) => setProperty(def.id, { case: 'date', value: next })}
-            onClear={iso ? () => setProperty(def.id, null) : undefined}
+            onChange={(next) => setDate(entity, def.id, next)}
+            onClear={iso ? () => setDate(entity, def.id, null) : undefined}
           />
         )
       }
@@ -222,7 +217,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
             label={def.label || def.id}
             value={current}
             options={def.options}
-            onChange={(next) => setProperty(def.id, { case: 'select', value: next })}
+            onChange={(next) => setSelect(entity, def.id, next)}
           />
         )
       }
@@ -235,14 +230,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
             label={def.label || def.id}
             targetStructure={def.targetStructure}
             refs={refs}
-            onChange={(nextRefs) =>
-              setProperty(
-                def.id,
-                nextRefs.length === 0
-                  ? null
-                  : { case: 'relations', value: createMessage(EntityRefListSchema, { refs: nextRefs }) },
-              )
-            }
+            onChange={(nextRefs) => setRelations(entity, def.id, nextRefs)}
           />
         )
       }
