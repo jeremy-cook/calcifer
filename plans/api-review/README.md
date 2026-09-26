@@ -104,16 +104,16 @@ Remember the Node PATH pin before any pnpm command:
 
 ## Status (2026-09-26)
 
-Phase 2 is closed. The branch is green (`cargo test` 67 passed, `calcifer` build + lint,
-`mcp-server` typecheck), and Phase 1 and Phase 2 were checked in the browser against a
-scratch DB. Next is Phase 3 (T13).
+Phase 3 is closed. The branch is green (`cargo test` 72 passed, `calcifer` build + lint,
+`mcp-server` typecheck), and Phases 1–3 were checked in the browser against a scratch
+DB. Next is Phase 4 (T16).
 
 - **Live DB:** the first start of a server built from this branch against
   `server/calcifer.db` runs T12's migration. It deletes the 27 rich-text pointer rows
   (24 Note, 2 Todo, 1 DailyNote; counted read-only 2026-09-26) and leaves the other 8
   `properties` rows. The user approved it without a backup (D5).
-- **Ports:** Finnegan (`~/Projects/Finnegan`) was stopped for the Phase 2 checks and
-  the ports were freed afterwards. Ask before stopping it again for Phase 3's checks.
+- **Ports:** Finnegan (`~/Projects/Finnegan`) wasn't running for Phase 3's checks, and the
+  ports were freed afterwards. Ask before stopping it for a later phase's checks.
 - The Calcifer MCP server works against this branch; no restart was needed.
 - Open questions for the user: none. D9 (defer rare concurrency) applies to triage.
 
@@ -185,7 +185,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | *unassigned* |
 | I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | *unassigned* |
 | I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | *unassigned* |
-| I-49 | Two writes to one entity can publish events out of commit order (found in T14) | low | deferred (D9) |
+| I-49 | Two writes to one entity can publish events out of commit order; the browser's replica has the same shape (found in T14, T15) | low | deferred (D9) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -216,7 +216,7 @@ user after Phase 2.
 | **Phase 3: sync** |||||
 | T13 | [Batch-load entities (List/snapshot in constant queries)](tasks/T13-batch-load.md) | server | T12 | none | done (4cc92ec) |
 | T14 | [Watch: snapshot, revisions, resync](tasks/T14-watch-snapshot.md) | proto, server | T13 | none | done (b1cdcda, ed9ee58, 1f9b5a4) |
-| T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | in progress (engineer: T15 engineer) |
+| T15 | [FE: replica from Watch; apply events; drop refetches](tasks/T15-fe-sync.md) | fe | T14 | none | done (bfdf3e1, b0889dc, a2efb11, a1667d9) |
 | **Phase 4: message shapes and naming** |||||
 | T16 | [Properties as a map](tasks/T16-properties-map.md) | all | T15 | none | todo |
 | T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | todo |

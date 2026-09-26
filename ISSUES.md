@@ -395,8 +395,17 @@ stay in the channel until the stream skips them, so a burst that keeps outpacing
 reader can resync more than once. Found during T14 of the API review; confirmed by
 reading, not reproduced.
 
+The same shape exists in the browser since T15: a mutation writes its response into the
+replica with `writeEntity`, so a response that arrives after a newer Watch event for the
+same entity overwrites it. Also, the snapshot's rich-text refetch (`model/sync.ts`) uses
+`invalidateQueries`, not `writeRichTextIfNewer`, so it can race an in-flight `Put` and
+cache the older doc (the open editor ignores it; a later remount starts from it and
+conflict-reloads).
+
 **Fix:** Take the revision inside the write transaction (or publish under the write
-lock), so publish order matches commit order.
+lock), so publish order matches commit order. In the browser, have `writeEntity` skip an
+entity older than the cached one (by `updated_at`), and route the snapshot refetch
+through `writeRichTextIfNewer`.
 
 **Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
 
@@ -407,7 +416,7 @@ published last.
 
 ## Resolved
 
-- **I-27 · Watch isn't built for keeping a full copy in sync.** Fixed 2026-09-26. Watch opens every stream with a snapshot, numbers events with a revision and sends a fresh snapshot to a subscriber that lags (T14, ADR 9). The browser's entity list is a replica fed only by Watch (`model/sync.ts`): `entitiesQuery` resolves with the first snapshot and never calls `List`; later snapshots replace the list, reset cached entities and refetch open rich-text docs; upserts and deletes are applied in place; a reconnect resyncs from its snapshot. Mutations write the server's response through the same `writeEntity` / `removeEntity`, and nothing invalidates the list, so an edit no longer reloads it. `useEntity` seeds from the replica and only calls `Get` before the first snapshot. Not yet observed in the browser. Publish order can still differ from commit order (I-49).
+- **I-27 · Watch isn't built for keeping a full copy in sync.** Fixed 2026-09-26. Watch opens every stream with a snapshot, numbers events with a revision and sends a fresh snapshot to a subscriber that lags (T14, ADR 9). The browser's entity list is a replica fed only by Watch (`model/sync.ts`): `entitiesQuery` resolves with the first snapshot and never calls `List`; later snapshots replace the list, reset cached entities and refetch open rich-text docs; upserts and deletes are applied in place; a reconnect resyncs from its snapshot. Mutations write the server's response through the same `writeEntity` / `removeEntity`, and nothing invalidates the list, so an edit no longer reloads it. `useEntity` seeds from the replica and only calls `Get` before the first snapshot. The Vite dev proxy now ends a proxied stream whose upstream dies, so a tab notices a server restart and reconnects; any other proxy put in front of the server needs the same behaviour. Observed 2026-09-26 on a scratch DB: no `EntityService/List` after startup, typing sends only `Put`, a second tab sees creates and status changes live, and after a server restart the tab reconnected and showed an edit made while the server was down. Publish order can still differ from commit order (I-49).
 - **I-38 · Stale comment about which writes publish events.** Fixed 2026-09-26. The `watch.rs` module comment now lists every publishing write, `RichText.Put` included; rewritten with the Watch snapshot and revisions (T14).
 - **I-22 · A rich-text ref stored as a property value adds nothing.** Fixed 2026-09-26. `PropertyValue.richtext` is gone (field 6 and the name reserved); a document is addressed by (entity id, declared rich-text property id). `new_entity` stores no value for rich-text properties, and `Create` and `SetProperty` reject any value on one with `INVALID_ARGUMENT` (superseding I-16's `richtext`-ref case). Migration `20260926000000_drop_richtext_property_values` deletes the stored `content` rows of Note, DailyNote and Todo, chosen by the registry, and nothing else (D5). The browser builds each ref with `richTextRef(entity.id, propertyId)` from the registry's declared rich-text properties (`richTextPropertyIds`), so an editor renders for every declared one; the MCP server already addressed `content` directly. Covered by `rich_text_properties_take_no_value`, `create_by_intent_mints_id_defaults_and_name`, `drop_richtext_migration_deletes_exactly_the_richtext_rows` and `drop_richtext_migration_lists_every_declared_richtext_property`. Observed 2026-09-26 on a scratch DB written before T12: the migration removed its 7 pointer rows and kept every other property and both docs, and the old Note and daily note opened with their content. Not yet run against the live DB (27 rows to delete).
 - **I-16 · Property values aren't checked against their declared kind (except select).** Fixed 2026-09-26. `validate_property` (replacing `validate_select`) requires every declared property's value case to match its `PropertyKind`, in `Create`, `Resolve` and `SetProperty`; a rich-text property takes only a `richtext` ref. Undeclared property ids still take any value except `select`. Covered by `values_must_match_the_declared_kind`.
