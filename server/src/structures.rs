@@ -181,8 +181,8 @@ fn properties_of(structure_type: &str) -> impl Iterator<Item = &'static Property
         .iter()
 }
 
-/// Richtext property ids a freshly-created entity of this structure should
-/// carry. Unknown types get none.
+/// A structure's declared rich-text property ids: the property half of every
+/// `RichTextRef` it can have (I-22). Unknown types get none.
 pub fn richtext_properties(structure_type: &str) -> Vec<&'static str> {
     properties_of(structure_type)
         .filter(|p| p.kind == PropertyKind::Richtext)

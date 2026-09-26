@@ -10,7 +10,7 @@ use crate::proto::{
     entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, CreateEntityRequest, DeleteEntityRequest, Entity, EntityEvent,
     EntityRef, GetEntityRequest, LinkRef, ListEntitiesRequest, ListEntitiesResponse, Property,
-    PropertyValue, RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse, RichTextRef,
+    PropertyValue, RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse,
     SetPropertyRequest, WatchRequest,
 };
 use crate::structures::{self, PropertyKind};
@@ -146,7 +146,7 @@ impl EntityService {
             )));
         }
 
-        let entity = new_entity(structure_type, Some(name), vec![]).map_err(Status::from)?;
+        let entity = new_entity(structure_type, Some(name), vec![]);
         let saved = self
             .persist_new_entity(&entity)
             .await
@@ -188,8 +188,7 @@ impl EntityService {
             return Err(Status::not_found(format!("DailyNote for {date}")));
         }
 
-        let entity =
-            new_entity("DailyNote", None, vec![date_property(date)]).map_err(Status::from)?;
+        let entity = new_entity("DailyNote", None, vec![date_property(date)]);
         let saved = self
             .persist_new_entity(&entity)
             .await
@@ -406,9 +405,11 @@ fn validate_properties(entity: &Entity) -> Result<(), AppError> {
 }
 
 /// Reject a property value that doesn't fit the structure's declaration: a
-/// declared property must hold a value of its declared `PropertyKind` (I-16; a
-/// rich-text property only a `richtext` ref), a declared select one of its
-/// options, and a `select` value is only allowed on a declared select (I-9).
+/// declared rich-text property takes no value at all, since its document is
+/// addressed by (entity id, property id) through `RichTextService` (I-22); any
+/// other declared property must hold a value of its declared `PropertyKind`
+/// (I-16), a declared select one of its options, and a `select` value is only
+/// allowed on a declared select (I-9).
 /// Other undeclared (ad-hoc) properties take any value. Structures missing from
 /// the registry (rows written before unknown types were rejected, I-24) have no
 /// schema and pass unchecked. Shared by Create and Resolve (via
@@ -427,6 +428,13 @@ fn validate_property(structure_type: &str, prop: &Property) -> Result<(), AppErr
             _ => Ok(()),
         };
     };
+    if def.kind == PropertyKind::Richtext {
+        return Err(AppError::Invalid(format!(
+            "{structure_type}.{} is a rich-text property and takes no value; \
+             its document is read and written with RichTextService",
+            prop.id
+        )));
+    }
     if def.kind == PropertyKind::Select {
         return validate_select(structure_type, def, value);
     }
@@ -474,12 +482,12 @@ fn value_kind(value: &property_value::Value) -> PropertyKind {
         property_value::Value::Date(_) => PropertyKind::Date,
         property_value::Value::Select(_) => PropertyKind::Select,
         property_value::Value::Relation(_) => PropertyKind::Relation,
-        property_value::Value::Richtext(_) => PropertyKind::Richtext,
         property_value::Value::Relations(_) => PropertyKind::Relations,
     }
 }
 
-/// A kind's name as its `PropertyValue` case is spelled in the proto.
+/// A kind's name as its `PropertyValue` case is spelled in the proto. Rich text
+/// has no case (I-22); `validate_property` rejects its values before naming it.
 fn kind_name(kind: PropertyKind) -> &'static str {
     match kind {
         PropertyKind::Richtext => "richtext",
@@ -546,49 +554,25 @@ fn apply_daily_note_name(entity: &mut Entity) {
 }
 
 /// Build a new, unsaved entity with every server-owned default (ADR 8): a minted
-/// id, a `RichTextRef` for each declared rich-text property and each select's
-/// default option, with the caller's `properties` laid over them (the caller wins
-/// on the same id). A caller value for a declared rich-text property is rejected:
-/// the server owns those refs. A DailyNote with a date is named for it
+/// id and each select's default option, with the caller's `properties` laid over
+/// them (the caller wins on the same id). Rich-text properties get no value: their
+/// documents are addressed by declared property (I-22), and `validate_property`
+/// rejects a caller value for one on persist. A DailyNote with a date is named for it
 /// (`apply_daily_note_name`); otherwise the name is `name`, or with none the
 /// structure's `default_name`. The caller makes a `unique_names` default free
 /// (`EntityService::free_name`); this has no database.
-fn new_entity(
-    structure_type: &str,
-    name: Option<&str>,
-    properties: Vec<Property>,
-) -> Result<Entity, AppError> {
+fn new_entity(structure_type: &str, name: Option<&str>, properties: Vec<Property>) -> Entity {
     let id = uuid::Uuid::new_v4().to_string();
-    let richtext = structures::richtext_properties(structure_type);
-    let mut defaults: Vec<Property> = richtext
+    let mut defaults: Vec<Property> = structures::select_defaults(structure_type)
         .iter()
-        .map(|pid| Property {
+        .map(|(pid, default)| Property {
             id: pid.to_string(),
             value: Some(PropertyValue {
-                value: Some(property_value::Value::Richtext(RichTextRef {
-                    entity_id: id.clone(),
-                    property_id: pid.to_string(),
-                })),
+                value: Some(property_value::Value::Select(default.to_string())),
             }),
         })
         .collect();
-    defaults.extend(
-        structures::select_defaults(structure_type)
-            .iter()
-            .map(|(pid, default)| Property {
-                id: pid.to_string(),
-                value: Some(PropertyValue {
-                    value: Some(property_value::Value::Select(default.to_string())),
-                }),
-            }),
-    );
     for prop in properties {
-        if richtext.contains(&prop.id.as_str()) {
-            return Err(AppError::Invalid(format!(
-                "{structure_type}.{} is a rich-text property; the server sets its value",
-                prop.id
-            )));
-        }
         match defaults.iter_mut().find(|p| p.id == prop.id) {
             Some(existing) => *existing = prop,
             None => defaults.push(prop),
@@ -605,7 +589,7 @@ fn new_entity(
         updated_at: None,
     };
     apply_daily_note_name(&mut entity);
-    Ok(entity)
+    entity
 }
 
 /// The name of a new entity created without one: `Untitled <StructureDef.name>`,
@@ -692,8 +676,7 @@ impl EntityServiceTrait for EntityService {
             )));
         }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
-        let mut entity =
-            new_entity(&structure_type, name.as_deref(), properties).map_err(Status::from)?;
+        let mut entity = new_entity(&structure_type, name.as_deref(), properties);
         if name.is_none() && def.unique_names {
             entity.name = self
                 .free_name(&structure_type, &entity.name)
@@ -1015,7 +998,7 @@ impl EntityServiceTrait for EntityService {
 mod tests {
     use super::*;
     use crate::proto::rich_text_service_server::RichTextService as _;
-    use crate::proto::{EntityRefList, RichText};
+    use crate::proto::{EntityRefList, RichText, RichTextRef};
     use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag, todo};
 
     async fn create(svc: &EntityService, req: CreateEntityRequest) -> Entity {
@@ -1075,19 +1058,12 @@ mod tests {
         assert_eq!(second.name, "Untitled To-do");
         assert_eq!(select_value(&first, "status").as_deref(), Some("open"));
         assert_eq!(select_value(&first, "priority").as_deref(), Some("none"));
-        let content = first
-            .properties
+        // No stored value for the rich-text `content` (I-22), here or in the DB.
+        assert!(first.properties.iter().all(|p| p.id != "content"));
+        assert!(stored_property_ids(&pool, &first.id)
+            .await
             .iter()
-            .find(|p| p.id == "content")
-            .and_then(|p| p.value.as_ref())
-            .and_then(|v| v.value.clone());
-        assert_eq!(
-            content,
-            Some(property_value::Value::Richtext(RichTextRef {
-                entity_id: first.id.clone(),
-                property_id: "content".to_string(),
-            }))
-        );
+            .all(|id| id != "content"));
         // Server-owned fields: no links or dates until content is saved (ADR 3).
         assert!(first.links.is_empty());
         assert!(first.referenced_dates.is_empty());
@@ -1608,20 +1584,7 @@ mod tests {
     async fn values_must_match_the_declared_kind() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
-        let target = create(&svc, note("Target")).await;
         let entity = create(&svc, todo("Water plants")).await;
-
-        // A `relations` value on `content` (declared richtext).
-        let err = set_property(
-            &svc,
-            &entity.id,
-            "content",
-            tags_value(&[(&target.id, "Note")]),
-        )
-        .await
-        .expect_err("relations on a rich-text property");
-        assert_eq!(err.code(), tonic::Code::InvalidArgument);
-        assert!(err.message().contains("richtext"), "{}", err.message());
 
         // A `date` value on a select, through SetProperty and Create.
         let err = set_property(&svc, &entity.id, "status", date("2026-06-13"))
@@ -1654,17 +1617,10 @@ mod tests {
         let stored = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(stored.properties, entity.properties);
         assert_eq!(stored.links, entity.links);
-        assert_eq!(entity_count(&pool).await, 2);
+        assert_eq!(entity_count(&pool).await, 1);
 
-        // The matching kinds are accepted: a richtext ref on `content` (until
-        // T12 drops the case), a date on `due`, and anything on an undeclared id.
-        let content = Some(property_value::Value::Richtext(RichTextRef {
-            entity_id: entity.id.clone(),
-            property_id: "content".to_string(),
-        }));
-        set_property(&svc, &entity.id, "content", content)
-            .await
-            .expect("richtext on content");
+        // The matching kinds are accepted: a date on `due`, and anything on an
+        // undeclared id.
         set_property(&svc, &entity.id, "due", date("2026-06-13"))
             .await
             .expect("date on due");
@@ -1676,6 +1632,44 @@ mod tests {
         )
         .await
         .expect("undeclared property is unchecked");
+    }
+
+    // I-22: a rich-text property's document is addressed by (entity id, declared
+    // property id), so the property itself takes no value of any kind.
+    #[tokio::test]
+    async fn rich_text_properties_take_no_value() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let target = create(&svc, note("Target")).await;
+        let entity = create(&svc, todo("Water plants")).await;
+
+        for value in [
+            property_value::Value::Text("hello".to_string()),
+            tags_value(&[(&target.id, "Note")]).expect("relations value"),
+        ] {
+            let err = set_property(&svc, &entity.id, "content", Some(value.clone()))
+                .await
+                .expect_err("SetProperty value on a rich-text property");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+            assert!(err.message().contains("rich-text"), "{}", err.message());
+
+            let err = try_create(&svc, with_value(note("Sneaky"), "content", value))
+                .await
+                .expect_err("Create value on a rich-text property");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+            assert!(err.message().contains("rich-text"), "{}", err.message());
+        }
+
+        assert_eq!(entity_count(&pool).await, 2);
+        assert!(stored_property_ids(&pool, &entity.id)
+            .await
+            .iter()
+            .all(|id| id != "content"));
+        assert!(stored_property_ids(&pool, &target.id).await.is_empty());
+        // Clearing it is a harmless no-op, as on any property.
+        set_property(&svc, &entity.id, "content", None)
+            .await
+            .expect("clear content");
     }
 
     #[tokio::test]
@@ -1803,6 +1797,17 @@ mod tests {
             .expect("fts row")
     }
 
+    /// The property ids stored in `properties` for `entity_id`, sorted.
+    async fn stored_property_ids(pool: &SqlitePool, entity_id: &str) -> Vec<String> {
+        sqlx::query_scalar(
+            "SELECT property_id FROM properties WHERE entity_id = ? ORDER BY property_id",
+        )
+        .bind(entity_id)
+        .fetch_all(pool)
+        .await
+        .expect("property rows")
+    }
+
     async fn stored_date_key(pool: &SqlitePool, entity_id: &str) -> Option<String> {
         sqlx::query_scalar("SELECT date_key FROM entities WHERE id = ?")
             .bind(entity_id)
@@ -1822,8 +1827,7 @@ mod tests {
                     value: Some(property_value::Value::Select("high".to_string())),
                 }),
             }],
-        )
-        .expect("todo");
+        );
 
         assert_eq!(entity.name, "Water plants");
         assert_eq!(select_value(&entity, "status").as_deref(), Some("open"));
@@ -1832,44 +1836,17 @@ mod tests {
             entity.properties.iter().filter(|p| p.id == "priority").count(),
             1
         );
-        let content = entity
-            .properties
-            .iter()
-            .find(|p| p.id == "content")
-            .and_then(|p| p.value.as_ref())
-            .and_then(|v| v.value.clone());
-        assert_eq!(
-            content,
-            Some(property_value::Value::Richtext(RichTextRef {
-                entity_id: entity.id.clone(),
-                property_id: "content".to_string(),
-            }))
-        );
-    }
-
-    #[test]
-    fn new_entity_rejects_a_caller_rich_text_value() {
-        let err = new_entity(
-            "Note",
-            Some("Sneaky"),
-            vec![Property {
-                id: "content".to_string(),
-                value: Some(PropertyValue {
-                    value: Some(property_value::Value::Richtext(RichTextRef {
-                        entity_id: "someone-else".to_string(),
-                        property_id: "content".to_string(),
-                    })),
-                }),
-            }],
-        )
-        .expect_err("rich-text value from the caller");
-        assert!(matches!(err, AppError::Invalid(_)), "{err:?}");
+        // Rich-text properties get no value (I-22).
+        assert!(entity.properties.iter().all(|p| p.id != "content"));
     }
 
     #[test]
     fn new_entity_names_a_daily_note_for_its_date() {
-        let entity = new_entity("DailyNote", Some("Ignored"), vec![date_property("2026-06-13")])
-            .expect("daily note");
+        let entity = new_entity(
+            "DailyNote",
+            Some("Ignored"),
+            vec![date_property("2026-06-13")],
+        );
         assert_eq!(entity.name, "June 13, 2026");
     }
 
@@ -2018,7 +1995,8 @@ mod tests {
             stored_date_key(&pool, &entity.id).await.as_deref(),
             Some("2026-06-13")
         );
-        assert!(entity.properties.iter().any(|p| p.id == "content"));
+        // No stored value for its rich-text `content` (I-22).
+        assert!(entity.properties.iter().all(|p| p.id != "content"));
         assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
 
         // Again, with the structure named: the same note, nothing published.
