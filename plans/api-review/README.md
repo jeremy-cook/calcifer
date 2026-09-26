@@ -188,6 +188,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | *unassigned* |
 | I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | *unassigned* |
 | I-49 | Two writes to one entity can publish events out of commit order; the browser's replica has the same shape (found in T14, T15) | low | deferred (D9) |
+| I-50 | `PutRichText` with an empty `entity_id` answers `NOT_FOUND` (found in T19) | low | *unassigned* |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
 (closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
@@ -224,7 +225,7 @@ user after Phase 2.
 | T17 | [One Search RPC with mode and match ranges](tasks/T17-search.md) | proto, server, mcp | T16 | none | done (c6ca637, 7e3ad21, ce9591f) |
 | T18 | [ListBacklinks request/response and self-link rule](tasks/T18-backlinks.md) | proto, server, mcp | T17 | none | done (6b22f57, c8b858a, 3d8f8e8, 9feaedc) |
 | T19 | [buf naming and lint](tasks/T19-buf-naming.md) | all | T18 | none | done (ebeee38, feeea88) |
-| T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | todo |
+| T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | in progress (engineer: T20 engineer) |
 | **Phase 5: frontend cleanup** |||||
 | T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | todo |
 | T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | todo |

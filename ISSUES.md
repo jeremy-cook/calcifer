@@ -351,6 +351,22 @@ published last.
 
 ---
 
+### I-50 · `PutRichText` with an empty `entity_id` answers `NOT_FOUND` · low · confirmed
+
+**Where:** `server/src/services/richtext.rs` (`put_rich_text`, `check_declared`)
+
+**Problem:** Since T19 the request is flat (`entity_id`, `property_id`, …), so there's no
+`ref` to be missing. An empty `entity_id` now fails `check_declared` with `NOT_FOUND`
+"entity " instead of the old `INVALID_ARGUMENT` "richtext missing ref". Found during
+T19 of the API review.
+
+**Fix:** Return `INVALID_ARGUMENT` for an empty `entity_id` or `property_id` in
+`GetRichText` and `PutRichText`, before the lookup.
+
+**Done when:** both RPCs answer `INVALID_ARGUMENT` for an empty id, and a test covers it.
+
+---
+
 ## Resolved
 
 - **I-13 · `buf lint` reports RPC naming errors in `services.proto`.** Fixed 2026-09-26. Adopted buf's standard naming (D7, variant A): every RPC is a verb and noun (`GetEntity`, `ListEntities`, `CreateEntity`, `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `WatchEntities`, `ResolveEntity`, `GetRichText`, `PutRichText`, `ListStructures`), takes `<Rpc>Request` and returns its own `<Rpc>Response`, which wraps the entity or doc (`GetEntityResponse { Entity entity = 1; }`, `PutRichTextResponse { RichText rich_text = 1; }`, `DeleteEntityResponse {}`). `EntityEvent` is `WatchEntitiesResponse` (same fields and numbers), `SetPropertyRequest` is `SetEntityPropertyRequest`, and `GetRichTextRequest` / `PutRichTextRequest` carry `entity_id` and `property_id` flat; `expected_updated_at` moved from `RichText` (field 4 reserved) to `PutRichTextRequest`. `RichTextRef`, `EntityRef` and `EntityRefList` stay, still used by `RichText.ref` and relations. Server, browser and MCP updated mechanically; `buf.yaml` stays on the default rules and `pnpm proto:lint` exits 0. Nothing runs it automatically: the README's proto dev loop now lists it first.
