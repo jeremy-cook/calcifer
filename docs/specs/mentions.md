@@ -26,6 +26,9 @@ export const HashtagMention = EntityMention.extend({ name: 'hashtag' })
 | `structureType` | `null` | `data-structure-type` |
 | `char` | `'@'` | `data-char` |
 
+The server reads only `id` and `structureType`; see
+[`../reference/richtext-doc.md`](../reference/richtext-doc.md).
+
 Both render through `MentionNodeView` (a React node view), which is what makes a chip
 clickable and lets deleted targets render as tombstones.
 
@@ -104,7 +107,7 @@ editor.chain().focus()
 ```
 
 For a create item, resolution goes through `getOrCreateEntityForMention`, which calls
-`EntityService.ResolveByName` — **the server decides the id**. The browser does not
+`EntityService.ResolveEntity` by name — **the server decides the id**. The browser does not
 get-or-create locally, so the browser and the MCP agent converge on one entity for the
 same name. This is why typing `#urgent` twice yields one Tag.
 

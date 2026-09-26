@@ -17,7 +17,9 @@ MCP agent) produces an identical, honest graph.
 
 Why the architecture is the way it is: [`docs/adr/`](docs/adr/).
 Data model, graph derivation, and the RPC surface:
-[`docs/reference/data-model.md`](docs/reference/data-model.md).
+[`docs/reference/data-model.md`](docs/reference/data-model.md). The TipTap node types
+the server reads from rich-text documents:
+[`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md).
 What's being built next: [`ROADMAP.md`](ROADMAP.md).
 
 ## Dev loop

@@ -31,7 +31,7 @@ message PropertyValue {
 message RichText {
   reserved 4; reserved "expected_updated_at";  // now on PutRichTextRequest
   RichTextRef ref = 1;
-  string doc = 2;               // TipTap JSON, inspected as text
+  string doc = 2;               // TipTap JSON; schema in richtext-doc.md
   google.protobuf.Timestamp updated_at = 3;
 }
 
@@ -66,6 +66,14 @@ id plus one of the property ids its structure declares with `PROPERTY_KIND_RICHT
 `PropertyValue` and never appears in `Entity.properties`; clients build the ref from
 the entity id and the registry, and every declared rich-text property has a document
 to read (empty until first saved).
+
+A document is TipTap JSON that the server parses on every save. The node types and
+attributes it reads (`mention`, `hashtag`, `dateChip` and text) and what it derives from
+each are specified in [`richtext-doc.md`](richtext-doc.md).
+
+Field formats: a `date` value, `ResolveEntityRequest.date` and every
+`referenced_dates` entry are ISO calendar days, `yyyy-MM-dd`. In a relation value the
+server reads only each `EntityRef`'s `id`; `structure_type` may be empty.
 
 ---
 
@@ -160,7 +168,8 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 [ADR 3](../adr/0003-server-authoritative-link-graph.md).
 
 - **`Entity.links`** — the full outgoing set, re-derived from document content on every
-  save by `server/src/links.rs::extract_doc_references` walking the TipTap JSON. Scoped
+  save by `server/src/links.rs::extract_doc_references` walking the TipTap JSON (see
+  [`richtext-doc.md`](richtext-doc.md) for the nodes it reads). Scoped
   per originating property via `source_property_id`, so properties reconcile
   independently.
 - Relation properties (`relation`/`relations`) also produce `links` rows, scoped by
@@ -388,7 +397,9 @@ With embeddings off (the model failed to load), semantic and hybrid behave exact
 lexical. A hit's `snippet` is plain text from FTS5's `snippet()` around the best
 lexical match, and `matches` holds each matched term as a half-open range of UTF-16
 code units into it (what JS string indices count). The server marks matches with
-private-use code points and strips them, so the snippet carries no markup. A hit only
+private-use code points (U+E000, U+E001) and strips them, so the snippet carries no
+markup; a document that contains those characters loses them from its snippet, and
+they can shift a match range. A hit only
 the vector side found has an empty snippet and no matches.
 
 **Embedder.** A background `tokio` worker drains an embed queue off the write hot
