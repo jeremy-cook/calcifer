@@ -43,6 +43,11 @@ existing dead refs once; that changes stored data, so confirm with the user firs
 **Done when:** after deleting a Tag, no Todo's `tags` value still refers to it, and a test
 covers it.
 
+**Decided (2026-09-26, D10, D11):** the server strips the id on delete; no frontend
+change. No cleanup code for existing dead refs: the live DB's one (Todo "Ship" → deleted
+Tag `b744dbdd…`) is the user's to remove with a one-off or by recreating the DB (the
+checked `UPDATE` is in `plans/api-review/README.md`). Planned as T25.
+
 ---
 
 ### I-34 · Relation edits resend the whole list · low · confirmed
@@ -114,6 +119,7 @@ T06a of the API review.
 
 
 **Also (found in T20):** the module comment at `server/src/links.rs:3-4` points at `extractDocReferences` in `calcifer/src/model/linkSync.ts`, which no longer exists. Fix it in the same pass.
+
 ---
 
 ### I-42 · A rich-text save that fails for a non-conflict reason is dropped silently · medium · confirmed
@@ -320,6 +326,11 @@ T19 of the API review.
 
 **Done when:** a renamed target shows its new name in `get_note`, and `[[name|label]]` round-trips.
 
+**Triage (2026-09-26):** the browser never shows a mention's `label` for a live target
+(`MentionNodeView` renders the current name), so there are no aliases to keep. T28
+writes chips from current names and drops the alias form. Writing `get_note`'s output
+back must link the same targets; that replaces the round-trip clause above. See I-58.
+
 ---
 
 ### I-54 · Search text drops chips and splits words across marks · low · confirmed
@@ -331,6 +342,9 @@ T19 of the API review.
 **Fix:** Emit chip labels (and dates) into the plain text, and join adjacent inline text nodes without a separator (separate only between blocks).
 
 **Done when:** a note is found by a word split across marks and by a mentioned name, with tests on `extract_plain_text`.
+
+**Decided (2026-09-26, D12):** no reindex of existing documents; each one's FTS text and
+chunks update on its next save.
 
 ---
 
@@ -377,6 +391,26 @@ in `excludeIds`.
 
 **Done when:** an any-structure `relations` property renders a picker, and neither
 picker lists the entity being edited.
+
+---
+
+### I-58 · `get_note` → write-back moves non-Note mentions onto a Note · low · confirmed
+
+**Where:** `mcp-server/src/markdown/serialize.ts` (`mention`), `mcp-server/src/markdown/parse.ts` (`[[…]]`)
+
+**Problem:** `get_note` writes every `mention` as `[[label]]`, whatever the target's
+structure, and the parser reads every `[[…]]` as a Note. Writing a note back through the
+agent (e.g. `create_note`, which replaces the body) moves a mention of a Todo or a
+DailyNote onto a Note with that name, and creates that Note if it's missing. The live DB
+has one DailyNote mention in a doc (counted read-only 2026-09-26). Found while triaging
+I-53.
+
+**Fix:** Write non-Note mentions with their structure (e.g. `[[Todo/Ship]]`), and parse
+that form back when the prefix is a registry structure type. Resolve with create only
+for `creatable` structures; a missing non-creatable target becomes plain text.
+
+**Done when:** a note mentioning a Note, a Tag and a Todo round-trips through `get_note`
+and `create_note` with the same links and no new entity.
 
 ---
 

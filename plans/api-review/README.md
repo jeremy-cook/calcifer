@@ -63,6 +63,8 @@ don't pick up each other's work.
 - [ ] The diff touches only the files the task lists, or the engineer explained why.
 - [ ] Every *Done when* item holds, and you checked it yourself.
 - [ ] `cd server && cargo test` passes (whenever `server/` or `proto/` changed).
+- [ ] `cd server && cargo fmt --check` passes (whenever `server/` changed; from T24 on,
+      I-41).
 - [ ] `cd calcifer && pnpm build && pnpm lint` passes (whenever `calcifer/` or `proto/`
       changed).
 - [ ] `cd mcp-server && pnpm typecheck` passes (whenever `mcp-server/` or `proto/`
@@ -111,19 +113,37 @@ were checked in the browser.
 
 **Left:** one browser pass over the frontend changes since T19 (renamed RPCs, T21's
 write helpers, T22's merged create/delete paths, T23's new kinds), which was blocked
-when the Firefox tools disconnected. Then the user triages the unassigned issues and
+when the Firefox tools disconnected. Then the Phase 6 follow-ups (T24–T29). The user
 decides when to merge `api-review` to `main`.
+
+**Triage (2026-09-26):** every unassigned issue was checked against the code and still
+holds. All of them are fixed in Phase 6 (D12); I-58 is new, found during triage. None
+is deferred beyond D9's (I-36, I-40, I-42, I-45, I-49) and I-34.
 
 - **Live DB:** the first start of a server built from this branch against
   `server/calcifer.db` runs T12's migration. It deletes the 27 rich-text pointer rows
   (24 Note, 2 Todo, 1 DailyNote; counted read-only 2026-09-26) and leaves the other 8
   `properties` rows. The user approved it without a backup (D5).
+- **Live DB dead ref (I-14, D11):** Todo "Ship" (`14d2d854…`) has `tags` =
+  [deleted Tag `b744dbdd…`, `urgent-review`]. No product code cleans it up. The user
+  either recreates the DB or runs this one-off with the server stopped (the tech lead
+  never runs it). Checked read-only: it matches one row and leaves only `urgent-review`:
+  ```sql
+  UPDATE properties SET value_blob = x'3A2D' || substr(value_blob, 48)
+  WHERE entity_id = '14d2d854-f26b-4148-a332-ef03e5b824d9' AND property_id = 'tags'
+    AND length(value_blob) = 92
+    AND CAST(substr(value_blob, 7, 36) AS TEXT) = 'b744dbdd-87f2-4884-afba-6f87b3cffe3c';
+  ```
 - **Ports:** Finnegan (`~/Projects/Finnegan`) wasn't running for Phase 3's checks, and the
   ports were freed afterwards. Ask before stopping it for a later phase's checks.
 - **MCP server:** since T17 a Calcifer MCP process started before `c6ca637` calls the
   removed `Retrieve`, so `search_notes` fails against this branch. The user restarts it
   (`/mcp`) before relying on the agent tools against a server built from this branch.
 - Open questions for the user: none. D9 (defer rare concurrency) applies to triage.
+- **Phase 6 checks for the tech lead:** after T25, delete a Tag used by a Todo in the
+  browser (scratch DB) and see the Todo's tags drop it live. After T27, the mention-create
+  checks in T27's *Done when*. After T28, `pnpm test:tools` on the first run against a
+  fresh scratch server.
 
 ---
 
@@ -152,6 +172,9 @@ answer and the date.
 | D7 | I-13: adopt buf's RPC naming (wrapped responses) or configure lint exceptions? | Adopt it (T19 variant A). Every consumer is being touched anyway, and wrapped responses leave room to grow (e.g. `created` on Resolve). | Adopt buf naming, T19 variant A (as recommended). 2026-09-25 |
 | D8 | Phase 1 check-in: fix I-37 and I-39 now or later? | Now, as a short task before T07 (both lose data) | Fix both in Phase 1, as T06a (server) and T06b (fe), run in parallel. The tech lead resolves both in `ISSUES.md` at integration. 2026-09-25 |
 | D9 | Phase 1 close: fix I-40 and I-42 (rare races and failure paths)? | Park I-42 until after Phase 2 | **Defer both, and don't treat rare concurrency as work** (user, 2026-09-25): Calcifer is a single-user local app, so clashes are very unlikely. The tech lead logs such findings as deferred and doesn't add them to task scope. 2026-09-25 |
+| D10 | I-14: when an entity is deleted, strip its id from other entities' relation values on the server, or have readers ignore dead refs? | Strip on delete in the same transaction and publish upserts; no FE change | Server strips on delete (as recommended). T25. 2026-09-26 |
+| D11 | I-14: clean up the live DB's one existing dead ref (Todo "Ship" → deleted Tag)? | An idempotent sweep at server start | **No cleanup code** (not the recommendation): "just do a one-off script, or delete the database and we can create it again from new". The product gets no sweep or migration. The tech lead recorded a checked one-off `UPDATE` under Status for the user to run, if they don't recreate the DB. 2026-09-26 |
+| D12 | Triage of the unassigned issues: verdicts and grouping | Fix all 15 (none defer or won't-fix; all small, none a race) in T24–T29; log I-58 (found in triage) and fix it with I-53; no reindex of existing docs for I-54 (each updates on its next save); add `cargo fmt --check` to the review checklist | Approved as proposed. 2026-09-26 |
 
 ---
 
@@ -185,27 +208,29 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-38 | Stale comment in watch.rs (found in T04; richtext.ts half fixed in T06) | low | T14 (note) |
 | I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | T06b |
 | I-40 | Entity write transactions that read first fail with Internal under a race (found in T06a) | medium | deferred (D9) |
-| I-41 | `cargo fmt --check` fails on committed server code (found in T06a) | low | *unassigned* |
+| I-41 | `cargo fmt --check` fails on committed server code (found in T06a) | low | T24 |
 | I-42 | A rich-text save that fails for a non-conflict reason is dropped silently (found in T06b) | medium | deferred (D9) |
-| I-43 | Creating a mention or tag sends Resolve twice (found in T07 checks) | low | *unassigned* |
-| I-44 | `test:tools` semantic assertion fails on a cold embedding model (found in T07 checks) | low | *unassigned* |
+| I-43 | Creating a mention or tag sends Resolve twice (found in T07 checks) | low | T27 |
+| I-44 | `test:tools` semantic assertion fails on a cold embedding model (found in T07 checks) | low | T28 |
 | I-45 | Two untitled Tags created at once can pick the same free name (found in T08) | low | deferred (D9) |
-| I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | *unassigned* |
-| I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | *unassigned* |
-| I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | *unassigned* |
+| I-46 | `Resolve` by name can create an undated DailyNote, getting around `creatable` (found in T09) | low | T24 |
+| I-47 | The MCP server hard-codes the `content` rich-text property instead of reading the registry (found in T12) | low | T28 |
+| I-48 | Entity ordering relies on the query plan (`load_entity`; List ties) (found in T13) | low | T24 |
 | I-49 | Two writes to one entity can publish events out of commit order; the browser's replica has the same shape (found in T14, T15) | low | deferred (D9) |
-| I-50 | `PutRichText` with an empty `entity_id` answers `NOT_FOUND` (found in T19) | low | *unassigned* |
-| I-51 | Content mention links trust the doc's `structureType`; null ones are dropped (found in T20) | low | *unassigned* |
-| I-52 | Date strings aren't format-checked (chips, `PropertyValue.date`, MCP parser) (found in T20) | low | *unassigned* |
-| I-53 | `get_note` renders stale mention labels and loses `[[name\|label]]` targets (found in T20) | low | *unassigned* |
-| I-54 | Search text drops chips and splits words across marks (found in T20) | low | *unassigned* |
-| I-55 | `proto:gen` depends on the remote buf plugin and fails under rate limits (found in T20) | low | *unassigned* |
-| I-56 | Create and resolve callbacks are never stable (found in T22) | low | *unassigned* |
-| I-57 | Relation pickers: any-structure `relations` renders nothing; self is offered (found in T23) | low | *unassigned* |
+| I-50 | `PutRichText` with an empty `entity_id` answers `NOT_FOUND` (found in T19) | low | T24 |
+| I-51 | Content mention links trust the doc's `structureType`; null ones are dropped (found in T20) | low | T26 |
+| I-52 | Date strings aren't format-checked (chips, `PropertyValue.date`, MCP parser) (found in T20) | low | T24 (server), T28 (mcp), T29 (proto comment) |
+| I-53 | `get_note` renders stale mention labels and loses `[[name\|label]]` targets (found in T20) | low | T28 |
+| I-54 | Search text drops chips and splits words across marks (found in T20) | low | T26 |
+| I-55 | `proto:gen` depends on the remote buf plugin and fails under rate limits (found in T20) | low | T29 |
+| I-56 | Create and resolve callbacks are never stable (found in T22) | low | T27 |
+| I-57 | Relation pickers: any-structure `relations` renders nothing; self is offered (found in T23) | low | T27 |
+| I-58 | `get_note` → write-back moves non-Note mentions onto a Note of that name (found in triage) | low | T28 |
+| I-14 | Deleting an entity leaves dead refs in other entities' relation values (pre-existing) | medium | T25 (D10, D11) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
-(closed by T09), **I-13** (closed by T19). **I-14** is out of scope; suggest it to the
-user after Phase 2.
+(closed by T09), **I-13** (closed by T19). **I-14** was left out of Phases 1–5 and
+is fixed in Phase 6 (T25).
 
 ---
 
@@ -243,6 +268,13 @@ user after Phase 2.
 | T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | done (037f920, 27857fd) |
 | T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | done (5a14ac1, 42cfb3b) |
 | T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | done (0e98e65, 09958dd, a2d2368) |
+| **Phase 6: triage follow-ups (D12)** |||||
+| T24 | [`cargo fmt`, then request guards (Resolve, ordering, empty ids, dates)](tasks/T24-server-fmt-and-guards.md) | server, docs | T23 | T27, T28 | todo |
+| T25 | [Deleting an entity strips it from relation values](tasks/T25-strip-dead-relation-refs.md) | server, docs | T24 | T27, T28 | todo |
+| T26 | [Content links use the target's real type; search text includes chips](tasks/T26-content-derivation.md) | server, docs | T25 | T27, T28 | todo |
+| T27 | [FE: one resolve per mention create, stable callbacks, relation pickers](tasks/T27-fe-editor-and-picker-fixes.md) | fe | T23 | T24, T25, T26, T28 | todo |
+| T28 | [MCP: registry-driven doc property, faithful `get_note`, strict dates, test poll](tasks/T28-mcp-round-trip.md) | mcp | T23 | T24, T25, T26, T27 | todo |
+| T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | todo |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
 
@@ -259,6 +291,11 @@ Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `
 - T16 and T19 are mechanical changes across every consumer. Doing them after the big
   rewrites means less code to churn. T17 and T18 go before the buf rename (T19) so it
   renames the final set of messages, not ones about to be deleted.
+- Phase 6: T24–T26 share `entity.rs` and `links.rs` and run in order, with T24's
+  `cargo fmt` first so later diffs stay clean. T27 (fe) and T28 (mcp) touch neither and
+  can run alongside any of them, or each other; at most one server task at a time. T29
+  regenerates stubs and edits proto comments that T24–T26 made stale, so it runs last
+  and alone. D10 means T25 has no FE half, so it pairs with T27.
 
 ### Phase-end browser checks (G3)
 - **Phase 1:** open a note in the browser; append to it with `mcp__calcifer__append_to_note`;
