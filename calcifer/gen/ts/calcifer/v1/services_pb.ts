@@ -432,6 +432,9 @@ export const EntityService: GenService<{
     output: typeof EntitySchema;
   },
   /**
+   * An empty structure_type lists every entity; one not in the registry is
+   * INVALID_ARGUMENT.
+   *
    * @generated from rpc calcifer.v1.EntityService.List
    */
   list: {
@@ -442,8 +445,10 @@ export const EntityService: GenService<{
   /**
    * Create a new entity from intent. The server mints the id, timestamps,
    * default properties and default name ("Untitled <structure name>", or for a
-   * unique-names structure the first free "Untitled <name> N"). A DailyNote's
-   * name is always derived from its `date`.
+   * unique-names structure the first free "Untitled <name> N"). INVALID_ARGUMENT
+   * for a structure_type not in the registry or a property value of the wrong
+   * kind; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
+   * comes from Resolve by date); ALREADY_EXISTS for a taken Tag name.
    *
    * @generated from rpc calcifer.v1.EntityService.Create
    */
@@ -454,7 +459,10 @@ export const EntityService: GenService<{
   },
   /**
    * Change only an entity's name. Other properties are untouched, so a rename
-   * doesn't overwrite a concurrent SetProperty. NOT_FOUND for an unknown id.
+   * doesn't overwrite a concurrent SetProperty. The name is trimmed; a blank
+   * one is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
+   * for a structure whose name isn't editable (DailyNote), ALREADY_EXISTS for a
+   * taken Tag name.
    *
    * @generated from rpc calcifer.v1.EntityService.Rename
    */
