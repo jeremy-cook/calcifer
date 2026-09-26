@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use futures::StreamExt;
 use sqlx::SqlitePool;
 use tokio_stream::wrappers::BroadcastStream;
@@ -319,6 +321,137 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
     })
 }
 
+/// An `entities` row, typed so both filter branches of `load_entities` share it.
+struct EntityRow {
+    id: String,
+    structure_type: String,
+    name: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+/// Hydrate every entity, or every entity of `structure_type`, most recently
+/// updated first, in four queries however many there are. Returns what
+/// `load_entity` returns for each, field for field. `load_entity` reads child rows
+/// through each table's `(entity_id, …)` primary-key index, so they come back in
+/// key order; the `ORDER BY`s below spell out that same order.
+pub(crate) async fn load_entities(
+    pool: &SqlitePool,
+    structure_type: Option<&str>,
+) -> Result<Vec<Entity>, AppError> {
+    // Two literal queries rather than `? IS NULL OR …`, so each keeps the plan
+    // (and the tie order within equal `updated_at`s) that List has always had.
+    let rows = match structure_type {
+        None => {
+            sqlx::query_as!(
+                EntityRow,
+                r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
+                          created_at AS "created_at!", updated_at AS "updated_at!"
+                   FROM entities ORDER BY updated_at DESC"#
+            )
+            .fetch_all(pool)
+            .await?
+        }
+        Some(structure_type) => {
+            sqlx::query_as!(
+                EntityRow,
+                r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
+                          created_at AS "created_at!", updated_at AS "updated_at!"
+                   FROM entities WHERE structure_type = ? ORDER BY updated_at DESC"#,
+                structure_type
+            )
+            .fetch_all(pool)
+            .await?
+        }
+    };
+
+    let mut entities: Vec<Entity> = rows
+        .into_iter()
+        .map(|row| Entity {
+            id: row.id,
+            structure_type: row.structure_type,
+            name: row.name,
+            properties: vec![],
+            links: vec![],
+            referenced_dates: vec![],
+            created_at: Some(ts_from_millis(row.created_at)),
+            updated_at: Some(ts_from_millis(row.updated_at)),
+        })
+        .collect();
+    let index: HashMap<String, usize> = entities
+        .iter()
+        .enumerate()
+        .map(|(i, e)| (e.id.clone(), i))
+        .collect();
+
+    // Each child query is restricted by the same filter. A row whose entity isn't
+    // in `index` (created between the queries) is skipped.
+    let prop_rows = sqlx::query!(
+        r#"SELECT entity_id AS "entity_id!", property_id AS "property_id!",
+                  value_blob AS "value_blob!"
+           FROM properties
+           WHERE entity_id IN (SELECT id FROM entities WHERE ?1 IS NULL OR structure_type = ?1)
+           ORDER BY entity_id, property_id"#,
+        structure_type
+    )
+    .fetch_all(pool)
+    .await?;
+    for r in prop_rows {
+        let Some(&i) = index.get(&r.entity_id) else {
+            continue;
+        };
+        let value: PropertyValue = prost::Message::decode(&*r.value_blob)?;
+        entities[i].properties.push(Property {
+            id: r.property_id,
+            value: Some(value),
+        });
+    }
+
+    let link_rows = sqlx::query!(
+        r#"SELECT entity_id AS "entity_id!", link_id AS "link_id!", target_id AS "target_id!",
+                  target_structure AS "target_structure!",
+                  source_property_id AS "source_property_id!", created_at AS "created_at!"
+           FROM links
+           WHERE entity_id IN (SELECT id FROM entities WHERE ?1 IS NULL OR structure_type = ?1)
+           ORDER BY entity_id, link_id"#,
+        structure_type
+    )
+    .fetch_all(pool)
+    .await?;
+    for r in link_rows {
+        let Some(&i) = index.get(&r.entity_id) else {
+            continue;
+        };
+        entities[i].links.push(LinkRef {
+            id: r.link_id,
+            target: Some(EntityRef {
+                id: r.target_id,
+                structure_type: r.target_structure,
+            }),
+            source_property_id: r.source_property_id,
+            created_at: Some(ts_from_millis(r.created_at)),
+        });
+    }
+
+    let date_rows = sqlx::query!(
+        r#"SELECT entity_id AS "entity_id!", iso_date AS "iso_date!"
+           FROM referenced_dates
+           WHERE entity_id IN (SELECT id FROM entities WHERE ?1 IS NULL OR structure_type = ?1)
+           ORDER BY entity_id, iso_date"#,
+        structure_type
+    )
+    .fetch_all(pool)
+    .await?;
+    for r in date_rows {
+        let Some(&i) = index.get(&r.entity_id) else {
+            continue;
+        };
+        entities[i].referenced_dates.push(r.iso_date);
+    }
+
+    Ok(entities)
+}
+
 /// Sync the FTS `name` column for an entity, preserving the existing `body`
 /// (owned by `RichTextService.Put`). Delete-then-insert by entity_id so there is
 /// always exactly one `entity_fts` row per entity. Call inside the same tx as the
@@ -638,24 +771,10 @@ impl EntityServiceTrait for EntityService {
             known_structure(&filter)?;
         }
 
-        let ids: Vec<String> = if filter.is_empty() {
-            sqlx::query_scalar!(r#"SELECT id AS "id!" FROM entities ORDER BY updated_at DESC"#)
-                .fetch_all(&self.pool)
-                .await
-        } else {
-            sqlx::query_scalar!(
-                r#"SELECT id AS "id!" FROM entities WHERE structure_type = ? ORDER BY updated_at DESC"#,
-                filter
-            )
-            .fetch_all(&self.pool)
+        let structure_type = (!filter.is_empty()).then_some(filter.as_str());
+        let entities = load_entities(&self.pool, structure_type)
             .await
-        }
-        .map_err(AppError::from)?;
-
-        let mut entities = Vec::with_capacity(ids.len());
-        for id in ids {
-            entities.push(self.load_entity(&id).await.map_err(Status::from)?);
-        }
+            .map_err(Status::from)?;
 
         Ok(Response::new(ListEntitiesResponse { entities }))
     }
@@ -2142,5 +2261,124 @@ mod tests {
             .await
             .expect("count entities");
         assert_eq!(rows, 1);
+    }
+
+    /// Put `content` on `entity_id` as a paragraph of the given inline nodes.
+    async fn put_content(pool: &SqlitePool, entity_id: &str, nodes: &[String]) {
+        let doc = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{}]}}]}}"#,
+            nodes.join(",")
+        );
+        richtext_service(pool.clone(), WatchHub::new())
+            .put(Request::new(RichText {
+                r#ref: Some(RichTextRef {
+                    entity_id: entity_id.to_string(),
+                    property_id: "content".to_string(),
+                }),
+                doc,
+                updated_at: None,
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put content");
+    }
+
+    fn mention(node_type: &str, target: &Entity) -> String {
+        format!(
+            r#"{{"type":"{node_type}","attrs":{{"id":"{}","structureType":"{}"}}}}"#,
+            target.id, target.structure_type
+        )
+    }
+
+    fn date_chip(date: &str) -> String {
+        format!(r#"{{"type":"dateChip","attrs":{{"date":"{date}"}}}}"#)
+    }
+
+    /// Ids in List's order before batching: the query List ran for its ids.
+    async fn listed_ids(pool: &SqlitePool, structure_type: Option<&str>) -> Vec<String> {
+        match structure_type {
+            None => sqlx::query_scalar("SELECT id FROM entities ORDER BY updated_at DESC")
+                .fetch_all(pool)
+                .await
+                .expect("ids"),
+            Some(s) => sqlx::query_scalar(
+                "SELECT id FROM entities WHERE structure_type = ? ORDER BY updated_at DESC",
+            )
+            .bind(s)
+            .fetch_all(pool)
+            .await
+            .expect("ids"),
+        }
+    }
+
+    #[tokio::test]
+    async fn load_entities_matches_load_entity() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let urgent = create(&svc, tag("urgent")).await;
+        let home = create(&svc, tag("home")).await;
+        let other = create(&svc, note("Other")).await;
+        let plants = create(
+            &svc,
+            with_relations(
+                todo("Water plants"),
+                "tags",
+                &[(&urgent.id, "Tag"), (&home.id, "Tag")],
+            ),
+        )
+        .await;
+        let _bare = create(&svc, todo("Bare")).await;
+        let ideas = create(&svc, note("Ideas")).await;
+        let day = daily_note(&svc, "2026-06-15").await;
+        // Several links and dates per entity, dates written out of order, so the
+        // ordering inside an entity is exercised.
+        put_content(
+            &pool,
+            &ideas.id,
+            &[
+                mention("mention", &plants),
+                mention("hashtag", &urgent),
+                mention("mention", &other),
+                date_chip("2026-09-01"),
+                date_chip("2026-01-02"),
+            ],
+        )
+        .await;
+        put_content(
+            &pool,
+            &plants.id,
+            &[mention("mention", &ideas), date_chip("2026-07-04")],
+        )
+        .await;
+        put_content(
+            &pool,
+            &day.id,
+            &[
+                mention("hashtag", &home),
+                date_chip("2026-12-25"),
+                date_chip("2026-03-03"),
+            ],
+        )
+        .await;
+
+        for filter in [
+            None,
+            Some("Note"),
+            Some("Todo"),
+            Some("Tag"),
+            Some("DailyNote"),
+        ] {
+            let mut expected = Vec::new();
+            for id in listed_ids(&pool, filter).await {
+                expected.push(load_entity(&pool, &id).await.expect("load"));
+            }
+            let batched = load_entities(&pool, filter).await.expect("load entities");
+            assert_eq!(batched, expected, "filter {filter:?}");
+        }
+        let all = load_entities(&pool, None).await.expect("load entities");
+        assert_eq!(all.len(), 7);
+        let ideas = all.iter().find(|e| e.id == ideas.id).expect("ideas");
+        assert_eq!(ideas.links.len(), 3);
+        assert_eq!(ideas.referenced_dates, ["2026-01-02", "2026-09-01"]);
     }
 }
