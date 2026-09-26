@@ -3,8 +3,20 @@ import { create as createMessage } from '@bufbuild/protobuf'
 import { TimestampSchema, type Timestamp } from '@bufbuild/protobuf/wkt'
 import { Code, ConnectError } from '@connectrpc/connect'
 import { useQuery } from '@tanstack/react-query'
-import { RichTextSchema, type RichText, type RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import {
+  RichTextRefSchema,
+  RichTextSchema,
+  type RichText,
+  type RichTextRef,
+} from '@calcifer/proto/calcifer/v1/entities_pb'
 import { qk, queryClient, richTextClient } from '~/model/api'
+
+// The address of one rich-text doc: an entity and one of its structure's
+// declared rich-text property ids (see `richTextPropertyIds`). Entities store
+// no value for these properties (ADR 8), so the ref is always derived.
+export function richTextRef(entityId: string, propertyId: string): RichTextRef {
+  return createMessage(RichTextRefSchema, { entityId, propertyId })
+}
 
 export function richTextKey(ref: RichTextRef): string {
   return `${ref.entityId}:${ref.propertyId}`

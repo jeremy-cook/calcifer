@@ -25,6 +25,8 @@ import {
   type Entity,
 } from '~/model/store'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
+import { richTextRef } from '~/model/richtext'
+import { richTextPropertyIds } from '~/model/structures'
 import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 
 interface DailyNoteSectionProps {
@@ -87,7 +89,14 @@ interface DailyNoteBodyProps {
 function DailyNoteBody({ dailyNote, autoFocus }: DailyNoteBodyProps) {
   const contentRef = contentRichTextRef(dailyNote)
   if (!contentRef) return null
-  return <EntityRichTextField propertyId="content" propertyRef={contentRef} autoFocus={autoFocus} hideToolbar={true} />
+  return (
+    <EntityRichTextField
+      entityId={contentRef.entityId}
+      propertyId={contentRef.propertyId}
+      autoFocus={autoFocus}
+      hideToolbar={true}
+    />
+  )
 }
 
 interface DailyNoteActionsProps {
@@ -143,8 +152,9 @@ function DailyNoteActions({ dailyNote }: DailyNoteActionsProps) {
   )
 }
 
+// The daily note's content doc: its structure's declared rich-text property
+// (DailyNote declares one, `content`), addressed by the entity's id.
 function contentRichTextRef(entity: Entity): RichTextRef | undefined {
-  const property = entity.properties.find((p) => p.id === 'content')
-  const value = property?.value?.value
-  return value?.case === 'richtext' ? value.value : undefined
+  const [propertyId] = richTextPropertyIds(entity.structureType)
+  return propertyId ? richTextRef(entity.id, propertyId) : undefined
 }

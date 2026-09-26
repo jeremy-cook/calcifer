@@ -1,19 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
-import { isNewerRichText, usePutRichText, useRichText, type RichTextState } from '~/model/richtext'
+import { isNewerRichText, richTextRef, usePutRichText, useRichText, type RichTextState } from '~/model/richtext'
 
 export const RICHTEXT_DEBOUNCE_MS = 300
 
 export interface EntityRichTextFieldProps {
+  entityId: string
+  // A rich-text property the entity's structure declares; the doc is addressed
+  // by (entityId, propertyId), not by a stored property value.
   propertyId: string
-  propertyRef: RichTextRef
   autoFocus?: boolean
   hideToolbar?: boolean
 }
 
-export function EntityRichTextField({ propertyId, propertyRef, autoFocus, hideToolbar }: EntityRichTextFieldProps) {
+export function EntityRichTextField({ entityId, propertyId, autoFocus, hideToolbar }: EntityRichTextFieldProps) {
+  const propertyRef = useMemo(() => richTextRef(entityId, propertyId), [entityId, propertyId])
   const { data, isError } = useRichText(propertyRef)
 
   // The editor needs the saved doc and its version before it mounts (the key
@@ -24,7 +27,7 @@ export function EntityRichTextField({ propertyId, propertyRef, autoFocus, hideTo
 
   return (
     <LiveRichTextEditor
-      key={`${propertyRef.entityId}:${propertyId}`}
+      key={`${entityId}:${propertyId}`}
       propertyRef={propertyRef}
       initial={data}
       autoFocus={autoFocus}

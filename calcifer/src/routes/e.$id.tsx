@@ -200,10 +200,8 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     const value = property?.value?.value
 
     switch (def.kind) {
-      case PropertyKind.RICHTEXT: {
-        if (value?.case !== 'richtext') return null
-        return <EntityRichTextField key={def.id} propertyId={def.id} propertyRef={value.value} />
-      }
+      case PropertyKind.RICHTEXT:
+        return <EntityRichTextField key={def.id} entityId={entity.id} propertyId={def.id} />
       case PropertyKind.DATE: {
         const iso = value?.case === 'date' ? value.value : undefined
         return (

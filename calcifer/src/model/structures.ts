@@ -1,7 +1,7 @@
 import type { Icon } from '@phosphor-icons/react'
 import { CheckSquareIcon, FileIcon, HashIcon, NoteIcon, NotebookIcon } from '@phosphor-icons/react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
-import type { PropertyDef, StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
+import { PropertyKind, type PropertyDef, type StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { queryClient, qk, structureClient } from '~/model/api'
 
 export { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
@@ -42,6 +42,13 @@ export function useStructure(structureType: string): StructureDef | undefined {
 
 export function propertyDef(structure: StructureDef | undefined, id: string): PropertyDef | undefined {
   return structure?.properties.find((p) => p.id === id)
+}
+
+// A structure's declared rich-text property ids, in registry order. Each one
+// names a doc per entity, addressed with `richTextRef(entity.id, id)`.
+export function richTextPropertyIds(structureType: string): string[] {
+  const properties = getStructure(structureType)?.properties ?? []
+  return properties.filter((p) => p.kind === PropertyKind.RICHTEXT).map((p) => p.id)
 }
 
 export function optionLabel(def: PropertyDef | undefined, key: string): string {
