@@ -633,6 +633,7 @@ impl EntityServiceTrait for EntityService {
 
     // Create by intent (ADR 8): the server builds the entity with `new_entity`,
     // so a client can't supply its id, links, referenced dates or timestamps.
+    // Only `creatable` structures: a DailyNote comes from Resolve's date key.
     async fn create(&self, req: Request<CreateEntityRequest>) -> Result<Response<Entity>, Status> {
         let CreateEntityRequest {
             structure_type,
@@ -640,6 +641,11 @@ impl EntityServiceTrait for EntityService {
             properties,
         } = req.into_inner();
         let def = known_structure(&structure_type)?;
+        if !def.creatable {
+            return Err(Status::failed_precondition(format!(
+                "{structure_type} can't be created with Create; use Resolve to get or create one"
+            )));
+        }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
         let mut entity =
             new_entity(&structure_type, name.as_deref(), properties).map_err(Status::from)?;
@@ -1622,13 +1628,13 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::NotFound);
     }
 
-    /// A Create request for a DailyNote on `date`.
-    fn daily_note(date: &str) -> CreateEntityRequest {
-        CreateEntityRequest {
-            structure_type: "DailyNote".to_string(),
-            name: None,
-            properties: vec![date_property(date)],
-        }
+    /// The DailyNote for `date`, created through Resolve (DailyNote isn't creatable).
+    async fn daily_note(svc: &EntityService, date: &str) -> Entity {
+        resolve(svc, "", by_date(date), true)
+            .await
+            .expect("resolve daily note")
+            .entity
+            .expect("entity")
     }
 
     fn date(d: &str) -> Option<property_value::Value> {
@@ -1713,22 +1719,37 @@ mod tests {
         assert_eq!(entity.name, "June 13, 2026");
     }
 
+    // I-26: DailyNote isn't creatable; Create points at Resolve, which still
+    // creates it by date.
     #[tokio::test]
-    async fn create_derives_daily_note_name() {
-        let svc = entity_service(memory_pool().await);
-        let mut req = daily_note("2026-06-13");
-        req.name = Some("Client name".to_string());
+    async fn create_of_a_daily_note_is_failed_precondition() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
 
-        let created = create(&svc, req).await;
+        let err = try_create(
+            &svc,
+            CreateEntityRequest {
+                structure_type: "DailyNote".to_string(),
+                name: None,
+                properties: vec![date_property("2026-06-13")],
+            },
+        )
+        .await
+        .expect_err("DailyNote isn't creatable");
 
-        assert_eq!(created.name, "June 13, 2026");
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(err.message().contains("Resolve"), "{}", err.message());
+        assert_eq!(entity_count(&pool).await, 0);
+
+        let day = daily_note(&svc, "2026-06-13").await;
+        assert_eq!(day.name, "June 13, 2026");
     }
 
     #[tokio::test]
     async fn set_property_date_renames_daily_note() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
-        let note = create(&svc, daily_note("2026-06-13")).await;
+        let note = daily_note(&svc, "2026-06-13").await;
 
         let moved = set_property(&svc, &note.id, "date", date("2026-06-15"))
             .await
@@ -1753,8 +1774,8 @@ mod tests {
     async fn set_property_date_onto_existing_day_is_already_exists() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
-        create(&svc, daily_note("2026-06-13")).await;
-        let second = create(&svc, daily_note("2026-06-14")).await;
+        daily_note(&svc, "2026-06-13").await;
+        let second = daily_note(&svc, "2026-06-14").await;
 
         let err = set_property(&svc, &second.id, "date", date("2026-06-13"))
             .await
@@ -1775,8 +1796,8 @@ mod tests {
     #[tokio::test]
     async fn set_property_moves_a_daily_note_date_key() {
         let svc = entity_service(memory_pool().await);
-        let first = create(&svc, daily_note("2026-06-13")).await;
-        let second = create(&svc, daily_note("2026-06-14")).await;
+        let first = daily_note(&svc, "2026-06-13").await;
+        let second = daily_note(&svc, "2026-06-14").await;
 
         set_property(&svc, &first.id, "date", date("2026-06-15"))
             .await
