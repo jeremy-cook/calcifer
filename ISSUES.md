@@ -93,46 +93,6 @@ property is rejected, and a test covers it.
 
 ---
 
-### I-17 · `RichText.Put` sends no Watch event and has no conflict check · high · confirmed
-
-**Where:** `server/src/services/richtext.rs:53` (`put`), `server/src/services/entity.rs` (the only caller of `hub.publish`), `mcp-server/src/tools.ts:48-56` (`appendToNote`)
-
-**Problem:** Only `EntityService` publishes to the watch hub; `RichTextService` doesn't
-hold it. A `Put` changes the entity's links, referenced_dates and search index, but no
-other tab hears about it, and there's no event for the document itself. So when the
-agent appends to a note that's open in the browser, the editor never sees the new text,
-and its next debounced save replaces the whole document, wiping out the append. `Put`
-also doesn't check that the entity exists or that the property is a declared rich-text
-property, and the `richtext` table has no foreign key, so orphaned documents are
-possible.
-
-**Fix:** `Put` publishes an `Upserted` event for the entity and bumps its `updated_at`.
-Add a rich-text-changed event. Add `expected_updated_at` to `Put` and return
-`FailedPrecondition` on a mismatch; the MCP append (read, edit, write back) gets the same
-protection. Reject a `Put` for a missing entity or an undeclared property.
-
-**Done when:** a `Put` publishes an event other subscribers receive, a `Put` with a stale
-`expected_updated_at` fails with `FailedPrecondition`, a `Put` on a missing entity or
-undeclared property is rejected, and tests cover each.
-
----
-
-### I-18 · `RichText.Get` uses `NotFound` for "nothing saved yet" · low · confirmed
-
-**Where:** `server/src/services/richtext.rs:26-38` (`get`), `calcifer/src/model/richtext.ts:41`, `mcp-server/src/tools.ts:28`
-
-**Problem:** `Get` returns `NotFound` when no document row exists, whether or not the
-entity and property exist. Both clients turn `NotFound` into an empty document, so a real
-"no such entity" error looks the same as a fresh note.
-
-**Fix:** Return an empty document for a declared rich-text property of an existing
-entity, and keep `NotFound` for an entity or property that doesn't exist.
-
-**Done when:** `Get` on a new entity's declared rich-text property returns an empty doc,
-`Get` on a missing entity or undeclared property returns `NotFound`, and tests cover both.
-
----
-
 ### I-20 · `Entity` is both the write input and the read output · high · confirmed
 
 **Where:** `proto/calcifer/v1/services.proto:68-69` (`CreateEntityRequest`, `UpdateEntityRequest`), `server/src/services/entity.rs:49-51` (`persist_new_entity`), `server/src/services/entity.rs:576` (`update`)
@@ -411,22 +371,6 @@ instead of replacing the list. Deferred: revisit if the agent starts tagging.
 
 ---
 
-### I-35 · Pruning an empty daily note can delete content the agent just appended · medium · confirmed
-
-**Where:** `calcifer/src/components/calendar/DailyNoteSection.tsx:45-56`, `calcifer/src/model/richtext.ts:68` (`getRichTextSnapshot`)
-
-**Problem:** `DailyNoteSection`'s unmount effect deletes the day's note if the *cached*
-doc is empty. Nothing refreshes that cache when the agent appends (I-17), so a stale
-empty cache can delete a note that now has content. Confirmed by reading; not
-reproduced.
-
-**Fix:** Don't prune from a possibly stale cache: refresh the cache when the document
-changes (I-17's rich-text event), or check the server's current doc before deleting.
-
-**Done when:** leaving a day whose note the agent has appended to doesn't delete it.
-
----
-
 ### I-36 · `ResolveByName` returns a generic error when it loses a create race · low · confirmed
 
 **Where:** `server/src/services/entity.rs:803-804` (`resolve_by_name`)
@@ -484,6 +428,9 @@ T06), which can pick this up.
 
 ## Resolved
 
+- **I-17 · `RichText.Put` sends no Watch event and has no conflict check.** Fixed 2026-09-25. `Put` checks the entity and declared property, takes `expected_updated_at` (mismatch is `FailedPrecondition`) and publishes `rich_text_changed` plus `upserted`; covered by server tests. The MCP append sends the expectation and retries on conflict. The browser writes Watch's `rich_text_changed` to the cache, loads newer versions into an open editor when no local save is pending, sends `expected_updated_at` on serialised saves, and on a conflict reloads the server's doc with an inline notice (D3, no merge). Browser behaviour verified by build and lint only; not yet observed in the browser.
+- **I-18 · `RichText.Get` uses `NotFound` for "nothing saved yet".** Fixed 2026-09-25. `Get` returns an empty doc at the epoch for a declared, unsaved property and `NotFound` only for a missing entity or undeclared property; neither client treats `NotFound` as an empty doc any more.
+- **I-35 · Pruning an empty daily note can delete content the agent just appended.** Fixed 2026-09-25. The prune fetches the doc from the server (`deleteEntityIfRichTextEmpty`) and deletes only if it's empty; a write landing between that Get and the Delete can still be lost. Not yet observed in the browser.
 - **I-19 · Daily notes are sorted by name, not date.** Fixed 2026-09-25. `listByStructure` sorts DailyNotes by their ISO `date` property, newest first; undated notes sort last and ties break by `id`. Verified by reasoning and a script check of the comparator; not observed in the browser.
 - **I-8 · Updating a missing entity returns a foreign-key error.** Fixed 2026-09-24. Update checks `rows_affected()` and returns `NotFound` for an unknown id; covered by `update_missing_entity_is_not_found`.
 - **I-3 · `Update` can change an entity's `structure_type`.** Fixed 2026-09-24. Update no longer writes `structure_type`; a mismatch with the stored type returns `InvalidArgument`; covered by `update_rejects_structure_type_change`.
