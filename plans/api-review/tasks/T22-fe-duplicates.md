@@ -21,6 +21,15 @@ leftovers:
 - Handle anything else listed in I-33's progress note.
 - No behaviour change.
 
+Tech lead notes (from T21):
+- `useSetTodoStatus` (`model/todos.ts`, about l.180) builds a raw `{ case: 'select' }`.
+  Use `usePropertyWriters().setSelect` from `model/store.ts` instead.
+- Entity property reads still index the map directly in `model/todos.ts` (about l.42 and
+  l.49) and `routes/e.$id.tsx` (about l.194). `model/store.ts` has a private
+  `propertyOf` that reads through `Object.hasOwn`. Export one read helper and use it at
+  all three sites.
+- I-33's line numbers in `ISSUES.md` predate T15 and T21; locate by name, not line.
+
 ## Out of scope
 Anything not listed in I-33.
 

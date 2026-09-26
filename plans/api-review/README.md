@@ -234,8 +234,8 @@ user after Phase 2.
 | T19 | [buf naming and lint](tasks/T19-buf-naming.md) | all | T18 | none | done (ebeee38, feeea88) |
 | T20 | [Document the contract and TipTap doc schema](tasks/T20-contract-docs.md) | docs, proto comments | T19 | none (regenerates stubs) | done (2faa8a4, dcf0625, 95b3325) |
 | **Phase 5: frontend cleanup** |||||
-| T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | in progress (engineer: T21 engineer) |
-| T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | todo |
+| T21 | [FE write helpers; no proto/Connect imports in components](tasks/T21-fe-write-helpers.md) | fe | T20 | none | done (037f920, 27857fd) |
+| T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | in progress (engineer: T22 engineer) |
 | T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | todo |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
