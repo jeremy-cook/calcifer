@@ -2,7 +2,7 @@
 //!
 //! This is the Rust mirror of the FE's `extractDocReferences`
 //! (calcifer/src/model/linkSync.ts). It is the single source of truth for "what
-//! does this doc reference", used by `RichTextService.Put` to derive links and
+//! does this doc reference", used by `RichTextService.PutRichText` to derive links and
 //! referenced_dates server-side — so every writer (browser, MCP agent, future
 //! extraction) gets identical graph edges and no client authors a link directly.
 

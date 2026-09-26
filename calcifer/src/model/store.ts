@@ -15,6 +15,13 @@ import { entitiesQuery, removeEntity, writeEntity } from '~/model/sync'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
+// The entity RPCs wrap their entity in a response message; the server always
+// sets it, so a missing one is a protocol error.
+function requireEntity({ entity }: { entity?: Entity }): Entity {
+  if (!entity) throw new Error('response carried no entity')
+  return entity
+}
+
 // --- Queries ---
 
 // The Watch replica (`model/sync.ts`): empty until the first snapshot arrives.
@@ -22,13 +29,13 @@ export function useAllEntities(): Entity[] {
   return useQuery(entitiesQuery).data ?? []
 }
 
-// Seeded from the replica. `Get` runs only for an entity the replica doesn't
+// Seeded from the replica. `GetEntity` runs only for an entity the replica doesn't
 // hold yet (a deep link before the first snapshot) or doesn't hold at all;
 // after that Watch and the mutations keep it current, so it never refetches.
 export function useEntity(id: string) {
   return useQuery({
     queryKey: qk.entity(id),
-    queryFn: () => entityClient.get({ id }),
+    queryFn: async () => requireEntity(await entityClient.getEntity({ id })),
     initialData: () => getEntitiesSnapshot().find((e) => e.id === id),
     staleTime: Infinity,
     enabled: !!id,
@@ -46,7 +53,8 @@ interface CreateEntityVars {
 // the default name when `name` is omitted. Resolves to the saved entity.
 export function useCreateEntity() {
   const m = useMutation({
-    mutationFn: ({ structureType, name }: CreateEntityVars) => entityClient.create({ structureType, name }),
+    mutationFn: async ({ structureType, name }: CreateEntityVars) =>
+      requireEntity(await entityClient.createEntity({ structureType, name })),
     onSuccess: writeEntity,
   })
   return useCallback(
@@ -59,7 +67,7 @@ export function useCreateEntity() {
 export function useResolveDailyNote() {
   const m = useMutation({
     mutationFn: async (iso: string) => {
-      const { entity } = await entityClient.resolve({
+      const { entity } = await entityClient.resolveEntity({
         key: { case: 'date', value: iso },
         createIfMissing: true,
       })
@@ -80,16 +88,16 @@ function renamed(entity: Entity, name: string): Entity {
   return createMessage(EntitySchema, { ...entity, name })
 }
 
-// Rename through EntityService.Rename, which writes only the name, so it can't
+// Rename through EntityService.RenameEntity, which writes only the name, so it can't
 // undo a concurrent property edit. Optimistic on `name` in both caches. On
 // error only the name is restored, on the current cached entity (the I-6
 // per-entity rollback), so a concurrent edit to anything else survives.
 export function useRenameEntity() {
   const qc = useQueryClient()
   const { mutate } = useMutation({
-    mutationFn: ({ id, name }: RenameEntityVars) => entityClient.rename({ id, name }),
+    mutationFn: async ({ id, name }: RenameEntityVars) => requireEntity(await entityClient.renameEntity({ id, name })),
     onMutate: async ({ id, name }) => {
-      // The list is never refetched (Watch feeds it), so only a deep link's Get can be in flight.
+      // The list is never refetched (Watch feeds it), so only a deep link's GetEntity can be in flight.
       await qc.cancelQueries({ queryKey: qk.entity(id) })
       const prevEntityName = qc.getQueryData<Entity>(qk.entity(id))?.name
       const prevListName = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === id)?.name
@@ -129,7 +137,7 @@ function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['val
   return property ? property.value : null
 }
 
-// Write one property (`null` clears it) through EntityService.SetProperty, so
+// Write one property (`null` clears it) through EntityService.SetEntityProperty, so
 // edits to different properties of the same entity don't overwrite each other.
 // Optimistic on both caches, applied to the entity as currently cached (not the
 // caller's possibly stale copy) so quick successive edits all show. On error
@@ -145,14 +153,16 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
     onErrorRef.current = onError
   })
   const { mutate } = useMutation({
-    mutationFn: ({ entity, propertyId, value }: SetPropertyVars) =>
-      entityClient.setProperty({
-        entityId: entity.id,
-        propertyId,
-        value: value === null ? undefined : createMessage(PropertyValueSchema, { value }),
-      }),
+    mutationFn: async ({ entity, propertyId, value }: SetPropertyVars) =>
+      requireEntity(
+        await entityClient.setEntityProperty({
+          entityId: entity.id,
+          propertyId,
+          value: value === null ? undefined : createMessage(PropertyValueSchema, { value }),
+        }),
+      ),
     onMutate: async ({ entity, propertyId, value }) => {
-      // The list is never refetched (Watch feeds it), so only a deep link's Get can be in flight.
+      // The list is never refetched (Watch feeds it), so only a deep link's GetEntity can be in flight.
       await qc.cancelQueries({ queryKey: qk.entity(entity.id) })
       const cachedEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
       const cachedListEntity = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === entity.id)
@@ -188,7 +198,7 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
 // --- Pure edit builder (useSetProperty()'s optimistic apply) ---
 
 // `null` removes the property. The server still clears links for declared
-// relation properties that are absent (SetProperty also for ad-hoc ones), so
+// relation properties that are absent (SetEntityProperty also for ad-hoc ones), so
 // removing the last ref is safe.
 export function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
   const properties = { ...entity.properties }
@@ -199,7 +209,7 @@ export function withProperty(entity: Entity, propertyId: string, value: Property
 
 export function useDeleteEntity() {
   const m = useMutation({
-    mutationFn: (id: string) => entityClient.delete({ id }),
+    mutationFn: (id: string) => entityClient.deleteEntity({ id }),
     onSuccess: (_r, id) => removeEntity(id),
   })
   return useCallback((id: string) => void m.mutateAsync(id), [m])
@@ -217,7 +227,7 @@ export async function getOrCreateEntityForMention(
 ): Promise<{ id: string; name: string; structureType: string }> {
   // Server-authoritative get-or-create so the browser and the MCP agent share
   // one identity path. The server dedupes by (structureType, name).
-  const { entity } = await entityClient.resolve({
+  const { entity } = await entityClient.resolveEntity({
     structureType,
     key: { case: 'name', value: name },
     createIfMissing: true,
@@ -229,7 +239,7 @@ export async function getOrCreateEntityForMention(
 
 export function deleteEntityImperative(id: string): void {
   void entityClient
-    .delete({ id })
+    .deleteEntity({ id })
     .then(() => removeEntity(id))
     .catch((err) => console.error('delete failed', err))
 }

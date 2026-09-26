@@ -3,7 +3,7 @@ syntax = "proto3";
 package calcifer.v1;
 
 // The shape of the structure registry. The data itself is authored only in
-// server/src/structures.rs and served by StructureService.List (ADR 7).
+// server/src/structures.rs and served by StructureService.ListStructures (ADR 7).
 
 enum PropertyKind {
   PROPERTY_KIND_UNSPECIFIED = 0;

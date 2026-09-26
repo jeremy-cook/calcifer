@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/entities.proto.
  */
 export const file_calcifer_v1_entities: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLJAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLwoJcmVsYXRpb25zGAcgASgLMhouY2FsY2lmZXIudjEuRW50aXR5UmVmTGlzdEgAQgcKBXZhbHVlSgQIBhAHUghyaWNodGV4dCI1CgtSaWNoVGV4dFJlZhIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkipwEKCFJpY2hUZXh0EiUKA3JlZhgBIAEoCzIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmEgsKA2RvYxgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBI3ChNleHBlY3RlZF91cGRhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCKJAQoHTGlua1JlZhIKCgJpZBgBIAEoCRImCgZ0YXJnZXQYAiABKAsyFi5jYWxjaWZlci52MS5FbnRpdHlSZWYSGgoSc291cmNlX3Byb3BlcnR5X2lkGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIuECCgZFbnRpdHkSCgoCaWQYASABKAkSFgoOc3RydWN0dXJlX3R5cGUYAiABKAkSDAoEbmFtZRgDIAEoCRI3Cgpwcm9wZXJ0aWVzGAQgAygLMiMuY2FsY2lmZXIudjEuRW50aXR5LlByb3BlcnRpZXNFbnRyeRIjCgVsaW5rcxgFIAMoCzIULmNhbGNpZmVyLnYxLkxpbmtSZWYSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGAoQcmVmZXJlbmNlZF9kYXRlcxgIIAMoCRpNCg9Qcm9wZXJ0aWVzRW50cnkSCwoDa2V5GAEgASgJEikKBXZhbHVlGAIgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZToCOAFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("ChpjYWxjaWZlci92MS9lbnRpdGllcy5wcm90bxILY2FsY2lmZXIudjEiLwoJRW50aXR5UmVmEgoKAmlkGAEgASgJEhYKDnN0cnVjdHVyZV90eXBlGAIgASgJIjUKDUVudGl0eVJlZkxpc3QSJAoEcmVmcxgBIAMoCzIWLmNhbGNpZmVyLnYxLkVudGl0eVJlZiLJAQoNUHJvcGVydHlWYWx1ZRIOCgR0ZXh0GAEgASgJSAASEAoGbnVtYmVyGAIgASgBSAASDgoEZGF0ZRgDIAEoCUgAEhAKBnNlbGVjdBgEIAEoCUgAEioKCHJlbGF0aW9uGAUgASgLMhYuY2FsY2lmZXIudjEuRW50aXR5UmVmSAASLwoJcmVsYXRpb25zGAcgASgLMhouY2FsY2lmZXIudjEuRW50aXR5UmVmTGlzdEgAQgcKBXZhbHVlSgQIBhAHUghyaWNodGV4dCI1CgtSaWNoVGV4dFJlZhIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkiiQEKCFJpY2hUZXh0EiUKA3JlZhgBIAEoCzIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmEgsKA2RvYxgCIAEoCRIuCgp1cGRhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBVITZXhwZWN0ZWRfdXBkYXRlZF9hdCKJAQoHTGlua1JlZhIKCgJpZBgBIAEoCRImCgZ0YXJnZXQYAiABKAsyFi5jYWxjaWZlci52MS5FbnRpdHlSZWYSGgoSc291cmNlX3Byb3BlcnR5X2lkGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIuECCgZFbnRpdHkSCgoCaWQYASABKAkSFgoOc3RydWN0dXJlX3R5cGUYAiABKAkSDAoEbmFtZRgDIAEoCRI3Cgpwcm9wZXJ0aWVzGAQgAygLMiMuY2FsY2lmZXIudjEuRW50aXR5LlByb3BlcnRpZXNFbnRyeRIjCgVsaW5rcxgFIAMoCzIULmNhbGNpZmVyLnYxLkxpbmtSZWYSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASGAoQcmVmZXJlbmNlZF9kYXRlcxgIIAMoCRpNCg9Qcm9wZXJ0aWVzRW50cnkSCwoDa2V5GAEgASgJEikKBXZhbHVlGAIgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZToCOAFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message calcifer.v1.EntityRef
@@ -138,6 +138,8 @@ export const RichTextRefSchema: GenMessage<RichTextRef> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_entities, 3);
 
 /**
+ * Output only: clients write through RichTextService.PutRichText.
+ *
  * @generated from message calcifer.v1.RichText
  */
 export type RichText = Message<"calcifer.v1.RichText"> & {
@@ -155,16 +157,6 @@ export type RichText = Message<"calcifer.v1.RichText"> & {
    * @generated from field: google.protobuf.Timestamp updated_at = 3;
    */
   updatedAt?: Timestamp | undefined;
-
-  /**
-   * Put only; ignored on output. Unset means an unconditional write. Set means
-   * the write fails with FAILED_PRECONDITION unless the stored document's
-   * updated_at equals it exactly. The epoch (0 seconds, 0 nanos) means "expect
-   * nothing saved yet". Clients echo back the updated_at they last read.
-   *
-   * @generated from field: google.protobuf.Timestamp expected_updated_at = 4;
-   */
-  expectedUpdatedAt?: Timestamp | undefined;
 };
 
 /**
@@ -208,7 +200,7 @@ export const LinkRefSchema: GenMessage<LinkRef> = /*@__PURE__*/
 
 /**
  * Output only: no request message carries an Entity (ADR 8). Clients write
- * through Create, Rename, SetProperty and Delete.
+ * through CreateEntity, RenameEntity, SetEntityProperty and DeleteEntity.
  *
  * @generated from message calcifer.v1.Entity
  */

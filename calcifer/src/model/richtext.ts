@@ -3,12 +3,7 @@ import { create as createMessage } from '@bufbuild/protobuf'
 import { TimestampSchema, type Timestamp } from '@bufbuild/protobuf/wkt'
 import { Code, ConnectError } from '@connectrpc/connect'
 import { useQuery } from '@tanstack/react-query'
-import {
-  RichTextRefSchema,
-  RichTextSchema,
-  type RichText,
-  type RichTextRef,
-} from '@calcifer/proto/calcifer/v1/entities_pb'
+import { RichTextRefSchema, type RichText, type RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { qk, queryClient, richTextClient } from '~/model/api'
 
 // The address of one rich-text doc: an entity and one of its structure's
@@ -62,6 +57,13 @@ export function isNewerRichText(a: Timestamp | undefined, b: Timestamp | undefin
   return compareTimestamps(a, b) > 0
 }
 
+// The rich-text RPCs wrap their doc in a response message; the server always
+// sets it, so a missing one is a protocol error.
+function requireRichText({ richText }: { richText?: RichText }): RichText {
+  if (!richText) throw new Error('response carried no rich text')
+  return richText
+}
+
 function toState(rt: RichText): RichTextState {
   return { doc: rt.doc, updatedAt: rt.updatedAt }
 }
@@ -69,7 +71,7 @@ function toState(rt: RichText): RichTextState {
 // Reads the doc from the server, bypassing the cache. A declared but unsaved
 // doc comes back as '' at the epoch; any error (NotFound included) is thrown.
 export async function fetchRichText(ref: RichTextRef): Promise<RichTextState> {
-  const rt = await richTextClient.get({ entityId: ref.entityId, propertyId: ref.propertyId })
+  const rt = requireRichText(await richTextClient.getRichText({ entityId: ref.entityId, propertyId: ref.propertyId }))
   return toState(rt)
 }
 
@@ -139,8 +141,13 @@ interface SaveTarget {
 
 async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict }: SaveTarget): Promise<void> {
   try {
-    const saved = await richTextClient.put(
-      createMessage(RichTextSchema, { ref, doc, expectedUpdatedAt: queue.base ?? EPOCH }),
+    const saved = requireRichText(
+      await richTextClient.putRichText({
+        entityId: ref.entityId,
+        propertyId: ref.propertyId,
+        doc,
+        expectedUpdatedAt: queue.base ?? EPOCH,
+      }),
     )
     queue.base = saved.updatedAt
     writeRichTextIfNewer(saved)
@@ -164,7 +171,9 @@ async function reloadAfterConflict(
   onConflict: SaveTarget['onConflict'],
 ): Promise<void> {
   try {
-    const latest = await richTextClient.get({ entityId: ref.entityId, propertyId: ref.propertyId })
+    const latest = requireRichText(
+      await richTextClient.getRichText({ entityId: ref.entityId, propertyId: ref.propertyId }),
+    )
     queue.base = latest.updatedAt
     writeRichTextIfNewer(latest)
     onConflict?.(toState(latest))

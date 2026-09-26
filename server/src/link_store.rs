@@ -11,7 +11,7 @@ use crate::structures::{self, relation_properties};
 /// link_id/created_at pairs for that scope, delete them, then re-insert one row per
 /// target, reusing the prior link_id/created_at when a target repeats (preserves
 /// backlink recency across an edit) and skipping targets with no `entities` row.
-/// Runs inside an already-open transaction. Shared by `RichTextService.Put`
+/// Runs inside an already-open transaction. Shared by `RichTextService.PutRichText`
 /// (content-derived links) and `sync_relation_property` (relation-property links).
 pub(crate) async fn replace_scoped_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -76,7 +76,7 @@ pub(crate) async fn replace_scoped_links(
 }
 
 /// Scoped-replace links derived from an entity's `relation`/`relations` property
-/// values (as opposed to richtext-derived links, owned by `RichTextService.Put`).
+/// values (as opposed to richtext-derived links, owned by `RichTextService.PutRichText`).
 /// Each existing target is checked by `check_relation_targets` first, so a bad
 /// ref fails the whole write.
 ///
@@ -129,7 +129,7 @@ pub(crate) fn is_relation_value(value: Option<&property_value::Value>) -> bool {
 
 /// Scoped-replace the links of one relation property from its new `value`
 /// (`None`, or a non-relation value, clears them). The per-property step of
-/// `sync_relation_links`, also called on its own by `EntityService.SetProperty`.
+/// `sync_relation_links`, also called on its own by `EntityService.SetEntityProperty`.
 /// Callers decide which properties are relation properties; this doesn't check.
 pub(crate) async fn sync_relation_property(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,

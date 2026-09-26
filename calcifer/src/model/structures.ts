@@ -8,12 +8,12 @@ export { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
 export type { PropertyDef, SelectOption, StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 
 // The registry itself (types, names, properties, options, flags) is authored in
-// server/src/structures.rs and fetched once over StructureService.List (ADR 7).
+// server/src/structures.rs and fetched once over StructureService.ListStructures (ADR 7).
 // It never changes while the server runs. App doesn't render the router until
 // it has loaded, so everything below the router may read it synchronously.
 export const structuresQuery = queryOptions({
   queryKey: qk.structures(),
-  queryFn: async () => (await structureClient.list({})).structures,
+  queryFn: async () => (await structureClient.listStructures({})).structures,
   staleTime: Infinity,
   gcTime: Infinity,
 })

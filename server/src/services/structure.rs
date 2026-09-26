@@ -13,7 +13,7 @@ pub struct StructureService;
 #[tonic::async_trait]
 impl StructureServiceTrait for StructureService {
     /// Every structure, in table order.
-    async fn list(
+    async fn list_structures(
         &self,
         _req: Request<ListStructuresRequest>,
     ) -> Result<Response<ListStructuresResponse>, Status> {
@@ -34,7 +34,7 @@ mod tests {
 
     async fn list() -> Vec<StructureDef> {
         StructureService
-            .list(Request::new(ListStructuresRequest {}))
+            .list_structures(Request::new(ListStructuresRequest {}))
             .await
             .expect("list")
             .into_inner()
@@ -181,7 +181,7 @@ mod tests {
     async fn resolved_todo_carries_listed_select_defaults() {
         let svc = entity_service(memory_pool().await);
         let entity = svc
-            .resolve(Request::new(ResolveEntityRequest {
+            .resolve_entity(Request::new(ResolveEntityRequest {
                 structure_type: "Todo".to_string(),
                 key: Some(resolve_entity_request::Key::Name("Water plants".to_string())),
                 create_if_missing: true,

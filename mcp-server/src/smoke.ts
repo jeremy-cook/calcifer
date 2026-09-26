@@ -3,16 +3,16 @@
 import { entityClient } from './calciferClient.js'
 
 async function main(): Promise<void> {
-  const before = await entityClient.list({ structureType: '' })
+  const before = await entityClient.listEntities({ structureType: '' })
   console.log(`list: ${before.entities.length} entities`)
   for (const e of before.entities) console.log(`  - ${e.structureType}: ${e.name}`)
 
   const name = `Node smoke ${new Date().toISOString().slice(11, 19)}`
   console.log(`create: "${name}"`)
-  const created = await entityClient.create({ structureType: 'Note', name })
+  const created = (await entityClient.createEntity({ structureType: 'Note', name })).entity!
   console.log(`  -> created ${created.id}`)
 
-  const after = await entityClient.list({ structureType: '' })
+  const after = await entityClient.listEntities({ structureType: '' })
   console.log(`list: ${after.entities.length} entities (was ${before.entities.length})`)
 
   if (after.entities.length !== before.entities.length + 1) {

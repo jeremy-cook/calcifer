@@ -55,16 +55,17 @@ async function pureRoundTrip(): Promise<void> {
 
 async function liveDerivation(): Promise<void> {
   const resolve = async (structureType: string, name: string) => {
-    const r = await entityClient.resolve({ structureType, key: { case: 'name', value: name }, createIfMissing: true })
+    const r = await entityClient.resolveEntity({ structureType, key: { case: 'name', value: name }, createIfMissing: true })
     return { id: r.entity!.id, name: r.entity!.name }
   }
   const md = 'Notes on [[Krebs Cycle]] — central to #metabolism. Reviewed 2026-07-04.'
   const doc = await toTipTap(md, resolve)
 
-  const { id: srcId } = await entityClient.create({ structureType: 'Note', name: `MD test ${Date.now()}` })
-  await richTextClient.put({ ref: { entityId: srcId, propertyId: 'content' }, doc: JSON.stringify(doc) })
+  const { id: srcId } = (await entityClient.createEntity({ structureType: 'Note', name: `MD test ${Date.now()}` }))
+    .entity!
+  await richTextClient.putRichText({ entityId: srcId, propertyId: 'content', doc: JSON.stringify(doc) })
 
-  const ent = await entityClient.get({ id: srcId })
+  const ent = (await entityClient.getEntity({ id: srcId })).entity!
   assert(ent.links.length === 2, `expected 2 derived links, got ${ent.links.length}`)
   assert(ent.referencedDates.includes('2026-07-04'), 'date reference derived')
   const kinds = ent.links.map((l) => l.target?.structureType).sort()

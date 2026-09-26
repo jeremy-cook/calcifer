@@ -6,7 +6,8 @@ use crate::error::AppError;
 use crate::link_store::replace_scoped_links;
 use crate::links::{extract_doc_references, extract_plain_text};
 use crate::proto::{
-    entity_event, rich_text_service_server::RichTextService as RichTextServiceTrait, RichText,
+    rich_text_service_server::RichTextService as RichTextServiceTrait, watch_entities_response,
+    GetRichTextRequest, GetRichTextResponse, PutRichTextRequest, PutRichTextResponse, RichText,
     RichTextRef,
 };
 use crate::services::entity::{load_entity, ts_from_millis};
@@ -48,7 +49,7 @@ async fn check_declared(conn: &mut SqliteConnection, r: &RichTextRef) -> Result<
 }
 
 /// Whether the stored document's `updated_at` (None when nothing is saved)
-/// satisfies the Put's `expected_updated_at`. Unset expects nothing; the epoch
+/// satisfies the PutRichText's `expected_updated_at`. Unset expects nothing; the epoch
 /// expects no saved document; anything else must equal the stored value exactly.
 fn expectation_met(expected: Option<&prost_types::Timestamp>, stored: Option<i64>) -> bool {
     let Some(expected) = expected else {
@@ -63,8 +64,18 @@ fn expectation_met(expected: Option<&prost_types::Timestamp>, stored: Option<i64
 
 #[tonic::async_trait]
 impl RichTextServiceTrait for RichTextService {
-    async fn get(&self, req: Request<RichTextRef>) -> Result<Response<RichText>, Status> {
-        let r = req.into_inner();
+    async fn get_rich_text(
+        &self,
+        req: Request<GetRichTextRequest>,
+    ) -> Result<Response<GetRichTextResponse>, Status> {
+        let GetRichTextRequest {
+            entity_id,
+            property_id,
+        } = req.into_inner();
+        let r = RichTextRef {
+            entity_id,
+            property_id,
+        };
         let mut conn = self.pool.acquire().await.map_err(AppError::from)?;
         check_declared(&mut conn, &r).await?;
 
@@ -84,11 +95,12 @@ impl RichTextServiceTrait for RichTextService {
             None => (String::new(), 0),
         };
 
-        Ok(Response::new(RichText {
-            r#ref: Some(r),
-            doc,
-            updated_at: Some(ts_from_millis(updated_at)),
-            expected_updated_at: None,
+        Ok(Response::new(GetRichTextResponse {
+            rich_text: Some(RichText {
+                r#ref: Some(r),
+                doc,
+                updated_at: Some(ts_from_millis(updated_at)),
+            }),
         }))
     }
 
@@ -97,12 +109,15 @@ impl RichTextServiceTrait for RichTextService {
     /// from the doc content — so no client (browser, MCP agent, …) ever authors a link directly.
     /// With `expected_updated_at` set, the write is conditional on the stored doc's
     /// `updated_at` (see the proto). Publishes `rich_text_changed` then `upserted`.
-    async fn put(&self, req: Request<RichText>) -> Result<Response<RichText>, Status> {
+    async fn put_rich_text(
+        &self,
+        req: Request<PutRichTextRequest>,
+    ) -> Result<Response<PutRichTextResponse>, Status> {
         let body = req.into_inner();
-        let r = body
-            .r#ref
-            .clone()
-            .ok_or_else(|| Status::invalid_argument("richtext missing ref"))?;
+        let r = RichTextRef {
+            entity_id: body.entity_id.clone(),
+            property_id: body.property_id.clone(),
+        };
         let now = chrono::Utc::now().timestamp_millis();
 
         // IMMEDIATE takes the write lock before the expectation check reads. A DEFERRED
@@ -119,8 +134,8 @@ impl RichTextServiceTrait for RichTextService {
 
         // 0. Validate the target and check the caller's expectation against what's stored.
         check_declared(&mut tx, &r).await?;
-        let entity_id = r.entity_id;
-        let property_id = r.property_id;
+        let entity_id = body.entity_id;
+        let property_id = body.property_id;
 
         let previous = sqlx::query_scalar!(
             "SELECT updated_at FROM richtext WHERE entity_id = ? AND property_id = ?",
@@ -251,19 +266,23 @@ impl RichTextServiceTrait for RichTextService {
         self.embed.enqueue(&entity_id);
 
         let saved = RichText {
-            r#ref: body.r#ref,
+            r#ref: Some(r),
             doc: body.doc,
             updated_at: Some(ts_from_millis(updated_at)),
-            expected_updated_at: None,
         };
         let entity = load_entity(&self.pool, &entity_id)
             .await
             .map_err(Status::from)?;
         self.hub
-            .publish(entity_event::Event::RichTextChanged(saved.clone()));
-        self.hub.publish(entity_event::Event::Upserted(entity));
+            .publish(watch_entities_response::Event::RichTextChanged(
+                saved.clone(),
+            ));
+        self.hub
+            .publish(watch_entities_response::Event::Upserted(entity));
 
-        Ok(Response::new(saved))
+        Ok(Response::new(PutRichTextResponse {
+            rich_text: Some(saved),
+        }))
     }
 }
 
@@ -294,10 +313,12 @@ mod tests {
 
     async fn create(pool: &SqlitePool, req: CreateEntityRequest) -> Entity {
         entity_service(pool.clone())
-            .create(Request::new(req))
+            .create_entity(Request::new(req))
             .await
             .expect("create")
             .into_inner()
+            .entity
+            .expect("entity")
     }
 
     fn rt_ref(entity_id: &str, property_id: &str) -> RichTextRef {
@@ -313,18 +334,23 @@ mod tests {
         doc: &str,
         expected: Option<prost_types::Timestamp>,
     ) -> Result<RichText, Status> {
-        svc.put(Request::new(RichText {
-            r#ref: Some(r),
+        svc.put_rich_text(Request::new(PutRichTextRequest {
+            entity_id: r.entity_id,
+            property_id: r.property_id,
             doc: doc.to_string(),
-            updated_at: None,
             expected_updated_at: expected,
         }))
         .await
-        .map(Response::into_inner)
+        .map(|res| res.into_inner().rich_text.expect("rich_text"))
     }
 
     async fn get(svc: &RichTextService, r: RichTextRef) -> Result<RichText, Status> {
-        svc.get(Request::new(r)).await.map(Response::into_inner)
+        svc.get_rich_text(Request::new(GetRichTextRequest {
+            entity_id: r.entity_id,
+            property_id: r.property_id,
+        }))
+        .await
+        .map(|res| res.into_inner().rich_text.expect("rich_text"))
     }
 
     #[tokio::test]
@@ -433,11 +459,11 @@ mod tests {
             .expect("put");
 
         match rx.try_recv().expect("first event").event {
-            Some(entity_event::Event::RichTextChanged(rt)) => assert_eq!(rt, saved),
+            Some(watch_entities_response::Event::RichTextChanged(rt)) => assert_eq!(rt, saved),
             other => panic!("expected rich_text_changed first, got {other:?}"),
         }
         match rx.try_recv().expect("second event").event {
-            Some(entity_event::Event::Upserted(e)) => {
+            Some(watch_entities_response::Event::Upserted(e)) => {
                 assert_eq!(e.id, entity.id);
                 assert_eq!(e.updated_at, saved.updated_at);
             }

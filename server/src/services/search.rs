@@ -332,10 +332,12 @@ mod tests {
 
     async fn create(pool: &SqlitePool, name: &str) -> Entity {
         entity_service(pool.clone())
-            .create(Request::new(note(name)))
+            .create_entity(Request::new(note(name)))
             .await
             .expect("create")
             .into_inner()
+            .entity
+            .expect("entity")
     }
 
     /// Store one chunk for `entity_id` with `embedding`, as the embed worker would.

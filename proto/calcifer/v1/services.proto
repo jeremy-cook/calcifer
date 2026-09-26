@@ -4,36 +4,35 @@ package calcifer.v1;
 
 import "calcifer/v1/entities.proto";
 import "calcifer/v1/structures.proto";
-import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
 service EntityService {
-  rpc Get(GetEntityRequest) returns (Entity);
-  // For the agent: the frontend's replica comes from Watch (ADR 9). An empty
+  rpc GetEntity(GetEntityRequest) returns (GetEntityResponse);
+  // For the agent: the frontend's replica comes from WatchEntities (ADR 9). An empty
   // structure_type lists every entity; one not in the registry is
   // INVALID_ARGUMENT.
-  rpc List(ListEntitiesRequest) returns (ListEntitiesResponse);
+  rpc ListEntities(ListEntitiesRequest) returns (ListEntitiesResponse);
   // Create a new entity from intent. The server mints the id, timestamps,
   // default properties and default name ("Untitled <structure name>", or for a
   // unique-names structure the first free "Untitled <name> N"). INVALID_ARGUMENT
   // for a structure_type not in the registry or a property value of the wrong
   // kind; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
-  // comes from Resolve by date); ALREADY_EXISTS for a taken Tag name.
-  rpc Create(CreateEntityRequest) returns (Entity);
+  // comes from ResolveEntity by date); ALREADY_EXISTS for a taken Tag name.
+  rpc CreateEntity(CreateEntityRequest) returns (CreateEntityResponse);
   // Change only an entity's name. Other properties are untouched, so a rename
-  // doesn't overwrite a concurrent SetProperty. The name is trimmed; a blank
+  // doesn't overwrite a concurrent SetEntityProperty. The name is trimmed; a blank
   // one is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
   // for a structure whose name isn't editable (DailyNote), ALREADY_EXISTS for a
   // taken Tag name.
-  rpc Rename(RenameEntityRequest) returns (Entity);
+  rpc RenameEntity(RenameEntityRequest) returns (RenameEntityResponse);
   // Write one property without resending the rest of the entity, so concurrent
   // edits to different properties don't overwrite each other. Returns the saved
-  // entity. Renames go through Rename.
+  // entity. Renames go through RenameEntity.
   // A DailyNote's name is derived from its date: setting `date` on a DailyNote
   // also sets its name, and fails with ALREADY_EXISTS if that day already has a
   // DailyNote.
-  rpc SetProperty(SetPropertyRequest) returns (Entity);
-  rpc Delete(DeleteEntityRequest) returns (google.protobuf.Empty);
+  rpc SetEntityProperty(SetEntityPropertyRequest) returns (SetEntityPropertyResponse);
+  rpc DeleteEntity(DeleteEntityRequest) returns (DeleteEntityResponse);
   // One-way replication of the whole entity set (ADR 9):
   // - The first message on every stream is a `snapshot`.
   // - After it come events with increasing `revision`.
@@ -45,7 +44,7 @@ service EntityService {
   //   revisions across streams.
   // A reconnect is a new stream, so it starts with a snapshot; there is no
   // resume from a revision.
-  rpc Watch(WatchRequest) returns (stream EntityEvent);
+  rpc WatchEntities(WatchEntitiesRequest) returns (stream WatchEntitiesResponse);
   // Get-or-create one entity by a key: a (structure_type, name) pair for
   // [[wikilinks]], mentions and #tags, or a calendar day for its DailyNote. The
   // single server-authoritative identity path for every client. The server
@@ -54,13 +53,13 @@ service EntityService {
   // structures several entities can share a name: the one with the oldest
   // created_at wins, and the lowest id breaks ties. A day has at most one
   // DailyNote.
-  rpc Resolve(ResolveEntityRequest) returns (ResolveEntityResponse);
+  rpc ResolveEntity(ResolveEntityRequest) returns (ResolveEntityResponse);
   // The links pointing AT an entity: one Backlink per link row, so a source
   // that links from two properties appears twice. Newest `created_at` first;
   // ties go to the lower source entity id, then the lower link id. Self-links
   // (a source linking to itself) are excluded, as the frontend's backlinks
   // panel excludes them. NOT_FOUND for an unknown entity_id.
-  // For the agent: the frontend derives backlinks from its Watch replica.
+  // For the agent: the frontend derives backlinks from its WatchEntities replica.
   rpc ListBacklinks(ListBacklinksRequest) returns (ListBacklinksResponse);
 }
 
@@ -69,8 +68,8 @@ service RichTextService {
   // epoch updated_at. NOT_FOUND means the entity doesn't exist. INVALID_ARGUMENT
   // means the property isn't a declared rich-text property of the entity's
   // structure.
-  rpc Get(RichTextRef) returns (RichText);
-  rpc Put(RichText) returns (RichText);
+  rpc GetRichText(GetRichTextRequest) returns (GetRichTextResponse);
+  rpc PutRichText(PutRichTextRequest) returns (PutRichTextResponse);
 }
 
 // Search over note names + bodies: lexical (SQLite FTS5), semantic (embeds the
@@ -85,7 +84,7 @@ service SearchService {
 // fetch it instead of keeping their own copy. No filters: every structure, in
 // the server's table order.
 service StructureService {
-  rpc List(ListStructuresRequest) returns (ListStructuresResponse);
+  rpc ListStructures(ListStructuresRequest) returns (ListStructuresResponse);
 }
 
 // How Search ranks. With embeddings off (the model failed to load), SEMANTIC and
@@ -122,6 +121,7 @@ message SearchHit {
 }
 
 message GetEntityRequest      { string id = 1; }
+message GetEntityResponse     { Entity entity = 1; }
 message ListEntitiesRequest   { string structure_type = 1; }
 message ListEntitiesResponse  { repeated Entity entities = 1; }
 message CreateEntityRequest {
@@ -135,14 +135,18 @@ message CreateEntityRequest {
   // same id). The server mints the id, timestamps and default properties.
   map<string, PropertyValue> properties = 4;   // keyed by property id
 }
+message CreateEntityResponse  { Entity entity = 1; }
 message RenameEntityRequest   { string id = 1; string name = 2; }
+message RenameEntityResponse  { Entity entity = 1; }
 message DeleteEntityRequest   { string id = 1; }
-message SetPropertyRequest {
+message DeleteEntityResponse  {}
+message SetEntityPropertyRequest {
   string entity_id = 1;
   string property_id = 2;
   PropertyValue value = 3;   // unset, or set with no case = clear (delete the property row)
 }
-message WatchRequest          {}
+message SetEntityPropertyResponse { Entity entity = 1; }
+message WatchEntitiesRequest  {}
 
 message ListBacklinksRequest { string entity_id = 1; }
 message Backlink {
@@ -168,14 +172,14 @@ message ResolveEntityResponse {
   bool created = 2;                   // true if this call minted the entity
 }
 
-// Every entity, sent by Watch at the start of a stream and after a lag.
+// Every entity, sent by WatchEntities at the start of a stream and after a lag.
 message EntitySnapshot { repeated Entity entities = 1; }
 
-message EntityEvent {
+message WatchEntitiesResponse {
   oneof event {
     Entity upserted = 1;
     string deleted_id = 2;
-    // A RichTextService.Put saved this document (ref, doc, updated_at).
+    // A RichTextService.PutRichText saved this document (ref, doc, updated_at).
     RichText rich_text_changed = 3;
     // Replaces the client's whole entity set. Rich-text docs aren't included.
     EntitySnapshot snapshot = 4;
@@ -184,3 +188,21 @@ message EntityEvent {
   // current as of; the events after it carry higher ones.
   uint64 revision = 15;
 }
+
+message GetRichTextRequest {
+  string entity_id = 1;
+  string property_id = 2;   // a declared rich-text property of the entity's structure
+}
+message GetRichTextResponse { RichText rich_text = 1; }
+
+message PutRichTextRequest {
+  string entity_id = 1;
+  string property_id = 2;   // a declared rich-text property of the entity's structure
+  string doc = 3;
+  // Unset means an unconditional write. Set means the write fails with
+  // FAILED_PRECONDITION unless the stored document's updated_at equals it
+  // exactly. The epoch (0 seconds, 0 nanos) means "expect nothing saved yet".
+  // Clients echo back the updated_at they last read.
+  google.protobuf.Timestamp expected_updated_at = 4;
+}
+message PutRichTextResponse { RichText rich_text = 1; }

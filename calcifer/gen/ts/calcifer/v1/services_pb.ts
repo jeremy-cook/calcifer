@@ -5,19 +5,19 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Entity, EntitySchema, PropertyValue, RichText, RichTextRefSchema, RichTextSchema } from "./entities_pb";
+import type { Entity, PropertyValue, RichText } from "./entities_pb";
 import { file_calcifer_v1_entities } from "./entities_pb";
 import type { StructureDef } from "./structures_pb";
 import { file_calcifer_v1_structures } from "./structures_pb";
-import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiVAoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDRIlCgRtb2RlGAMgASgOMhcuY2FsY2lmZXIudjEuU2VhcmNoTW9kZSI2Cg5TZWFyY2hSZXNwb25zZRIkCgRoaXRzGAEgAygLMhYuY2FsY2lmZXIudjEuU2VhcmNoSGl0IigKCk1hdGNoUmFuZ2USDQoFc3RhcnQYASABKA0SCwoDZW5kGAIgASgNInoKCVNlYXJjaEhpdBIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSDwoHc25pcHBldBgCIAEoCRINCgVzY29yZRgDIAEoARIoCgdtYXRjaGVzGAQgAygLMhcuY2FsY2lmZXIudjEuTWF0Y2hSYW5nZSIeChBHZXRFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIi0KE0xpc3RFbnRpdGllc1JlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkiPQoUTGlzdEVudGl0aWVzUmVzcG9uc2USJQoIZW50aXRpZXMYASADKAsyEy5jYWxjaWZlci52MS5FbnRpdHki7AEKE0NyZWF0ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYAiABKAkSEQoEbmFtZRgDIAEoCUgAiAEBEkQKCnByb3BlcnRpZXMYBCADKAsyMC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0LlByb3BlcnRpZXNFbnRyeRpNCg9Qcm9wZXJ0aWVzRW50cnkSCwoDa2V5GAEgASgJEikKBXZhbHVlGAIgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZToCOAFCBwoFX25hbWVKBAgBEAJSBmVudGl0eSIvChNSZW5hbWVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkiIQoTRGVsZXRlRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSJnChJTZXRQcm9wZXJ0eVJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJEikKBXZhbHVlGAMgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZSIOCgxXYXRjaFJlcXVlc3QiKQoUTGlzdEJhY2tsaW5rc1JlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJInsKCEJhY2tsaW5rEiMKBnNvdXJjZRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIaChJzb3VyY2VfcHJvcGVydHlfaWQYAiABKAkSLgoKY3JlYXRlZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQQoVTGlzdEJhY2tsaW5rc1Jlc3BvbnNlEigKCWJhY2tsaW5rcxgBIAMoCzIVLmNhbGNpZmVyLnYxLkJhY2tsaW5rIhcKFUxpc3RTdHJ1Y3R1cmVzUmVxdWVzdCJHChZMaXN0U3RydWN0dXJlc1Jlc3BvbnNlEi0KCnN0cnVjdHVyZXMYASADKAsyGS5jYWxjaWZlci52MS5TdHJ1Y3R1cmVEZWYicAoUUmVzb2x2ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkSDgoEbmFtZRgCIAEoCUgAEg4KBGRhdGUYAyABKAlIABIZChFjcmVhdGVfaWZfbWlzc2luZxgEIAEoCEIFCgNrZXkiTQoVUmVzb2x2ZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIjcKDkVudGl0eVNuYXBzaG90EiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IswBCgtFbnRpdHlFdmVudBInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SAASLwoIc25hcHNob3QYBCABKAsyGy5jYWxjaWZlci52MS5FbnRpdHlTbmFwc2hvdEgAEhAKCHJldmlzaW9uGA8gASgEQgcKBWV2ZW50KnQKClNlYXJjaE1vZGUSGwoXU0VBUkNIX01PREVfVU5TUEVDSUZJRUQQABIXChNTRUFSQ0hfTU9ERV9MRVhJQ0FMEAESGAoUU0VBUkNIX01PREVfU0VNQU5USUMQAhIWChJTRUFSQ0hfTU9ERV9IWUJSSUQQAzKMBQoNRW50aXR5U2VydmljZRI5CgNHZXQSHS5jYWxjaWZlci52MS5HZXRFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EksKBExpc3QSIC5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXF1ZXN0GiEuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVzcG9uc2USPwoGQ3JlYXRlEiAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdBoTLmNhbGNpZmVyLnYxLkVudGl0eRI/CgZSZW5hbWUSIC5jYWxjaWZlci52MS5SZW5hbWVFbnRpdHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EkMKC1NldFByb3BlcnR5Eh8uY2FsY2lmZXIudjEuU2V0UHJvcGVydHlSZXF1ZXN0GhMuY2FsY2lmZXIudjEuRW50aXR5EkIKBkRlbGV0ZRIgLmNhbGNpZmVyLnYxLkRlbGV0ZUVudGl0eVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSPgoFV2F0Y2gSGS5jYWxjaWZlci52MS5XYXRjaFJlcXVlc3QaGC5jYWxjaWZlci52MS5FbnRpdHlFdmVudDABElAKB1Jlc29sdmUSIS5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVxdWVzdBoiLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXNwb25zZRJWCg1MaXN0QmFja2xpbmtzEiEuY2FsY2lmZXIudjEuTGlzdEJhY2tsaW5rc1JlcXVlc3QaIi5jYWxjaWZlci52MS5MaXN0QmFja2xpbmtzUmVzcG9uc2UyfgoPUmljaFRleHRTZXJ2aWNlEjYKA0dldBIYLmNhbGNpZmVyLnYxLlJpY2hUZXh0UmVmGhUuY2FsY2lmZXIudjEuUmljaFRleHQSMwoDUHV0EhUuY2FsY2lmZXIudjEuUmljaFRleHQaFS5jYWxjaWZlci52MS5SaWNoVGV4dDJSCg1TZWFyY2hTZXJ2aWNlEkEKBlNlYXJjaBIaLmNhbGNpZmVyLnYxLlNlYXJjaFJlcXVlc3QaGy5jYWxjaWZlci52MS5TZWFyY2hSZXNwb25zZTJjChBTdHJ1Y3R1cmVTZXJ2aWNlEk8KBExpc3QSIi5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1JlcXVlc3QaIy5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1Jlc3BvbnNlYgZwcm90bzM", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiVAoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDRIlCgRtb2RlGAMgASgOMhcuY2FsY2lmZXIudjEuU2VhcmNoTW9kZSI2Cg5TZWFyY2hSZXNwb25zZRIkCgRoaXRzGAEgAygLMhYuY2FsY2lmZXIudjEuU2VhcmNoSGl0IigKCk1hdGNoUmFuZ2USDQoFc3RhcnQYASABKA0SCwoDZW5kGAIgASgNInoKCVNlYXJjaEhpdBIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSDwoHc25pcHBldBgCIAEoCRINCgVzY29yZRgDIAEoARIoCgdtYXRjaGVzGAQgAygLMhcuY2FsY2lmZXIudjEuTWF0Y2hSYW5nZSIeChBHZXRFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIjgKEUdldEVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5IuwBChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARJECgpwcm9wZXJ0aWVzGAQgAygLMjAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdC5Qcm9wZXJ0aWVzRW50cnkaTQoPUHJvcGVydGllc0VudHJ5EgsKA2tleRgBIAEoCRIpCgV2YWx1ZRgCIAEoCzIaLmNhbGNpZmVyLnYxLlByb3BlcnR5VmFsdWU6AjgBQgcKBV9uYW1lSgQIARACUgZlbnRpdHkiOwoUQ3JlYXRlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Ii8KE1JlbmFtZUVudGl0eVJlcXVlc3QSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCSI7ChRSZW5hbWVFbnRpdHlSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiIQoTRGVsZXRlRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCSIWChREZWxldGVFbnRpdHlSZXNwb25zZSJtChhTZXRFbnRpdHlQcm9wZXJ0eVJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJEikKBXZhbHVlGAMgASgLMhouY2FsY2lmZXIudjEuUHJvcGVydHlWYWx1ZSJAChlTZXRFbnRpdHlQcm9wZXJ0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSIWChRXYXRjaEVudGl0aWVzUmVxdWVzdCIpChRMaXN0QmFja2xpbmtzUmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkiewoIQmFja2xpbmsSIwoGc291cmNlGAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5EhoKEnNvdXJjZV9wcm9wZXJ0eV9pZBgCIAEoCRIuCgpjcmVhdGVkX2F0GAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJBChVMaXN0QmFja2xpbmtzUmVzcG9uc2USKAoJYmFja2xpbmtzGAEgAygLMhUuY2FsY2lmZXIudjEuQmFja2xpbmsiFwoVTGlzdFN0cnVjdHVyZXNSZXF1ZXN0IkcKFkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2USLQoKc3RydWN0dXJlcxgBIAMoCzIZLmNhbGNpZmVyLnYxLlN0cnVjdHVyZURlZiJwChRSZXNvbHZlRW50aXR5UmVxdWVzdBIWCg5zdHJ1Y3R1cmVfdHlwZRgBIAEoCRIOCgRuYW1lGAIgASgJSAASDgoEZGF0ZRgDIAEoCUgAEhkKEWNyZWF0ZV9pZl9taXNzaW5nGAQgASgIQgUKA2tleSJNChVSZXNvbHZlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB2NyZWF0ZWQYAiABKAgiNwoORW50aXR5U25hcHNob3QSJQoIZW50aXRpZXMYASADKAsyEy5jYWxjaWZlci52MS5FbnRpdHki1gEKFVdhdGNoRW50aXRpZXNSZXNwb25zZRInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SAASLwoIc25hcHNob3QYBCABKAsyGy5jYWxjaWZlci52MS5FbnRpdHlTbmFwc2hvdEgAEhAKCHJldmlzaW9uGA8gASgEQgcKBWV2ZW50IjwKEkdldFJpY2hUZXh0UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkiPwoTR2V0UmljaFRleHRSZXNwb25zZRIoCglyaWNoX3RleHQYASABKAsyFS5jYWxjaWZlci52MS5SaWNoVGV4dCKCAQoSUHV0UmljaFRleHRSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRILCgNkb2MYAyABKAkSNwoTZXhwZWN0ZWRfdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPwoTUHV0UmljaFRleHRSZXNwb25zZRIoCglyaWNoX3RleHQYASABKAsyFS5jYWxjaWZlci52MS5SaWNoVGV4dCp0CgpTZWFyY2hNb2RlEhsKF1NFQVJDSF9NT0RFX1VOU1BFQ0lGSUVEEAASFwoTU0VBUkNIX01PREVfTEVYSUNBTBABEhgKFFNFQVJDSF9NT0RFX1NFTUFOVElDEAISFgoSU0VBUkNIX01PREVfSFlCUklEEAMynQYKDUVudGl0eVNlcnZpY2USSgoJR2V0RW50aXR5Eh0uY2FsY2lmZXIudjEuR2V0RW50aXR5UmVxdWVzdBoeLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlc3BvbnNlElMKDExpc3RFbnRpdGllcxIgLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1JlcXVlc3QaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZRJTCgxDcmVhdGVFbnRpdHkSIC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0GiEuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVzcG9uc2USUwoMUmVuYW1lRW50aXR5EiAuY2FsY2lmZXIudjEuUmVuYW1lRW50aXR5UmVxdWVzdBohLmNhbGNpZmVyLnYxLlJlbmFtZUVudGl0eVJlc3BvbnNlEmIKEVNldEVudGl0eVByb3BlcnR5EiUuY2FsY2lmZXIudjEuU2V0RW50aXR5UHJvcGVydHlSZXF1ZXN0GiYuY2FsY2lmZXIudjEuU2V0RW50aXR5UHJvcGVydHlSZXNwb25zZRJTCgxEZWxldGVFbnRpdHkSIC5jYWxjaWZlci52MS5EZWxldGVFbnRpdHlSZXF1ZXN0GiEuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVzcG9uc2USWAoNV2F0Y2hFbnRpdGllcxIhLmNhbGNpZmVyLnYxLldhdGNoRW50aXRpZXNSZXF1ZXN0GiIuY2FsY2lmZXIudjEuV2F0Y2hFbnRpdGllc1Jlc3BvbnNlMAESVgoNUmVzb2x2ZUVudGl0eRIhLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXF1ZXN0GiIuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlc3BvbnNlElYKDUxpc3RCYWNrbGlua3MSIS5jYWxjaWZlci52MS5MaXN0QmFja2xpbmtzUmVxdWVzdBoiLmNhbGNpZmVyLnYxLkxpc3RCYWNrbGlua3NSZXNwb25zZTK1AQoPUmljaFRleHRTZXJ2aWNlElAKC0dldFJpY2hUZXh0Eh8uY2FsY2lmZXIudjEuR2V0UmljaFRleHRSZXF1ZXN0GiAuY2FsY2lmZXIudjEuR2V0UmljaFRleHRSZXNwb25zZRJQCgtQdXRSaWNoVGV4dBIfLmNhbGNpZmVyLnYxLlB1dFJpY2hUZXh0UmVxdWVzdBogLmNhbGNpZmVyLnYxLlB1dFJpY2hUZXh0UmVzcG9uc2UyUgoNU2VhcmNoU2VydmljZRJBCgZTZWFyY2gSGi5jYWxjaWZlci52MS5TZWFyY2hSZXF1ZXN0GhsuY2FsY2lmZXIudjEuU2VhcmNoUmVzcG9uc2UybQoQU3RydWN0dXJlU2VydmljZRJZCg5MaXN0U3RydWN0dXJlcxIiLmNhbGNpZmVyLnYxLkxpc3RTdHJ1Y3R1cmVzUmVxdWVzdBojLmNhbGNpZmVyLnYxLkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2ViBnByb3RvMw", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message calcifer.v1.SearchRequest
@@ -146,6 +146,23 @@ export const GetEntityRequestSchema: GenMessage<GetEntityRequest> = /*@__PURE__*
   messageDesc(file_calcifer_v1_services, 4);
 
 /**
+ * @generated from message calcifer.v1.GetEntityResponse
+ */
+export type GetEntityResponse = Message<"calcifer.v1.GetEntityResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.GetEntityResponse.
+ * Use `create(GetEntityResponseSchema)` to create a new message.
+ */
+export const GetEntityResponseSchema: GenMessage<GetEntityResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 5);
+
+/**
  * @generated from message calcifer.v1.ListEntitiesRequest
  */
 export type ListEntitiesRequest = Message<"calcifer.v1.ListEntitiesRequest"> & {
@@ -160,7 +177,7 @@ export type ListEntitiesRequest = Message<"calcifer.v1.ListEntitiesRequest"> & {
  * Use `create(ListEntitiesRequestSchema)` to create a new message.
  */
 export const ListEntitiesRequestSchema: GenMessage<ListEntitiesRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 5);
+  messageDesc(file_calcifer_v1_services, 6);
 
 /**
  * @generated from message calcifer.v1.ListEntitiesResponse
@@ -177,7 +194,7 @@ export type ListEntitiesResponse = Message<"calcifer.v1.ListEntitiesResponse"> &
  * Use `create(ListEntitiesResponseSchema)` to create a new message.
  */
 export const ListEntitiesResponseSchema: GenMessage<ListEntitiesResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 6);
+  messageDesc(file_calcifer_v1_services, 7);
 
 /**
  * @generated from message calcifer.v1.CreateEntityRequest
@@ -212,7 +229,24 @@ export type CreateEntityRequest = Message<"calcifer.v1.CreateEntityRequest"> & {
  * Use `create(CreateEntityRequestSchema)` to create a new message.
  */
 export const CreateEntityRequestSchema: GenMessage<CreateEntityRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 7);
+  messageDesc(file_calcifer_v1_services, 8);
+
+/**
+ * @generated from message calcifer.v1.CreateEntityResponse
+ */
+export type CreateEntityResponse = Message<"calcifer.v1.CreateEntityResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.CreateEntityResponse.
+ * Use `create(CreateEntityResponseSchema)` to create a new message.
+ */
+export const CreateEntityResponseSchema: GenMessage<CreateEntityResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 9);
 
 /**
  * @generated from message calcifer.v1.RenameEntityRequest
@@ -234,7 +268,24 @@ export type RenameEntityRequest = Message<"calcifer.v1.RenameEntityRequest"> & {
  * Use `create(RenameEntityRequestSchema)` to create a new message.
  */
 export const RenameEntityRequestSchema: GenMessage<RenameEntityRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 8);
+  messageDesc(file_calcifer_v1_services, 10);
+
+/**
+ * @generated from message calcifer.v1.RenameEntityResponse
+ */
+export type RenameEntityResponse = Message<"calcifer.v1.RenameEntityResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.RenameEntityResponse.
+ * Use `create(RenameEntityResponseSchema)` to create a new message.
+ */
+export const RenameEntityResponseSchema: GenMessage<RenameEntityResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 11);
 
 /**
  * @generated from message calcifer.v1.DeleteEntityRequest
@@ -251,12 +302,25 @@ export type DeleteEntityRequest = Message<"calcifer.v1.DeleteEntityRequest"> & {
  * Use `create(DeleteEntityRequestSchema)` to create a new message.
  */
 export const DeleteEntityRequestSchema: GenMessage<DeleteEntityRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 9);
+  messageDesc(file_calcifer_v1_services, 12);
 
 /**
- * @generated from message calcifer.v1.SetPropertyRequest
+ * @generated from message calcifer.v1.DeleteEntityResponse
  */
-export type SetPropertyRequest = Message<"calcifer.v1.SetPropertyRequest"> & {
+export type DeleteEntityResponse = Message<"calcifer.v1.DeleteEntityResponse"> & {
+};
+
+/**
+ * Describes the message calcifer.v1.DeleteEntityResponse.
+ * Use `create(DeleteEntityResponseSchema)` to create a new message.
+ */
+export const DeleteEntityResponseSchema: GenMessage<DeleteEntityResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 13);
+
+/**
+ * @generated from message calcifer.v1.SetEntityPropertyRequest
+ */
+export type SetEntityPropertyRequest = Message<"calcifer.v1.SetEntityPropertyRequest"> & {
   /**
    * @generated from field: string entity_id = 1;
    */
@@ -276,24 +340,41 @@ export type SetPropertyRequest = Message<"calcifer.v1.SetPropertyRequest"> & {
 };
 
 /**
- * Describes the message calcifer.v1.SetPropertyRequest.
- * Use `create(SetPropertyRequestSchema)` to create a new message.
+ * Describes the message calcifer.v1.SetEntityPropertyRequest.
+ * Use `create(SetEntityPropertyRequestSchema)` to create a new message.
  */
-export const SetPropertyRequestSchema: GenMessage<SetPropertyRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 10);
+export const SetEntityPropertyRequestSchema: GenMessage<SetEntityPropertyRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 14);
 
 /**
- * @generated from message calcifer.v1.WatchRequest
+ * @generated from message calcifer.v1.SetEntityPropertyResponse
  */
-export type WatchRequest = Message<"calcifer.v1.WatchRequest"> & {
+export type SetEntityPropertyResponse = Message<"calcifer.v1.SetEntityPropertyResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
 };
 
 /**
- * Describes the message calcifer.v1.WatchRequest.
- * Use `create(WatchRequestSchema)` to create a new message.
+ * Describes the message calcifer.v1.SetEntityPropertyResponse.
+ * Use `create(SetEntityPropertyResponseSchema)` to create a new message.
  */
-export const WatchRequestSchema: GenMessage<WatchRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 11);
+export const SetEntityPropertyResponseSchema: GenMessage<SetEntityPropertyResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 15);
+
+/**
+ * @generated from message calcifer.v1.WatchEntitiesRequest
+ */
+export type WatchEntitiesRequest = Message<"calcifer.v1.WatchEntitiesRequest"> & {
+};
+
+/**
+ * Describes the message calcifer.v1.WatchEntitiesRequest.
+ * Use `create(WatchEntitiesRequestSchema)` to create a new message.
+ */
+export const WatchEntitiesRequestSchema: GenMessage<WatchEntitiesRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 16);
 
 /**
  * @generated from message calcifer.v1.ListBacklinksRequest
@@ -310,7 +391,7 @@ export type ListBacklinksRequest = Message<"calcifer.v1.ListBacklinksRequest"> &
  * Use `create(ListBacklinksRequestSchema)` to create a new message.
  */
 export const ListBacklinksRequestSchema: GenMessage<ListBacklinksRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 12);
+  messageDesc(file_calcifer_v1_services, 17);
 
 /**
  * @generated from message calcifer.v1.Backlink
@@ -343,7 +424,7 @@ export type Backlink = Message<"calcifer.v1.Backlink"> & {
  * Use `create(BacklinkSchema)` to create a new message.
  */
 export const BacklinkSchema: GenMessage<Backlink> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 13);
+  messageDesc(file_calcifer_v1_services, 18);
 
 /**
  * @generated from message calcifer.v1.ListBacklinksResponse
@@ -360,7 +441,7 @@ export type ListBacklinksResponse = Message<"calcifer.v1.ListBacklinksResponse">
  * Use `create(ListBacklinksResponseSchema)` to create a new message.
  */
 export const ListBacklinksResponseSchema: GenMessage<ListBacklinksResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 14);
+  messageDesc(file_calcifer_v1_services, 19);
 
 /**
  * @generated from message calcifer.v1.ListStructuresRequest
@@ -373,7 +454,7 @@ export type ListStructuresRequest = Message<"calcifer.v1.ListStructuresRequest">
  * Use `create(ListStructuresRequestSchema)` to create a new message.
  */
 export const ListStructuresRequestSchema: GenMessage<ListStructuresRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 15);
+  messageDesc(file_calcifer_v1_services, 20);
 
 /**
  * @generated from message calcifer.v1.ListStructuresResponse
@@ -390,7 +471,7 @@ export type ListStructuresResponse = Message<"calcifer.v1.ListStructuresResponse
  * Use `create(ListStructuresResponseSchema)` to create a new message.
  */
 export const ListStructuresResponseSchema: GenMessage<ListStructuresResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 16);
+  messageDesc(file_calcifer_v1_services, 21);
 
 /**
  * @generated from message calcifer.v1.ResolveEntityRequest
@@ -437,7 +518,7 @@ export type ResolveEntityRequest = Message<"calcifer.v1.ResolveEntityRequest"> &
  * Use `create(ResolveEntityRequestSchema)` to create a new message.
  */
 export const ResolveEntityRequestSchema: GenMessage<ResolveEntityRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 17);
+  messageDesc(file_calcifer_v1_services, 22);
 
 /**
  * @generated from message calcifer.v1.ResolveEntityResponse
@@ -461,10 +542,10 @@ export type ResolveEntityResponse = Message<"calcifer.v1.ResolveEntityResponse">
  * Use `create(ResolveEntityResponseSchema)` to create a new message.
  */
 export const ResolveEntityResponseSchema: GenMessage<ResolveEntityResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 18);
+  messageDesc(file_calcifer_v1_services, 23);
 
 /**
- * Every entity, sent by Watch at the start of a stream and after a lag.
+ * Every entity, sent by WatchEntities at the start of a stream and after a lag.
  *
  * @generated from message calcifer.v1.EntitySnapshot
  */
@@ -480,14 +561,14 @@ export type EntitySnapshot = Message<"calcifer.v1.EntitySnapshot"> & {
  * Use `create(EntitySnapshotSchema)` to create a new message.
  */
 export const EntitySnapshotSchema: GenMessage<EntitySnapshot> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 19);
+  messageDesc(file_calcifer_v1_services, 24);
 
 /**
- * @generated from message calcifer.v1.EntityEvent
+ * @generated from message calcifer.v1.WatchEntitiesResponse
  */
-export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
+export type WatchEntitiesResponse = Message<"calcifer.v1.WatchEntitiesResponse"> & {
   /**
-   * @generated from oneof calcifer.v1.EntityEvent.event
+   * @generated from oneof calcifer.v1.WatchEntitiesResponse.event
    */
   event: {
     /**
@@ -503,7 +584,7 @@ export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
     case: "deletedId";
   } | {
     /**
-     * A RichTextService.Put saved this document (ref, doc, updated_at).
+     * A RichTextService.PutRichText saved this document (ref, doc, updated_at).
      *
      * @generated from field: calcifer.v1.RichText rich_text_changed = 3;
      */
@@ -529,11 +610,108 @@ export type EntityEvent = Message<"calcifer.v1.EntityEvent"> & {
 };
 
 /**
- * Describes the message calcifer.v1.EntityEvent.
- * Use `create(EntityEventSchema)` to create a new message.
+ * Describes the message calcifer.v1.WatchEntitiesResponse.
+ * Use `create(WatchEntitiesResponseSchema)` to create a new message.
  */
-export const EntityEventSchema: GenMessage<EntityEvent> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 20);
+export const WatchEntitiesResponseSchema: GenMessage<WatchEntitiesResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 25);
+
+/**
+ * @generated from message calcifer.v1.GetRichTextRequest
+ */
+export type GetRichTextRequest = Message<"calcifer.v1.GetRichTextRequest"> & {
+  /**
+   * @generated from field: string entity_id = 1;
+   */
+  entityId: string;
+
+  /**
+   * a declared rich-text property of the entity's structure
+   *
+   * @generated from field: string property_id = 2;
+   */
+  propertyId: string;
+};
+
+/**
+ * Describes the message calcifer.v1.GetRichTextRequest.
+ * Use `create(GetRichTextRequestSchema)` to create a new message.
+ */
+export const GetRichTextRequestSchema: GenMessage<GetRichTextRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 26);
+
+/**
+ * @generated from message calcifer.v1.GetRichTextResponse
+ */
+export type GetRichTextResponse = Message<"calcifer.v1.GetRichTextResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.RichText rich_text = 1;
+   */
+  richText?: RichText | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.GetRichTextResponse.
+ * Use `create(GetRichTextResponseSchema)` to create a new message.
+ */
+export const GetRichTextResponseSchema: GenMessage<GetRichTextResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 27);
+
+/**
+ * @generated from message calcifer.v1.PutRichTextRequest
+ */
+export type PutRichTextRequest = Message<"calcifer.v1.PutRichTextRequest"> & {
+  /**
+   * @generated from field: string entity_id = 1;
+   */
+  entityId: string;
+
+  /**
+   * a declared rich-text property of the entity's structure
+   *
+   * @generated from field: string property_id = 2;
+   */
+  propertyId: string;
+
+  /**
+   * @generated from field: string doc = 3;
+   */
+  doc: string;
+
+  /**
+   * Unset means an unconditional write. Set means the write fails with
+   * FAILED_PRECONDITION unless the stored document's updated_at equals it
+   * exactly. The epoch (0 seconds, 0 nanos) means "expect nothing saved yet".
+   * Clients echo back the updated_at they last read.
+   *
+   * @generated from field: google.protobuf.Timestamp expected_updated_at = 4;
+   */
+  expectedUpdatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.PutRichTextRequest.
+ * Use `create(PutRichTextRequestSchema)` to create a new message.
+ */
+export const PutRichTextRequestSchema: GenMessage<PutRichTextRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 28);
+
+/**
+ * @generated from message calcifer.v1.PutRichTextResponse
+ */
+export type PutRichTextResponse = Message<"calcifer.v1.PutRichTextResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.RichText rich_text = 1;
+   */
+  richText?: RichText | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.PutRichTextResponse.
+ * Use `create(PutRichTextResponseSchema)` to create a new message.
+ */
+export const PutRichTextResponseSchema: GenMessage<PutRichTextResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 29);
 
 /**
  * How Search ranks. With embeddings off (the model failed to load), SEMANTIC and
@@ -582,21 +760,21 @@ export const SearchModeSchema: GenEnum<SearchMode> = /*@__PURE__*/
  */
 export const EntityService: GenService<{
   /**
-   * @generated from rpc calcifer.v1.EntityService.Get
+   * @generated from rpc calcifer.v1.EntityService.GetEntity
    */
-  get: {
+  getEntity: {
     methodKind: "unary";
     input: typeof GetEntityRequestSchema;
-    output: typeof EntitySchema;
+    output: typeof GetEntityResponseSchema;
   },
   /**
-   * For the agent: the frontend's replica comes from Watch (ADR 9). An empty
+   * For the agent: the frontend's replica comes from WatchEntities (ADR 9). An empty
    * structure_type lists every entity; one not in the registry is
    * INVALID_ARGUMENT.
    *
-   * @generated from rpc calcifer.v1.EntityService.List
+   * @generated from rpc calcifer.v1.EntityService.ListEntities
    */
-  list: {
+  listEntities: {
     methodKind: "unary";
     input: typeof ListEntitiesRequestSchema;
     output: typeof ListEntitiesResponseSchema;
@@ -607,51 +785,51 @@ export const EntityService: GenService<{
    * unique-names structure the first free "Untitled <name> N"). INVALID_ARGUMENT
    * for a structure_type not in the registry or a property value of the wrong
    * kind; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
-   * comes from Resolve by date); ALREADY_EXISTS for a taken Tag name.
+   * comes from ResolveEntity by date); ALREADY_EXISTS for a taken Tag name.
    *
-   * @generated from rpc calcifer.v1.EntityService.Create
+   * @generated from rpc calcifer.v1.EntityService.CreateEntity
    */
-  create: {
+  createEntity: {
     methodKind: "unary";
     input: typeof CreateEntityRequestSchema;
-    output: typeof EntitySchema;
+    output: typeof CreateEntityResponseSchema;
   },
   /**
    * Change only an entity's name. Other properties are untouched, so a rename
-   * doesn't overwrite a concurrent SetProperty. The name is trimmed; a blank
+   * doesn't overwrite a concurrent SetEntityProperty. The name is trimmed; a blank
    * one is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
    * for a structure whose name isn't editable (DailyNote), ALREADY_EXISTS for a
    * taken Tag name.
    *
-   * @generated from rpc calcifer.v1.EntityService.Rename
+   * @generated from rpc calcifer.v1.EntityService.RenameEntity
    */
-  rename: {
+  renameEntity: {
     methodKind: "unary";
     input: typeof RenameEntityRequestSchema;
-    output: typeof EntitySchema;
+    output: typeof RenameEntityResponseSchema;
   },
   /**
    * Write one property without resending the rest of the entity, so concurrent
    * edits to different properties don't overwrite each other. Returns the saved
-   * entity. Renames go through Rename.
+   * entity. Renames go through RenameEntity.
    * A DailyNote's name is derived from its date: setting `date` on a DailyNote
    * also sets its name, and fails with ALREADY_EXISTS if that day already has a
    * DailyNote.
    *
-   * @generated from rpc calcifer.v1.EntityService.SetProperty
+   * @generated from rpc calcifer.v1.EntityService.SetEntityProperty
    */
-  setProperty: {
+  setEntityProperty: {
     methodKind: "unary";
-    input: typeof SetPropertyRequestSchema;
-    output: typeof EntitySchema;
+    input: typeof SetEntityPropertyRequestSchema;
+    output: typeof SetEntityPropertyResponseSchema;
   },
   /**
-   * @generated from rpc calcifer.v1.EntityService.Delete
+   * @generated from rpc calcifer.v1.EntityService.DeleteEntity
    */
-  delete: {
+  deleteEntity: {
     methodKind: "unary";
     input: typeof DeleteEntityRequestSchema;
-    output: typeof EmptySchema;
+    output: typeof DeleteEntityResponseSchema;
   },
   /**
    * One-way replication of the whole entity set (ADR 9):
@@ -666,12 +844,12 @@ export const EntityService: GenService<{
    * A reconnect is a new stream, so it starts with a snapshot; there is no
    * resume from a revision.
    *
-   * @generated from rpc calcifer.v1.EntityService.Watch
+   * @generated from rpc calcifer.v1.EntityService.WatchEntities
    */
-  watch: {
+  watchEntities: {
     methodKind: "server_streaming";
-    input: typeof WatchRequestSchema;
-    output: typeof EntityEventSchema;
+    input: typeof WatchEntitiesRequestSchema;
+    output: typeof WatchEntitiesResponseSchema;
   },
   /**
    * Get-or-create one entity by a key: a (structure_type, name) pair for
@@ -683,9 +861,9 @@ export const EntityService: GenService<{
    * created_at wins, and the lowest id breaks ties. A day has at most one
    * DailyNote.
    *
-   * @generated from rpc calcifer.v1.EntityService.Resolve
+   * @generated from rpc calcifer.v1.EntityService.ResolveEntity
    */
-  resolve: {
+  resolveEntity: {
     methodKind: "unary";
     input: typeof ResolveEntityRequestSchema;
     output: typeof ResolveEntityResponseSchema;
@@ -696,7 +874,7 @@ export const EntityService: GenService<{
    * ties go to the lower source entity id, then the lower link id. Self-links
    * (a source linking to itself) are excluded, as the frontend's backlinks
    * panel excludes them. NOT_FOUND for an unknown entity_id.
-   * For the agent: the frontend derives backlinks from its Watch replica.
+   * For the agent: the frontend derives backlinks from its WatchEntities replica.
    *
    * @generated from rpc calcifer.v1.EntityService.ListBacklinks
    */
@@ -718,20 +896,20 @@ export const RichTextService: GenService<{
    * means the property isn't a declared rich-text property of the entity's
    * structure.
    *
-   * @generated from rpc calcifer.v1.RichTextService.Get
+   * @generated from rpc calcifer.v1.RichTextService.GetRichText
    */
-  get: {
+  getRichText: {
     methodKind: "unary";
-    input: typeof RichTextRefSchema;
-    output: typeof RichTextSchema;
+    input: typeof GetRichTextRequestSchema;
+    output: typeof GetRichTextResponseSchema;
   },
   /**
-   * @generated from rpc calcifer.v1.RichTextService.Put
+   * @generated from rpc calcifer.v1.RichTextService.PutRichText
    */
-  put: {
+  putRichText: {
     methodKind: "unary";
-    input: typeof RichTextSchema;
-    output: typeof RichTextSchema;
+    input: typeof PutRichTextRequestSchema;
+    output: typeof PutRichTextResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_calcifer_v1_services, 1);
@@ -766,9 +944,9 @@ export const SearchService: GenService<{
  */
 export const StructureService: GenService<{
   /**
-   * @generated from rpc calcifer.v1.StructureService.List
+   * @generated from rpc calcifer.v1.StructureService.ListStructures
    */
-  list: {
+  listStructures: {
     methodKind: "unary";
     input: typeof ListStructuresRequestSchema;
     output: typeof ListStructuresResponseSchema;

@@ -1,7 +1,7 @@
 //! Background embed worker: keeps `chunks` + `entity_vec` in sync with content,
 //! off the write hot-path.
 //!
-//! Write paths (`RichTextService.Put`, `EntityService` create/update) call
+//! Write paths (`RichTextService.PutRichText`, `EntityService` create/update) call
 //! `EmbedHandle::enqueue(entity_id)` after their transaction commits. The handle
 //! pushes the id onto an unbounded channel and returns instantly — the request
 //! never waits on chunking or the ONNX model. A single spawned task drains the

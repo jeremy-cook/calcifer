@@ -35,15 +35,13 @@ message RichTextRef {
   string property_id = 2;
 }
 
+// Output only: clients write through RichTextService.PutRichText.
 message RichText {
+  reserved 4;
+  reserved "expected_updated_at";   // now PutRichTextRequest.expected_updated_at
   RichTextRef ref = 1;
   string doc = 2;
   google.protobuf.Timestamp updated_at = 3;
-  // Put only; ignored on output. Unset means an unconditional write. Set means
-  // the write fails with FAILED_PRECONDITION unless the stored document's
-  // updated_at equals it exactly. The epoch (0 seconds, 0 nanos) means "expect
-  // nothing saved yet". Clients echo back the updated_at they last read.
-  google.protobuf.Timestamp expected_updated_at = 4;
 }
 
 message LinkRef {
@@ -54,7 +52,7 @@ message LinkRef {
 }
 
 // Output only: no request message carries an Entity (ADR 8). Clients write
-// through Create, Rename, SetProperty and Delete.
+// through CreateEntity, RenameEntity, SetEntityProperty and DeleteEntity.
 message Entity {
   string id = 1;                                  // output only
   string structure_type = 2;

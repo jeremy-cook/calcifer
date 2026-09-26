@@ -12,7 +12,7 @@ import type { TTNode } from './markdown/types.js'
 // Get (or, with createIfMissing, create) the (structureType, name) entity.
 // NOT_FOUND when it's missing and createIfMissing is false.
 function resolveName(structureType: string, name: string, createIfMissing: boolean) {
-  return entityClient.resolve({ structureType, key: { case: 'name', value: name }, createIfMissing })
+  return entityClient.resolveEntity({ structureType, key: { case: 'name', value: name }, createIfMissing })
 }
 
 // [[wikilinks]] / #tags resolve to canonical entities (get-or-create) server-side.
@@ -28,10 +28,10 @@ function isNotFound(e: unknown): boolean {
   return e instanceof ConnectError && e.code === Code.NotFound
 }
 
-// A declared-but-unsaved doc comes back empty at the epoch (see RichTextService.Get),
-// so `updatedAt` is always something a conditional Put can echo back.
+// A declared-but-unsaved doc comes back empty at the epoch (see RichTextService.GetRichText),
+// so `updatedAt` is always something a conditional PutRichText can echo back.
 async function getDoc(entityId: string): Promise<{ doc: TTNode; updatedAt: Timestamp }> {
-  const rt = await richTextClient.get(contentRef(entityId))
+  const rt = (await richTextClient.getRichText(contentRef(entityId))).richText!
   return {
     doc: rt.doc ? (JSON.parse(rt.doc) as TTNode) : emptyDoc(),
     updatedAt: rt.updatedAt ?? timestampFromMs(0),
@@ -40,15 +40,15 @@ async function getDoc(entityId: string): Promise<{ doc: TTNode; updatedAt: Times
 
 const APPEND_ATTEMPTS = 3
 
-// Read, merge, and Put conditioned on the updated_at we read. A concurrent save
-// (e.g. the browser) makes the Put fail with FAILED_PRECONDITION; re-read and retry.
+// Read, merge, and PutRichText conditioned on the updated_at we read. A concurrent
+// save (e.g. the browser) makes the PutRichText fail with FAILED_PRECONDITION; re-read and retry.
 async function appendDoc(entityId: string, label: string, markdown: string): Promise<void> {
   const addition = await toTipTap(markdown, resolver)
   for (let attempt = 1; attempt <= APPEND_ATTEMPTS; attempt++) {
     const { doc, updatedAt } = await getDoc(entityId)
     const merged: TTNode = { type: 'doc', content: [...(doc.content ?? []), ...(addition.content ?? [])] }
     try {
-      await richTextClient.put({ ref: contentRef(entityId), doc: JSON.stringify(merged), expectedUpdatedAt: updatedAt })
+      await richTextClient.putRichText({ ...contentRef(entityId), doc: JSON.stringify(merged), expectedUpdatedAt: updatedAt })
       return
     } catch (e) {
       if (!(e instanceof ConnectError && e.code === Code.FailedPrecondition)) throw e
@@ -86,8 +86,8 @@ export async function createNote(name: string, markdown: string): Promise<string
   const { id } = await resolver('Note', name)
   const doc = await toTipTap(markdown, resolver)
   // Unconditional on purpose: create_note overwrites whatever the note held.
-  await richTextClient.put({ ref: contentRef(id), doc: JSON.stringify(doc) })
-  const ent = await entityClient.get({ id })
+  await richTextClient.putRichText({ ...contentRef(id), doc: JSON.stringify(doc) })
+  const ent = (await entityClient.getEntity({ id })).entity!
   const linked = ent.links.map((l) => l.target?.structureType).join(', ') || 'none'
   return `Saved note "${ent.name}" (${id}). Derived links: ${ent.links.length} [${linked}]; dates: ${ent.referencedDates.length}.`
 }
@@ -95,7 +95,7 @@ export async function createNote(name: string, markdown: string): Promise<string
 export async function appendToNote(name: string, markdown: string): Promise<string> {
   const { id } = await resolver('Note', name)
   await appendDoc(id, `Note "${name}"`, markdown)
-  const ent = await entityClient.get({ id })
+  const ent = (await entityClient.getEntity({ id })).entity!
   return `Appended to "${ent.name}" (${id}); now ${ent.links.length} link(s).`
 }
 
@@ -170,7 +170,7 @@ export async function linkNotes(from: string, to: string): Promise<string> {
 // Get-or-create the DailyNote for `date` (ISO "YYYY-MM-DD"). The server keeps
 // one per day and names it for the day.
 async function resolveDailyNote(date: string): Promise<{ id: string; name: string; created: boolean }> {
-  const r = await entityClient.resolve({ key: { case: 'date', value: date }, createIfMissing: true })
+  const r = await entityClient.resolveEntity({ key: { case: 'date', value: date }, createIfMissing: true })
   return { id: r.entity!.id, name: r.entity!.name, created: r.created }
 }
 
@@ -182,7 +182,7 @@ export async function createDailyNote(date: string): Promise<string> {
 export async function appendToDailyNote(date: string, markdown: string): Promise<string> {
   const { id, name } = await resolveDailyNote(date)
   await appendDoc(id, `Daily note "${name}"`, markdown)
-  const ent = await entityClient.get({ id })
+  const ent = (await entityClient.getEntity({ id })).entity!
   return `Appended to daily note "${name}" (${id}); now ${ent.links.length} link(s).`
 }
 
@@ -212,7 +212,7 @@ function describeProperty(p: PropertyDef): string {
 
 // The registry lives on the server (StructureService); this only formats it.
 export async function listStructures(): Promise<string> {
-  const { structures } = await structureClient.list({})
+  const { structures } = await structureClient.listStructures({})
   return structures
     .map((s) => {
       const line = `- ${s.type}: ${s.description}`

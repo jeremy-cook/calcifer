@@ -1,14 +1,14 @@
 import { useEffect } from 'react'
 import { queryOptions } from '@tanstack/react-query'
 import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
-import type { EntityEvent } from '@calcifer/proto/calcifer/v1/services_pb'
+import type { WatchEntitiesResponse } from '@calcifer/proto/calcifer/v1/services_pb'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { writeRichTextIfNewer } from '~/model/richtext'
 
 // The browser's copy of every entity is a replica fed only by
-// EntityService.Watch (ADR 9): each stream opens with a snapshot of every
+// EntityService.WatchEntities (ADR 9): each stream opens with a snapshot of every
 // entity, then streams ordered events, and sends a fresh snapshot whenever the
-// server can't guarantee continuity. The list is never fetched with `List` and
+// server can't guarantee continuity. The list is never fetched with `ListEntities` and
 // never invalidated. Mutations write the server's response through
 // `writeEntity` / `removeEntity`, the same path the events take; the Watch echo
 // of that write is harmless because applying an upsert is idempotent.
@@ -70,7 +70,7 @@ async function applySnapshot(entities: Entity[]): Promise<void> {
   void queryClient.invalidateQueries({ queryKey: qk.everyRichtext() })
 }
 
-async function applyEvent({ event }: EntityEvent): Promise<void> {
+async function applyEvent({ event }: WatchEntitiesResponse): Promise<void> {
   switch (event.case) {
     case 'snapshot':
       await applySnapshot(event.value.entities)
@@ -97,7 +97,7 @@ export function useEntitySync(): void {
     void (async () => {
       while (!controller.signal.aborted) {
         try {
-          for await (const event of entityClient.watch({}, { signal: controller.signal })) {
+          for await (const event of entityClient.watchEntities({}, { signal: controller.signal })) {
             if (controller.signal.aborted) return
             await applyEvent(event)
           }

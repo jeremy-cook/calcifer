@@ -9,12 +9,14 @@ use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
-    entity_event, entity_service_server::EntityService as EntityServiceTrait, property_value,
-    resolve_entity_request, Backlink, CreateEntityRequest, DeleteEntityRequest, Entity,
-    EntityEvent, EntityRef, EntitySnapshot, GetEntityRequest, LinkRef, ListBacklinksRequest,
+    entity_service_server::EntityService as EntityServiceTrait, property_value,
+    resolve_entity_request, watch_entities_response, Backlink, CreateEntityRequest,
+    CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse, Entity, EntityRef,
+    EntitySnapshot, GetEntityRequest, GetEntityResponse, LinkRef, ListBacklinksRequest,
     ListBacklinksResponse, ListEntitiesRequest, ListEntitiesResponse, PropertyValue,
-    RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse, SetPropertyRequest,
-    WatchRequest,
+    RenameEntityRequest, RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse,
+    SetEntityPropertyRequest, SetEntityPropertyResponse, WatchEntitiesRequest,
+    WatchEntitiesResponse,
 };
 use crate::structures::{self, PropertyKind};
 use crate::watch::WatchHub;
@@ -33,7 +35,7 @@ impl EntityService {
     /// Insert a brand-new entity built by `new_entity` (row, properties, relation
     /// links and FTS name) in one tx and return the hydrated result. Shared by
     /// Create and Resolve. A new entity has no content, so no content-derived
-    /// links or referenced dates: those are `RichTextService.Put`'s (ADR 3).
+    /// links or referenced dates: those are `RichTextService.PutRichText`'s (ADR 3).
     async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
         let now = chrono::Utc::now().timestamp_millis();
         let date_key = date_key_for(entity);
@@ -202,7 +204,7 @@ impl EntityService {
     /// Publish a Resolve-created entity and wrap it in the response.
     fn created(&self, saved: Entity) -> ResolveEntityResponse {
         self.hub
-            .publish(entity_event::Event::Upserted(saved.clone()));
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
         ResolveEntityResponse {
             entity: Some(saved),
             created: true,
@@ -496,7 +498,7 @@ async fn load_entities_where(
 }
 
 /// Sync the FTS `name` column for an entity, preserving the existing `body`
-/// (owned by `RichTextService.Put`). Delete-then-insert by entity_id so there is
+/// (owned by `RichTextService.PutRichText`). Delete-then-insert by entity_id so there is
 /// always exactly one `entity_fts` row per entity. Call inside the same tx as the
 /// entities-table write.
 pub(crate) async fn fts_upsert_name(
@@ -793,15 +795,18 @@ fn known_structure(structure_type: &str) -> Result<&'static structures::Structur
 
 #[tonic::async_trait]
 impl EntityServiceTrait for EntityService {
-    async fn get(&self, req: Request<GetEntityRequest>) -> Result<Response<Entity>, Status> {
+    async fn get_entity(
+        &self,
+        req: Request<GetEntityRequest>,
+    ) -> Result<Response<GetEntityResponse>, Status> {
         let id = req.into_inner().id;
-        self.load_entity(&id)
-            .await
-            .map(Response::new)
-            .map_err(Status::from)
+        let entity = self.load_entity(&id).await.map_err(Status::from)?;
+        Ok(Response::new(GetEntityResponse {
+            entity: Some(entity),
+        }))
     }
 
-    async fn list(
+    async fn list_entities(
         &self,
         req: Request<ListEntitiesRequest>,
     ) -> Result<Response<ListEntitiesResponse>, Status> {
@@ -822,7 +827,10 @@ impl EntityServiceTrait for EntityService {
     // Create by intent (ADR 8): the server builds the entity with `new_entity`,
     // so a client can't supply its id, links, referenced dates or timestamps.
     // Only `creatable` structures: a DailyNote comes from Resolve's date key.
-    async fn create(&self, req: Request<CreateEntityRequest>) -> Result<Response<Entity>, Status> {
+    async fn create_entity(
+        &self,
+        req: Request<CreateEntityRequest>,
+    ) -> Result<Response<CreateEntityResponse>, Status> {
         let CreateEntityRequest {
             structure_type,
             name,
@@ -831,7 +839,7 @@ impl EntityServiceTrait for EntityService {
         let def = known_structure(&structure_type)?;
         if !def.creatable {
             return Err(Status::failed_precondition(format!(
-                "{structure_type} can't be created with Create; use Resolve to get or create one"
+                "{structure_type} can't be created with CreateEntity; use ResolveEntity to get or create one"
             )));
         }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
@@ -850,15 +858,20 @@ impl EntityServiceTrait for EntityService {
                 map_unique_violation(e, &entity.name, date_key_for(&entity).as_deref())
             })?;
         self.hub
-            .publish(entity_event::Event::Upserted(saved.clone()));
-        Ok(Response::new(saved))
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        Ok(Response::new(CreateEntityResponse {
+            entity: Some(saved),
+        }))
     }
 
     // The name (and its FTS row) and updated_at only: properties are untouched,
     // so a rename doesn't undo a concurrent SetProperty (I-15). A structure with
     // `name_editable = false` (a DailyNote, named for its date) can't be renamed.
     // The name is trimmed, as Create trims it, and can't be blank.
-    async fn rename(&self, req: Request<RenameEntityRequest>) -> Result<Response<Entity>, Status> {
+    async fn rename_entity(
+        &self,
+        req: Request<RenameEntityRequest>,
+    ) -> Result<Response<RenameEntityResponse>, Status> {
         let RenameEntityRequest { id, name } = req.into_inner();
         let name = name.trim();
         if name.is_empty() {
@@ -894,8 +907,10 @@ impl EntityServiceTrait for EntityService {
 
         let saved = self.load_entity(&id).await.map_err(Status::from)?;
         self.hub
-            .publish(entity_event::Event::Upserted(saved.clone()));
-        Ok(Response::new(saved))
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        Ok(Response::new(RenameEntityResponse {
+            entity: Some(saved),
+        }))
     }
 
     // One property row, not the whole entity, so writers editing different
@@ -903,11 +918,11 @@ impl EntityServiceTrait for EntityService {
     // property with the same checks Create uses: `validate_property` (I-9, I-16)
     // and, through `sync_relation_property`, `check_relation_targets` (I-2).
     // Only a DailyNote's `date` changes the name (and so the FTS name row).
-    async fn set_property(
+    async fn set_entity_property(
         &self,
-        req: Request<SetPropertyRequest>,
-    ) -> Result<Response<Entity>, Status> {
-        let SetPropertyRequest {
+        req: Request<SetEntityPropertyRequest>,
+    ) -> Result<Response<SetEntityPropertyResponse>, Status> {
+        let SetEntityPropertyRequest {
             entity_id,
             property_id,
             value,
@@ -1036,11 +1051,16 @@ impl EntityServiceTrait for EntityService {
 
         let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
         self.hub
-            .publish(entity_event::Event::Upserted(saved.clone()));
-        Ok(Response::new(saved))
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        Ok(Response::new(SetEntityPropertyResponse {
+            entity: Some(saved),
+        }))
     }
 
-    async fn delete(&self, req: Request<DeleteEntityRequest>) -> Result<Response<()>, Status> {
+    async fn delete_entity(
+        &self,
+        req: Request<DeleteEntityRequest>,
+    ) -> Result<Response<DeleteEntityResponse>, Status> {
         let id = req.into_inner().id;
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
@@ -1088,11 +1108,12 @@ impl EntityServiceTrait for EntityService {
             .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
-        self.hub.publish(entity_event::Event::DeletedId(id));
-        Ok(Response::new(()))
+        self.hub
+            .publish(watch_entities_response::Event::DeletedId(id));
+        Ok(Response::new(DeleteEntityResponse {}))
     }
 
-    async fn resolve(
+    async fn resolve_entity(
         &self,
         req: Request<ResolveEntityRequest>,
     ) -> Result<Response<ResolveEntityResponse>, Status> {
@@ -1169,8 +1190,11 @@ impl EntityServiceTrait for EntityService {
         Ok(Response::new(ListBacklinksResponse { backlinks }))
     }
 
-    type WatchStream = BoxStream<'static, Result<EntityEvent, Status>>;
-    async fn watch(&self, _: Request<WatchRequest>) -> Result<Response<Self::WatchStream>, Status> {
+    type WatchEntitiesStream = BoxStream<'static, Result<WatchEntitiesResponse, Status>>;
+    async fn watch_entities(
+        &self,
+        _: Request<WatchEntitiesRequest>,
+    ) -> Result<Response<Self::WatchEntitiesStream>, Status> {
         // Subscribe now, before the stream reads a revision (see `watch_stream`).
         let rx = self.hub.subscribe();
         Ok(Response::new(watch_stream(
@@ -1194,7 +1218,7 @@ enum WatchPhase {
 struct WatchState {
     pool: SqlitePool,
     hub: WatchHub,
-    rx: broadcast::Receiver<EntityEvent>,
+    rx: broadcast::Receiver<WatchEntitiesResponse>,
     /// The revision the last snapshot is current as of.
     covered: u64,
     phase: WatchPhase,
@@ -1220,8 +1244,8 @@ struct WatchState {
 fn watch_stream(
     pool: SqlitePool,
     hub: WatchHub,
-    rx: broadcast::Receiver<EntityEvent>,
-) -> BoxStream<'static, Result<EntityEvent, Status>> {
+    rx: broadcast::Receiver<WatchEntitiesResponse>,
+) -> BoxStream<'static, Result<WatchEntitiesResponse, Status>> {
     let state = WatchState {
         pool,
         hub,
@@ -1240,10 +1264,10 @@ fn watch_stream(
                         Ok(entities) => {
                             s.covered = revision;
                             s.phase = WatchPhase::Events;
-                            let event = EntityEvent {
-                                event: Some(entity_event::Event::Snapshot(EntitySnapshot {
-                                    entities,
-                                })),
+                            let event = WatchEntitiesResponse {
+                                event: Some(watch_entities_response::Event::Snapshot(
+                                    EntitySnapshot { entities },
+                                )),
                                 revision,
                             };
                             Some((Ok(event), s))
@@ -1271,7 +1295,7 @@ fn watch_stream(
 mod tests {
     use super::*;
     use crate::proto::rich_text_service_server::RichTextService as _;
-    use crate::proto::{EntityRefList, RichText, RichTextRef};
+    use crate::proto::{EntityRefList, PutRichTextRequest};
     use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag, todo};
     use futures::StreamExt;
 
@@ -1280,9 +1304,9 @@ mod tests {
     }
 
     async fn try_create(svc: &EntityService, req: CreateEntityRequest) -> Result<Entity, Status> {
-        svc.create(Request::new(req))
+        svc.create_entity(Request::new(req))
             .await
-            .map(Response::into_inner)
+            .map(|r| r.into_inner().entity.expect("entity"))
     }
 
     /// A Create request with no name, so the server picks the default.
@@ -1295,12 +1319,12 @@ mod tests {
     }
 
     async fn rename(svc: &EntityService, id: &str, name: &str) -> Result<Entity, Status> {
-        svc.rename(Request::new(RenameEntityRequest {
+        svc.rename_entity(Request::new(RenameEntityRequest {
             id: id.to_string(),
             name: name.to_string(),
         }))
         .await
-        .map(Response::into_inner)
+        .map(|r| r.into_inner().entity.expect("entity"))
     }
 
     async fn entity_count(pool: &SqlitePool) -> i64 {
@@ -1627,7 +1651,7 @@ mod tests {
         assert_eq!(entity_count(&pool).await, 1);
 
         let err = svc
-            .list(Request::new(ListEntitiesRequest {
+            .list_entities(Request::new(ListEntitiesRequest {
                 structure_type: "Custom".to_string(),
             }))
             .await
@@ -1635,7 +1659,7 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
         // An empty filter still lists every structure.
         let all = svc
-            .list(Request::new(ListEntitiesRequest {
+            .list_entities(Request::new(ListEntitiesRequest {
                 structure_type: String::new(),
             }))
             .await
@@ -1755,7 +1779,7 @@ mod tests {
             ),
         )
         .await;
-        svc.delete(Request::new(DeleteEntityRequest {
+        svc.delete_entity(Request::new(DeleteEntityRequest {
             id: gone.id.clone(),
         }))
         .await
@@ -1784,13 +1808,13 @@ mod tests {
         property_id: &str,
         value: Option<property_value::Value>,
     ) -> Result<Entity, Status> {
-        svc.set_property(Request::new(SetPropertyRequest {
+        svc.set_entity_property(Request::new(SetEntityPropertyRequest {
             entity_id: entity_id.to_string(),
             property_id: property_id.to_string(),
             value: value.map(|value| PropertyValue { value: Some(value) }),
         }))
         .await
-        .map(Response::into_inner)
+        .map(|r| r.into_inner().entity.expect("entity"))
     }
 
     fn select(key: &str) -> Option<property_value::Value> {
@@ -1991,13 +2015,10 @@ mod tests {
             mentioned.id
         );
         richtext_service(pool.clone(), WatchHub::new())
-            .put(Request::new(RichText {
-                r#ref: Some(RichTextRef {
-                    entity_id: entity.id.clone(),
-                    property_id: "content".to_string(),
-                }),
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: entity.id.clone(),
+                property_id: "content".to_string(),
                 doc,
-                updated_at: None,
                 expected_updated_at: None,
             }))
             .await
@@ -2222,7 +2243,7 @@ mod tests {
         key: resolve_entity_request::Key,
         create_if_missing: bool,
     ) -> Result<ResolveEntityResponse, Status> {
-        svc.resolve(Request::new(ResolveEntityRequest {
+        svc.resolve_entity(Request::new(ResolveEntityRequest {
             structure_type: structure_type.to_string(),
             key: Some(key),
             create_if_missing,
@@ -2240,10 +2261,12 @@ mod tests {
     }
 
     /// The ids of the entities Upserted on `rx` so far.
-    fn upserted_ids(rx: &mut tokio::sync::broadcast::Receiver<EntityEvent>) -> Vec<String> {
+    fn upserted_ids(
+        rx: &mut tokio::sync::broadcast::Receiver<WatchEntitiesResponse>,
+    ) -> Vec<String> {
         let mut ids = vec![];
         while let Ok(event) = rx.try_recv() {
-            if let Some(entity_event::Event::Upserted(e)) = event.event {
+            if let Some(watch_entities_response::Event::Upserted(e)) = event.event {
                 ids.push(e.id);
             }
         }
@@ -2316,7 +2339,7 @@ mod tests {
             assert_eq!(err.code(), tonic::Code::InvalidArgument, "{key:?}");
         }
         let err = svc
-            .resolve(Request::new(ResolveEntityRequest {
+            .resolve_entity(Request::new(ResolveEntityRequest {
                 structure_type: "Note".to_string(),
                 key: None,
                 create_if_missing: true,
@@ -2423,13 +2446,10 @@ mod tests {
             nodes.join(",")
         );
         richtext_service(pool.clone(), WatchHub::new())
-            .put(Request::new(RichText {
-                r#ref: Some(RichTextRef {
-                    entity_id: entity_id.to_string(),
-                    property_id: "content".to_string(),
-                }),
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: entity_id.to_string(),
+                property_id: "content".to_string(),
                 doc,
-                updated_at: None,
                 expected_updated_at: None,
             }))
             .await
@@ -2661,18 +2681,18 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::NotFound);
     }
 
-    type EventStream = BoxStream<'static, Result<EntityEvent, Status>>;
+    type EventStream = BoxStream<'static, Result<WatchEntitiesResponse, Status>>;
 
     /// Open a Watch stream on `svc` through the RPC.
     async fn open_watch(svc: &EntityService) -> EventStream {
-        svc.watch(Request::new(WatchRequest {}))
+        svc.watch_entities(Request::new(WatchEntitiesRequest {}))
             .await
             .expect("watch")
             .into_inner()
     }
 
     /// The stream's next message, failing the test if none comes within a second.
-    async fn next_event(stream: &mut EventStream) -> EntityEvent {
+    async fn next_event(stream: &mut EventStream) -> WatchEntitiesResponse {
         tokio::time::timeout(std::time::Duration::from_secs(1), stream.next())
             .await
             .expect("an event within a second")
@@ -2681,8 +2701,8 @@ mod tests {
     }
 
     /// The sorted entity ids of a snapshot event.
-    fn snapshot_ids(event: &EntityEvent) -> Vec<String> {
-        let Some(entity_event::Event::Snapshot(snapshot)) = &event.event else {
+    fn snapshot_ids(event: &WatchEntitiesResponse) -> Vec<String> {
+        let Some(watch_entities_response::Event::Snapshot(snapshot)) = &event.event else {
             panic!("expected a snapshot, got {event:?}");
         };
         let mut ids: Vec<String> = snapshot.entities.iter().map(|e| e.id.clone()).collect();
@@ -2691,8 +2711,8 @@ mod tests {
     }
 
     /// The id of an upserted event.
-    fn upserted_id(event: &EntityEvent) -> &str {
-        let Some(entity_event::Event::Upserted(entity)) = &event.event else {
+    fn upserted_id(event: &WatchEntitiesResponse) -> &str {
+        let Some(watch_entities_response::Event::Upserted(entity)) = &event.event else {
             panic!("expected an upsert, got {event:?}");
         };
         &entity.id
@@ -2720,7 +2740,7 @@ mod tests {
         );
         assert_eq!(first.revision, 2);
         assert_eq!(first.revision, svc.hub.current_revision());
-        let Some(entity_event::Event::Snapshot(snapshot)) = first.event else {
+        let Some(watch_entities_response::Event::Snapshot(snapshot)) = first.event else {
             unreachable!()
         };
         let snapshot_a = snapshot.entities.iter().find(|e| e.id == a.id);
@@ -2738,7 +2758,7 @@ mod tests {
         let a = create(&svc, note("A")).await;
         let b = create(&svc, todo("B")).await;
         rename(&svc, &a.id, "A2").await.expect("rename");
-        svc.delete(Request::new(DeleteEntityRequest { id: b.id.clone() }))
+        svc.delete_entity(Request::new(DeleteEntityRequest { id: b.id.clone() }))
             .await
             .expect("delete");
 
@@ -2748,8 +2768,8 @@ mod tests {
             let event = next_event(&mut stream).await;
             revisions.push(event.revision);
             kinds.push(match event.event {
-                Some(entity_event::Event::Upserted(e)) => format!("upserted {}", e.name),
-                Some(entity_event::Event::DeletedId(id)) => format!("deleted {id}"),
+                Some(watch_entities_response::Event::Upserted(e)) => format!("upserted {}", e.name),
+                Some(watch_entities_response::Event::DeletedId(id)) => format!("deleted {id}"),
                 other => panic!("unexpected event {other:?}"),
             });
         }
@@ -2773,7 +2793,7 @@ mod tests {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
         // Subscribe, then publish before the stream takes its snapshot: the
-        // window between `watch`'s subscribe and its revision read.
+        // window between `watch_entities`'s subscribe and its revision read.
         let rx = svc.hub.subscribe();
         let a = create(&svc, note("A")).await;
         let mut stream = watch_stream(pool.clone(), svc.hub.clone(), rx);
