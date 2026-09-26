@@ -403,11 +403,36 @@ fn map_unique_violation(err: AppError, msg: &str) -> Status {
     Status::from(err)
 }
 
-/// Build a new Entity for ResolveByName's create path, carrying its structure's
-/// richtext property pointers and select defaults (mirrors the FE's buildEntityMessage).
-fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
+/// The DailyNote name rule (ADR 8): a DailyNote is named for its date, as a long
+/// human date, on every write. `date_key` is the entity's `date_key` mirror (see
+/// `date_key_for` and `date_key_from`), so this is None for other structures and
+/// for an undated DailyNote, which keep the name they have.
+fn daily_note_name(date_key: Option<&str>) -> Option<String> {
+    date_key.map(format_long_date)
+}
+
+/// Apply `daily_note_name` to a whole entity, for the write paths that see one
+/// (Create, Update and `new_entity`). SetProperty applies it to the one row.
+fn apply_daily_note_name(entity: &mut Entity) {
+    if let Some(name) = daily_note_name(date_key_for(entity).as_deref()) {
+        entity.name = name;
+    }
+}
+
+/// Build a new, unsaved entity with every server-owned default (ADR 8): a minted
+/// id, a `RichTextRef` for each declared rich-text property and each select's
+/// default option, with the caller's `properties` laid over them (the caller wins
+/// on the same id). A caller value for a declared rich-text property is rejected:
+/// the server owns those refs. The name is `name`, or for a DailyNote the one
+/// derived from its date (`apply_daily_note_name`).
+fn new_entity(
+    structure_type: &str,
+    name: Option<&str>,
+    properties: Vec<Property>,
+) -> Result<Entity, AppError> {
     let id = uuid::Uuid::new_v4().to_string();
-    let mut properties: Vec<Property> = crate::structures::richtext_properties(structure_type)
+    let richtext = structures::richtext_properties(structure_type);
+    let mut defaults: Vec<Property> = richtext
         .iter()
         .map(|pid| Property {
             id: pid.to_string(),
@@ -419,57 +444,49 @@ fn build_resolved_entity(structure_type: &str, name: &str) -> Entity {
             }),
         })
         .collect();
-    properties.extend(crate::structures::select_defaults(structure_type).iter().map(
-        |(pid, default)| Property {
-            id: pid.to_string(),
-            value: Some(PropertyValue {
-                value: Some(property_value::Value::Select(default.to_string())),
+    defaults.extend(
+        structures::select_defaults(structure_type)
+            .iter()
+            .map(|(pid, default)| Property {
+                id: pid.to_string(),
+                value: Some(PropertyValue {
+                    value: Some(property_value::Value::Select(default.to_string())),
+                }),
             }),
-        },
-    ));
-    Entity {
+    );
+    for prop in properties {
+        if richtext.contains(&prop.id.as_str()) {
+            return Err(AppError::Invalid(format!(
+                "{structure_type}.{} is a rich-text property; the server sets its value",
+                prop.id
+            )));
+        }
+        match defaults.iter_mut().find(|p| p.id == prop.id) {
+            Some(existing) => *existing = prop,
+            None => defaults.push(prop),
+        }
+    }
+    let mut entity = Entity {
         id,
         structure_type: structure_type.to_string(),
-        name: name.to_string(),
-        properties,
+        name: name.unwrap_or_default().to_string(),
+        properties: defaults,
         links: vec![],
         referenced_dates: vec![],
         created_at: None,
         updated_at: None,
-    }
+    };
+    apply_daily_note_name(&mut entity);
+    Ok(entity)
 }
 
-/// Build a new DailyNote entity for `date`: a `date` property (drives date_key),
-/// the structure's richtext `content` property, and a long-human-date name.
-fn build_daily_note(date: &str) -> Entity {
-    let id = uuid::Uuid::new_v4().to_string();
-    let mut properties: Vec<Property> = crate::structures::richtext_properties("DailyNote")
-        .iter()
-        .map(|pid| Property {
-            id: pid.to_string(),
-            value: Some(PropertyValue {
-                value: Some(property_value::Value::Richtext(RichTextRef {
-                    entity_id: id.clone(),
-                    property_id: pid.to_string(),
-                })),
-            }),
-        })
-        .collect();
-    properties.push(Property {
+/// A DailyNote's `date` property holding the ISO day `date`.
+fn date_property(date: &str) -> Property {
+    Property {
         id: "date".to_string(),
         value: Some(PropertyValue {
             value: Some(property_value::Value::Date(date.to_string())),
         }),
-    });
-    Entity {
-        id,
-        structure_type: "DailyNote".to_string(),
-        name: format_long_date(date),
-        properties,
-        links: vec![],
-        referenced_dates: vec![],
-        created_at: None,
-        updated_at: None,
     }
 }
 
@@ -512,10 +529,11 @@ impl EntityServiceTrait for EntityService {
     }
 
     async fn create(&self, req: Request<CreateEntityRequest>) -> Result<Response<Entity>, Status> {
-        let entity = req
+        let mut entity = req
             .into_inner()
             .entity
             .ok_or_else(|| Status::invalid_argument("missing entity"))?;
+        apply_daily_note_name(&mut entity);
 
         let saved = self
             .persist_new_entity(&entity)
@@ -528,10 +546,11 @@ impl EntityServiceTrait for EntityService {
     }
 
     async fn update(&self, req: Request<UpdateEntityRequest>) -> Result<Response<Entity>, Status> {
-        let entity = req
+        let mut entity = req
             .into_inner()
             .entity
             .ok_or_else(|| Status::invalid_argument("missing entity"))?;
+        apply_daily_note_name(&mut entity);
         let now = chrono::Utc::now().timestamp_millis();
         let date_key = date_key_for(&entity);
 
@@ -596,7 +615,7 @@ impl EntityServiceTrait for EntityService {
     // properties of the same entity don't undo each other (I-11). Validates the
     // property with the same checks Create/Update use: `validate_select` (I-9)
     // and, through `sync_relation_property`, `check_relation_targets` (I-2).
-    // The name never changes here, so the FTS row (name + body) needs no sync.
+    // Only a DailyNote's `date` changes the name (and so the FTS name row).
     async fn set_property(
         &self,
         req: Request<SetPropertyRequest>,
@@ -684,11 +703,14 @@ impl EntityServiceTrait for EntityService {
                 .map_err(Status::from)?;
         }
 
-        // A DailyNote's `date` drives date_key; every other property leaves it be.
+        // A DailyNote's `date` drives date_key and its name; every other property
+        // leaves both be. Clearing the date keeps the name it had.
         if structure_type == "DailyNote" && prop.id == "date" {
             let date_key = date_key_from(&structure_type, &prop);
+            let name = daily_note_name(date_key.as_deref());
             sqlx::query!(
-                "UPDATE entities SET date_key = ?, updated_at = ? WHERE id = ?",
+                "UPDATE entities SET name = COALESCE(?, name), date_key = ?, updated_at = ? WHERE id = ?",
+                name,
                 date_key,
                 now,
                 entity_id,
@@ -696,6 +718,11 @@ impl EntityServiceTrait for EntityService {
             .execute(&mut *tx)
             .await
             .map_err(|e| map_unique_violation(AppError::from(e), "a DailyNote for this date already exists"))?;
+            if let Some(name) = &name {
+                fts_upsert_name(&mut tx, &entity_id, name)
+                    .await
+                    .map_err(Status::from)?;
+            }
         } else {
             sqlx::query!(
                 "UPDATE entities SET updated_at = ? WHERE id = ?",
@@ -800,8 +827,8 @@ impl EntityServiceTrait for EntityService {
             )));
         }
 
-        // Create: a fresh entity carrying its structure's richtext properties.
-        let entity = build_resolved_entity(&r.structure_type, name);
+        // Create: a fresh entity carrying its structure's defaults.
+        let entity = new_entity(&r.structure_type, Some(name), vec![]).map_err(Status::from)?;
         let saved = self.persist_new_entity(&entity).await.map_err(Status::from)?;
         self.hub.publish(EntityEvent {
             event: Some(entity_event::Event::Upserted(saved.clone())),
@@ -844,7 +871,7 @@ impl EntityServiceTrait for EntityService {
             return Err(Status::invalid_argument("date is required"));
         }
 
-        let entity = build_daily_note(date);
+        let entity = new_entity("DailyNote", None, vec![date_property(date)]).map_err(Status::from)?;
         let saved = self.persist_new_entity(&entity).await.map_err(|e| {
             map_unique_violation(e, &format!("a DailyNote for {} already exists", date))
         })?;
@@ -1414,12 +1441,166 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::NotFound);
     }
 
+    /// A new DailyNote for `date`, built by the server's default builder.
+    fn daily_note(date: &str) -> Entity {
+        new_entity("DailyNote", None, vec![date_property(date)]).expect("daily note")
+    }
+
+    fn date(d: &str) -> Option<property_value::Value> {
+        Some(property_value::Value::Date(d.to_string()))
+    }
+
+    async fn fts_name(pool: &SqlitePool, entity_id: &str) -> String {
+        sqlx::query_scalar("SELECT name FROM entity_fts WHERE entity_id = ?")
+            .bind(entity_id)
+            .fetch_one(pool)
+            .await
+            .expect("fts row")
+    }
+
+    async fn stored_date_key(pool: &SqlitePool, entity_id: &str) -> Option<String> {
+        sqlx::query_scalar("SELECT date_key FROM entities WHERE id = ?")
+            .bind(entity_id)
+            .fetch_one(pool)
+            .await
+            .expect("entity row")
+    }
+
+    #[test]
+    fn new_entity_builds_defaults_and_lets_the_caller_win() {
+        let entity = new_entity(
+            "Todo",
+            Some("Water plants"),
+            vec![Property {
+                id: "priority".to_string(),
+                value: Some(PropertyValue {
+                    value: Some(property_value::Value::Select("high".to_string())),
+                }),
+            }],
+        )
+        .expect("todo");
+
+        assert_eq!(entity.name, "Water plants");
+        assert_eq!(select_value(&entity, "status").as_deref(), Some("open"));
+        assert_eq!(select_value(&entity, "priority").as_deref(), Some("high"));
+        assert_eq!(
+            entity.properties.iter().filter(|p| p.id == "priority").count(),
+            1
+        );
+        let content = entity
+            .properties
+            .iter()
+            .find(|p| p.id == "content")
+            .and_then(|p| p.value.as_ref())
+            .and_then(|v| v.value.clone());
+        assert_eq!(
+            content,
+            Some(property_value::Value::Richtext(RichTextRef {
+                entity_id: entity.id.clone(),
+                property_id: "content".to_string(),
+            }))
+        );
+    }
+
+    #[test]
+    fn new_entity_rejects_a_caller_rich_text_value() {
+        let err = new_entity(
+            "Note",
+            Some("Sneaky"),
+            vec![Property {
+                id: "content".to_string(),
+                value: Some(PropertyValue {
+                    value: Some(property_value::Value::Richtext(RichTextRef {
+                        entity_id: "someone-else".to_string(),
+                        property_id: "content".to_string(),
+                    })),
+                }),
+            }],
+        )
+        .expect_err("rich-text value from the caller");
+        assert!(matches!(err, AppError::Invalid(_)), "{err:?}");
+    }
+
+    #[test]
+    fn new_entity_names_a_daily_note_for_its_date() {
+        let entity = new_entity("DailyNote", Some("Ignored"), vec![date_property("2026-06-13")])
+            .expect("daily note");
+        assert_eq!(entity.name, "June 13, 2026");
+    }
+
+    #[tokio::test]
+    async fn create_and_update_derive_daily_note_name() {
+        let svc = entity_service(memory_pool().await);
+        let mut entity = daily_note("2026-06-13");
+        entity.name = "Client name".to_string();
+
+        let created = create(&svc, entity).await;
+        assert_eq!(created.name, "June 13, 2026");
+
+        let mut moved = with_date(created, "2026-06-14");
+        moved.name = "Stale name".to_string();
+        let updated = update(&svc, moved).await.expect("update");
+        assert_eq!(updated.name, "June 14, 2026");
+    }
+
+    fn with_date(mut entity: Entity, d: &str) -> Entity {
+        entity.properties.retain(|p| p.id != "date");
+        entity.properties.push(date_property(d));
+        entity
+    }
+
+    #[tokio::test]
+    async fn set_property_date_renames_daily_note() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let note = create(&svc, daily_note("2026-06-13")).await;
+
+        let moved = set_property(&svc, &note.id, "date", date("2026-06-15"))
+            .await
+            .expect("move to a free day");
+
+        assert_eq!(moved.name, "June 15, 2026");
+        assert_eq!(fts_name(&pool, &note.id).await, "June 15, 2026");
+        assert_eq!(
+            stored_date_key(&pool, &note.id).await.as_deref(),
+            Some("2026-06-15")
+        );
+
+        // Clearing the date keeps the name it had.
+        let cleared = set_property(&svc, &note.id, "date", None)
+            .await
+            .expect("clear date");
+        assert_eq!(cleared.name, "June 15, 2026");
+        assert_eq!(stored_date_key(&pool, &note.id).await, None);
+    }
+
+    #[tokio::test]
+    async fn set_property_date_onto_existing_day_is_already_exists() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        create(&svc, daily_note("2026-06-13")).await;
+        let second = create(&svc, daily_note("2026-06-14")).await;
+
+        let err = set_property(&svc, &second.id, "date", date("2026-06-13"))
+            .await
+            .expect_err("day already has a note");
+
+        assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        let stored = svc.load_entity(&second.id).await.expect("load");
+        assert_eq!(stored.name, "June 14, 2026");
+        assert_eq!(stored.properties, second.properties);
+        assert_eq!(fts_name(&pool, &second.id).await, "June 14, 2026");
+        assert_eq!(
+            stored_date_key(&pool, &second.id).await.as_deref(),
+            Some("2026-06-14")
+        );
+    }
+
     #[tokio::test]
     async fn set_property_moves_a_daily_note_date_key() {
         let svc = entity_service(memory_pool().await);
-        let first = create(&svc, build_daily_note("2026-06-13")).await;
-        let second = create(&svc, build_daily_note("2026-06-14")).await;
-        let date = |d: &str| Some(property_value::Value::Date(d.to_string()));
+        let first = create(&svc, daily_note("2026-06-13")).await;
+        let second = create(&svc, daily_note("2026-06-14")).await;
 
         set_property(&svc, &first.id, "date", date("2026-06-15"))
             .await
