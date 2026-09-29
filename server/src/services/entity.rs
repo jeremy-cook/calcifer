@@ -258,6 +258,97 @@ impl EntityService {
     }
 }
 
+/// Remove `deleted_id` from other entities' `relation` and `relations` values
+/// (I-14): a `relations` value drops the matching refs and is deleted if none are
+/// left; a `relation` value pointing at it is deleted. Each changed entity's
+/// `updated_at` becomes `now`. Returns the changed entity ids, sorted.
+///
+/// Candidates come from the inbound `links` rows, so call it before they're swept.
+/// A rich-text link has no property row (its document lives in `richtext`), and
+/// any row that isn't a relation value is left alone.
+async fn strip_relation_refs(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    deleted_id: &str,
+    now: i64,
+) -> Result<Vec<String>, AppError> {
+    let sources = sqlx::query!(
+        r#"SELECT DISTINCT entity_id AS "entity_id!", source_property_id AS "property_id!"
+           FROM links WHERE target_id = ? ORDER BY entity_id, source_property_id"#,
+        deleted_id
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+
+    let mut changed: Vec<String> = Vec::new();
+    for source in sources {
+        let Some(blob) = sqlx::query_scalar!(
+            "SELECT value_blob FROM properties WHERE entity_id = ? AND property_id = ?",
+            source.entity_id,
+            source.property_id
+        )
+        .fetch_optional(&mut **tx)
+        .await?
+        else {
+            continue;
+        };
+        let value: PropertyValue = prost::Message::decode(&*blob)?;
+
+        // Some(Some(v)): write v back; Some(None): delete the row; None: unchanged.
+        let update = match value.value {
+            Some(property_value::Value::Relation(r)) if r.id == deleted_id => Some(None),
+            Some(property_value::Value::Relations(mut list)) => {
+                let before = list.refs.len();
+                list.refs.retain(|r| r.id != deleted_id);
+                match list.refs.len() {
+                    n if n == before => None,
+                    0 => Some(None),
+                    _ => Some(Some(PropertyValue {
+                        value: Some(property_value::Value::Relations(list)),
+                    })),
+                }
+            }
+            _ => None,
+        };
+        let Some(update) = update else {
+            continue;
+        };
+
+        match update {
+            Some(value) => {
+                let blob = prost::Message::encode_to_vec(&value);
+                sqlx::query!(
+                    "UPDATE properties SET value_blob = ? WHERE entity_id = ? AND property_id = ?",
+                    blob,
+                    source.entity_id,
+                    source.property_id
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+            None => {
+                sqlx::query!(
+                    "DELETE FROM properties WHERE entity_id = ? AND property_id = ?",
+                    source.entity_id,
+                    source.property_id
+                )
+                .execute(&mut **tx)
+                .await?;
+            }
+        }
+        if changed.last() != Some(&source.entity_id) {
+            sqlx::query!(
+                "UPDATE entities SET updated_at = ? WHERE id = ?",
+                now,
+                source.entity_id
+            )
+            .execute(&mut **tx)
+            .await?;
+            changed.push(source.entity_id);
+        }
+    }
+    Ok(changed)
+}
+
 /// Hydrate a full Entity (metadata + properties + links + referenced_dates) from
 /// the pool. The single read-shape definition, shared by EntityService and
 /// SearchService so both services return identical entities.
@@ -1065,11 +1156,16 @@ impl EntityServiceTrait for EntityService {
         }))
     }
 
+    /// Delete an entity and everything derived from it, and strip its id from
+    /// other entities' relation values (I-14), all in one transaction. After
+    /// commit it publishes `deleted_id` first, then one `upserted` per stripped
+    /// entity in id order.
     async fn delete_entity(
         &self,
         req: Request<DeleteEntityRequest>,
     ) -> Result<Response<DeleteEntityResponse>, Status> {
         let id = req.into_inner().id;
+        let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = self.pool.begin().await.map_err(AppError::from)?;
 
@@ -1084,6 +1180,11 @@ impl EntityServiceTrait for EntityService {
             .execute(&mut *tx)
             .await
             .map_err(AppError::from)?;
+
+        // Needs the inbound links, so it runs before the sweep below.
+        let stripped = strip_relation_refs(&mut tx, &id, now)
+            .await
+            .map_err(Status::from)?;
 
         // Inbound links authored by OTHER entities aren't covered by the cascade — sweep them
         // so the relational index never points at a tombstone.
@@ -1118,6 +1219,11 @@ impl EntityServiceTrait for EntityService {
         tx.commit().await.map_err(AppError::from)?;
         self.hub
             .publish(watch_entities_response::Event::DeletedId(id));
+        for entity_id in &stripped {
+            let saved = self.load_entity(entity_id).await.map_err(Status::from)?;
+            self.hub
+                .publish(watch_entities_response::Event::Upserted(saved));
+        }
         Ok(Response::new(DeleteEntityResponse {}))
     }
 
@@ -1775,9 +1881,9 @@ mod tests {
         );
     }
 
-    // A deleted Tag stays in the Todo's stored `tags` value (Delete only sweeps
-    // links), and a tag edit resends the whole list, so a dead ref must not block
-    // the write.
+    // A client may resend a stale tag list that still holds a deleted Tag (Delete
+    // strips it from stored values, but not from a client's copy), so a dead ref
+    // must not block the write.
     #[tokio::test]
     async fn dead_relation_ref_does_not_block_set_property() {
         let svc = entity_service(memory_pool().await);
@@ -1814,6 +1920,150 @@ mod tests {
         ];
         expected.sort();
         assert_eq!(link_targets(&updated, "tags"), expected);
+    }
+
+    async fn delete(svc: &EntityService, id: &str) {
+        svc.delete_entity(Request::new(DeleteEntityRequest { id: id.to_string() }))
+            .await
+            .expect("delete");
+    }
+
+    /// The target ids of a stored `relations` value, in stored order.
+    fn relation_ids(entity: &Entity, property_id: &str) -> Option<Vec<String>> {
+        match entity.properties.get(property_id)?.value.as_ref()? {
+            property_value::Value::Relations(list) => {
+                Some(list.refs.iter().map(|r| r.id.clone()).collect())
+            }
+            other => panic!("expected relations, got {other:?}"),
+        }
+    }
+
+    /// A Todo tagged with `tags`, created a few milliseconds in the past so a
+    /// later bump of `updated_at` is visible.
+    async fn tagged_todo(svc: &EntityService, tags: &[&Entity]) -> Entity {
+        let refs: Vec<(&str, &str)> = tags.iter().map(|t| (t.id.as_str(), "Tag")).collect();
+        let todo = create(svc, with_relations(todo("Water plants"), "tags", &refs)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        todo
+    }
+
+    #[tokio::test]
+    async fn delete_strips_the_id_from_relations_values() {
+        let svc = entity_service(memory_pool().await);
+        let gone = create(&svc, tag("gone")).await;
+        let kept = create(&svc, tag("kept")).await;
+        let todo = tagged_todo(&svc, &[&gone, &kept]).await;
+
+        delete(&svc, &gone.id).await;
+
+        let stored = svc.load_entity(&todo.id).await.expect("load");
+        assert_eq!(relation_ids(&stored, "tags"), Some(vec![kept.id.clone()]));
+        assert_eq!(
+            link_targets(&stored, "tags"),
+            [(kept.id.clone(), "Tag".to_string())]
+        );
+        assert!(millis(stored.updated_at) > millis(todo.updated_at));
+    }
+
+    #[tokio::test]
+    async fn delete_clears_a_relations_value_left_empty() {
+        let svc = entity_service(memory_pool().await);
+        let only = create(&svc, tag("only")).await;
+        let todo = tagged_todo(&svc, &[&only]).await;
+
+        delete(&svc, &only.id).await;
+
+        let stored = svc.load_entity(&todo.id).await.expect("load");
+        assert!(!stored.properties.contains_key("tags"));
+        assert!(link_targets(&stored, "tags").is_empty());
+        assert!(millis(stored.updated_at) > millis(todo.updated_at));
+    }
+
+    #[tokio::test]
+    async fn delete_clears_a_single_relation_value() {
+        let svc = entity_service(memory_pool().await);
+        let target = create(&svc, note("Target")).await;
+        let source = create(&svc, note("Source")).await;
+        let source = set_property(
+            &svc,
+            &source.id,
+            "parent",
+            Some(property_value::Value::Relation(EntityRef {
+                id: target.id.clone(),
+                structure_type: String::new(),
+            })),
+        )
+        .await
+        .expect("set ad-hoc relation");
+        assert_eq!(link_targets(&source, "parent").len(), 1);
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+        delete(&svc, &target.id).await;
+
+        let stored = svc.load_entity(&source.id).await.expect("load");
+        assert!(!stored.properties.contains_key("parent"));
+        assert!(stored.links.is_empty());
+        assert!(millis(stored.updated_at) > millis(source.updated_at));
+    }
+
+    #[tokio::test]
+    async fn delete_publishes_upserts_for_stripped_entities() {
+        let svc = entity_service(memory_pool().await);
+        let gone = create(&svc, tag("gone")).await;
+        let kept = create(&svc, tag("kept")).await;
+        let todo = tagged_todo(&svc, &[&gone, &kept]).await;
+        let mut rx = svc.hub.subscribe();
+
+        delete(&svc, &gone.id).await;
+
+        let first = rx.recv().await.expect("deleted event");
+        assert_eq!(
+            first.event,
+            Some(watch_entities_response::Event::DeletedId(gone.id.clone()))
+        );
+        let second = rx.recv().await.expect("upserted event");
+        let Some(watch_entities_response::Event::Upserted(upserted)) = second.event else {
+            panic!("expected an upsert, got {second:?}");
+        };
+        assert_eq!(upserted.id, todo.id);
+        assert_eq!(relation_ids(&upserted, "tags"), Some(vec![kept.id.clone()]));
+        assert!(rx.try_recv().is_err(), "no further events");
+    }
+
+    #[tokio::test]
+    async fn delete_leaves_rich_text_mentions_out_of_properties() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let gone = create(&svc, tag("gone")).await;
+        let mentioner = create(&svc, todo("Mentions the tag")).await;
+        let doc = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{{"type":"mention","attrs":{{"id":"{}","structureType":"Tag"}}}}]}}]}}"#,
+            gone.id
+        );
+        richtext_service(pool.clone(), WatchHub::new())
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: mentioner.id.clone(),
+                property_id: "content".to_string(),
+                doc,
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put content");
+        let before = svc.load_entity(&mentioner.id).await.expect("load");
+        assert_eq!(link_targets(&before, "content").len(), 1);
+        let mut rx = svc.hub.subscribe();
+
+        delete(&svc, &gone.id).await;
+
+        let after = svc.load_entity(&mentioner.id).await.expect("load");
+        assert_eq!(after.properties, before.properties);
+        assert_eq!(after.updated_at, before.updated_at);
+        let event = rx.recv().await.expect("deleted event");
+        assert_eq!(
+            event.event,
+            Some(watch_entities_response::Event::DeletedId(gone.id.clone()))
+        );
+        assert!(rx.try_recv().is_err(), "no upsert for a rich-text mention");
     }
 
     async fn set_property(
