@@ -141,47 +141,6 @@ published last.
 
 ---
 
-### I-52 · Date strings aren't format-checked · low · confirmed
-
-**Where:** `server/src/links.rs:66-76` (dateChip), `server/src/services/entity.rs` (`validate_property`, `date_key_from`), `mcp-server/src/markdown/parse.ts:66`
-
-**Problem:** A `dateChip`'s `date` goes into `referenced_dates` unchecked, and `PropertyValue.date` isn't checked in `CreateEntity` or `SetEntityProperty` (only `ResolveEntity`'s date key is). A non-ISO DailyNote `date` becomes its `date_key`, and its name falls back to the raw string. The MCP parser's date regex accepts impossible days such as `2026-13-45`. Found during T20 of the API review.
-
-**Fix:** Validate `yyyy-MM-dd` as a real calendar day in all three server paths (`INVALID_ARGUMENT` for a property; skip a bad chip), and tighten the MCP regex to real days.
-
-**Done when:** a bad date is rejected by `SetEntityProperty` and `CreateEntity`, ignored in a chip, and not produced by the MCP parser, with tests.
-
-**Server half done (T24, 2026-09-28):** `CreateEntity`, `ResolveEntity` and `SetEntityProperty` reject a date value that isn't a real ISO day with `INVALID_ARGUMENT`, and a `dateChip` with a bad `date` is skipped (`is_iso_day` in `links.rs`; `date_values_must_be_iso_days`, `date_chips_with_a_non_iso_date_are_skipped`). Still open: the MCP parser regex (T28) and the proto comment on `PropertyValue.date` (T29). Existing stored values aren't checked or cleaned up.
-
-**MCP half done (T28, 2026-09-28):** `parse.ts` makes a `dateChip` only for a real calendar day with no digit on either side (`2026-02-30` and `2026-06-155` stay text). Only the proto comment on `PropertyValue.date` is left (T29).
-
----
-
-### I-55 · `proto:gen` depends on the remote buf plugin and fails under rate limits · low · confirmed
-
-**Where:** `calcifer/buf.gen.yaml`, `mcp-server/buf.gen.yaml`
-
-**Problem:** Both use the remote `buf.build/bufbuild/es` plugin, so `pnpm proto:gen` fails when the BSR rate-limits (T20 needed seven retries). `calcifer` has a local `protoc-gen-es`, but at v2.11.0 against the remote v2.15.0. Found during T20 of the API review.
-
-**Fix:** Use a local `protoc-gen-es` pinned to one version in both packages.
-
-**Done when:** `proto:gen` works offline in both packages and both produce the same generated code version.
-
----
-
-### I-60 · `parse.ts` contains a literal NUL byte · low · confirmed
-
-**Where:** `mcp-server/src/markdown/parse.ts` (`refKey` separator)
-
-**Problem:** `refKey` joins its parts with a literal NUL character in the source, so git
-treats the file as binary and shows no diff for it. Predates T28. Found in T28.
-
-**Fix:** Write the separator as an escape (`'\u0000'`) or use another separator.
-
-**Done when:** `git diff` shows `parse.ts` as text.
-
----
-
 ### I-61 · MCP link syntax isn't escaped for names containing `|`, `]]` or a structure prefix · low · confirmed
 
 **Where:** `mcp-server/src/tools.ts` (`linkNotes`), `mcp-server/src/markdown/serialize.ts` (`mentionToMd`)
@@ -217,6 +176,9 @@ through, or let the link store skip its lookup for pre-checked relation targets.
 
 ## Resolved
 
+- **I-60 · `parse.ts` contains a literal NUL byte.** Fixed 2026-09-28. `refKey`'s separator is written as the escape `\u0000` (same runtime value), so git diffs `parse.ts` as text.
+- **I-55 · `proto:gen` depends on the remote buf plugin and fails under rate limits.** Fixed 2026-09-28. Both `buf.gen.yaml`s use `local: protoc-gen-es`, and `calcifer` and `mcp-server` pin `@bufbuild/protoc-gen-es` 2.15.0, `@bufbuild/buf` 1.68.2 and `@bufbuild/protobuf` 2.15.0 (the plugin's exact peer) as exact versions; `mcp-server` no longer needs a global `buf`. Regenerating left `calcifer/gen/ts/` byte-identical.
+- **I-52 · Date strings aren't format-checked.** Fixed 2026-09-28. The server rejects a date value that isn't a real ISO day with `INVALID_ARGUMENT` in `CreateEntity`, `ResolveEntity` and `SetEntityProperty`, and skips a `dateChip` with a bad `date` (T24; `date_values_must_be_iso_days`, `date_chips_with_a_non_iso_date_are_skipped`). The MCP parser makes a `dateChip` only for a real day with no digit on either side (T28). The proto comments on `PropertyValue.date`, `RichText.doc` and `LinkRef.target` now say so (T29). Existing stored values aren't checked or cleaned up.
 - **I-59 · Structure descriptions tell the agent to reference a Todo with `[[Name]]`.** Fixed 2026-09-28. The Todo description says `[[Todo/Name]]`, the syntax the MCP parser reads for a Todo; Note keeps `[[Name]]`.
 - **I-54 · Search text drops chips and splits words across marks.** Fixed 2026-09-28. One rule (`links::collect_text`) feeds FTS and embedding chunks: inline nodes join with no separator, a mention or hashtag gives its `label`, a date chip its `date`, a `hardBreak` a space, and blocks are separated by one space. Existing documents aren't reindexed (D12); each updates on its next save. Covered by `plain_text_joins_inline_nodes_and_includes_chip_text`, `chunk_text_joins_inline_nodes_and_includes_chip_text` and `lexical_search_finds_split_words_and_mentioned_names`.
 - **I-51 · Content mention links trust the doc's `structureType`.** Fixed 2026-09-28. A `mention`/`hashtag` needs only a string `id`; `replace_scoped_links` records the target's real `structure_type`, read in the query that drops a dead target. Covered by `content_links_record_the_targets_real_type`.
