@@ -12,8 +12,8 @@ use serde_json::Value;
 
 use crate::error::AppError;
 
-/// A link target: an entity id. Its structure type isn't carried; the link store
-/// reads the target's real `structure_type` when it writes the row (I-51).
+/// A link target: an entity id. Its structure type isn't carried; the link store's
+/// `live_targets` reads the target's real `structure_type` (I-51).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MentionRef {
     pub id: String,

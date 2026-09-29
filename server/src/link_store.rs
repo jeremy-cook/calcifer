@@ -7,18 +7,52 @@ use crate::links::MentionRef;
 use crate::proto::{property_value, Entity, EntityRef};
 use crate::structures::{self, relation_properties};
 
+/// A link target that exists, with its real `structure_type` (I-51).
+#[derive(Debug, Clone)]
+pub(crate) struct LinkTarget {
+    pub id: String,
+    pub structure_type: String,
+}
+
+/// Look up each mention's real `structure_type`, dropping targets with no
+/// `entities` row. Safe because the server is authoritative — unlike the FE, where
+/// such a chip is a tombstone, not a deletion. Links record the target's real type,
+/// never a type the caller claims (I-51).
+pub(crate) async fn live_targets(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    refs: &[MentionRef],
+) -> Result<Vec<LinkTarget>, AppError> {
+    let mut targets = Vec::with_capacity(refs.len());
+    for m in refs {
+        // Runtime (non-macro) query: same vec0-virtual-table compile-time
+        // introspection hazard documented at fts_upsert_name forces unchecked here.
+        let structure_type =
+            sqlx::query_scalar::<_, String>("SELECT structure_type FROM entities WHERE id = ?")
+                .bind(&m.id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        if let Some(structure_type) = structure_type {
+            targets.push(LinkTarget {
+                id: m.id.clone(),
+                structure_type,
+            });
+        }
+    }
+    Ok(targets)
+}
+
 /// Scoped link replace for a single (entity_id, source_property_id): select existing
 /// link_id/created_at pairs for that scope, delete them, then re-insert one row per
 /// target, reusing the prior link_id/created_at when a target repeats (preserves
-/// backlink recency across an edit) and skipping targets with no `entities` row.
-/// Each row's `target_structure` is the target's real `structure_type`.
+/// backlink recency across an edit). Targets come from `live_targets` or
+/// `check_relation_targets`, so they exist and carry their real type.
 /// Runs inside an already-open transaction. Shared by `RichTextService.PutRichText`
 /// (content-derived links) and `sync_relation_property` (relation-property links).
 pub(crate) async fn replace_scoped_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     entity_id: &str,
     source_property_id: &str,
-    targets: &[MentionRef],
+    targets: &[LinkTarget],
     now: i64,
 ) -> Result<(), AppError> {
     let existing = sqlx::query!(
@@ -43,20 +77,6 @@ pub(crate) async fn replace_scoped_links(
     .await?;
 
     for m in targets {
-        // Drop targets whose entity row no longer exists. Safe because the server is
-        // authoritative — unlike the FE, where such a chip is a tombstone, not a deletion.
-        // Runtime (non-macro) query: same vec0-virtual-table compile-time
-        // introspection hazard documented at fts_upsert_name forces unchecked here.
-        // The link records the target's real type, never a type the caller claims (I-51).
-        let structure_type =
-            sqlx::query_scalar::<_, String>("SELECT structure_type FROM entities WHERE id = ?")
-                .bind(&m.id)
-                .fetch_optional(&mut **tx)
-                .await?;
-        let Some(structure_type) = structure_type else {
-            continue;
-        };
-
         let (link_id, created_at) = match prev.get(&m.id) {
             Some((lid, ts)) => (lid.clone(), *ts),
             None => (uuid::Uuid::new_v4().to_string(), now),
@@ -67,7 +87,7 @@ pub(crate) async fn replace_scoped_links(
             entity_id,
             link_id,
             m.id,
-            structure_type,
+            m.structure_type,
             source_property_id,
             created_at,
         )
@@ -151,8 +171,8 @@ pub(crate) async fn sync_relation_property(
 }
 
 /// Check a relation property's refs against the targets' real `structure_type`
-/// (I-2) and return them as link targets (the link store records that real
-/// type), so the stored value and its links never disagree. Rejects a ref whose
+/// (I-2) and return them as link targets carrying that real type (one read per
+/// ref), so the stored value and its links never disagree. Rejects a ref whose
 /// claimed type (when non-empty) isn't the target's, or whose target isn't the
 /// property's declared `target_structure`. Ad-hoc properties have no declared
 /// target to check. Refs to ids with no `entities` row are dropped, not
@@ -163,7 +183,7 @@ async fn check_relation_targets(
     structure_type: &str,
     property_id: &str,
     refs: &[&EntityRef],
-) -> Result<Vec<MentionRef>, AppError> {
+) -> Result<Vec<LinkTarget>, AppError> {
     let expected =
         structures::property(structure_type, property_id).and_then(|def| def.target_structure);
     let mut targets = Vec::with_capacity(refs.len());
@@ -188,7 +208,10 @@ async fn check_relation_targets(
                 )));
             }
         }
-        targets.push(MentionRef { id: r.id.clone() });
+        targets.push(LinkTarget {
+            id: r.id.clone(),
+            structure_type: actual,
+        });
     }
     Ok(targets)
 }

@@ -3,7 +3,7 @@ use tonic::{Request, Response, Status};
 
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
-use crate::link_store::replace_scoped_links;
+use crate::link_store::{live_targets, replace_scoped_links};
 use crate::links::{extract_doc_references, extract_plain_text};
 use crate::proto::{
     rich_text_service_server::RichTextService as RichTextServiceTrait, watch_entities_response,
@@ -198,15 +198,12 @@ impl RichTextServiceTrait for RichTextService {
         let refs = extract_doc_references(&body.doc).map_err(Status::from)?;
 
         // 3. Scoped link replace for THIS property, preserving link_id/created_at per target.
-        replace_scoped_links(
-            &mut tx,
-            &entity_id,
-            &property_id,
-            &refs.entities,
-            updated_at,
-        )
-        .await
-        .map_err(Status::from)?;
+        let targets = live_targets(&mut tx, &refs.entities)
+            .await
+            .map_err(Status::from)?;
+        replace_scoped_links(&mut tx, &entity_id, &property_id, &targets, updated_at)
+            .await
+            .map_err(Status::from)?;
 
         // 4. Recompute referenced_dates as the entity-scoped union across all richtext docs.
         let all_docs = sqlx::query_scalar!(
