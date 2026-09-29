@@ -72,7 +72,12 @@ attributes it reads (`mention`, `hashtag`, `dateChip` and text) and what it deri
 each are specified in [`richtext-doc.md`](richtext-doc.md).
 
 Field formats: a `date` value, `ResolveEntityRequest.date` and every
-`referenced_dates` entry are ISO calendar days, `yyyy-MM-dd`. In a relation value the
+`referenced_dates` entry are ISO calendar days, `yyyy-MM-dd`. The server checks them:
+`CreateEntity`, `ResolveEntity` and `SetEntityProperty` return `INVALID_ARGUMENT` for a
+`date` value that isn't a real day in that canonical form (`2026-13-45`, `2026-2-3`,
+`June 13`, `""`), whether the property is declared or ad hoc; clear a date by removing
+the property. A date chip with a bad `date` is skipped (see
+[`richtext-doc.md`](richtext-doc.md)). In a relation value the
 server reads only each `EntityRef`'s `id`; `structure_type` may be empty.
 
 ---
@@ -114,7 +119,7 @@ message StructureDef {
 | Flag | Meaning |
 |---|---|
 | `mentionable` | Whether bare `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
-| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. Enforced: `CreateEntity` of a non-creatable structure is `FAILED_PRECONDITION`; a DailyNote is made by `ResolveEntity` with a date. |
+| `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. Enforced: `CreateEntity`, and `ResolveEntity` by name with `create_if_missing`, of a non-creatable structure is `FAILED_PRECONDITION`; a DailyNote is made by `ResolveEntity` with a date. |
 | `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Enforced by the `one_tag_per_name` index (`ALREADY_EXISTS`). Other names can repeat; see `ResolveEntity` for which one a name lookup returns. |
 | `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. Enforced: `RenameEntity` of a structure with `name_editable: false` is `FAILED_PRECONDITION`. |
 
@@ -126,7 +131,8 @@ in `services/entity.rs` puts on an entity `CreateEntity` or `ResolveEntity` crea
 `CreateEntity`, `ResolveEntity` and `SetEntityProperty` check property values against it and return
 `InvalidArgument` for any value on a declared rich-text property (it takes none), a
 value whose case isn't the declared property's `PropertyKind`, a select key that isn't one of the
-property's options, or a `select` value on a property not declared as a select. Other
+property's options, a `select` value on a property not declared as a select, or a
+`date` value that isn't an ISO day (on any property, declared or not). Other
 undeclared (ad-hoc) property ids take any value. `CreateEntity`, `ResolveEntity` by name and a
 non-empty `ListEntities` filter return `InvalidArgument` for a `structure_type` not in the
 table. Entities of such a type written before that check have no schema and their
@@ -309,6 +315,10 @@ for a blank one, and `FAILED_PRECONDITION` for a structure with `name_editable: 
 that failed: `a Tag named "<name>" already exists` or `a DailyNote for <date> already
 exists`. There is no whole-entity write.
 
+`ListEntities` returns entities most recently updated first; entities with the same
+`updated_at` come back in `id` order. Within an entity, `links` are in `link_id` order
+and `referenced_dates` in date order, whichever RPC returns it.
+
 `CreateEntity` takes intent: `structure_type`, an optional `name` and initial `properties`
 (the same `map<string, PropertyValue>`, keyed by property id; an entry whose value has
 no case is `INVALID_ARGUMENT`).
@@ -335,6 +345,8 @@ name, an empty or unknown `structure_type` (name), a malformed day, or a `struct
 or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is set, in
 which case the server builds the entity (`new_entity`: minted id, select defaults,
 and for a date the `date` property and its name), saves it, publishes `upserted` and returns `created = true`.
+Creating by name is `FAILED_PRECONDITION` for a structure that isn't `creatable` (a
+DailyNote is resolved by `date`); looking one up by name still works.
 
 **DailyNote name rule.** A DailyNote's name is its `date` as a long date ("June 13,
 2026"), set by the server when `ResolveEntity` creates it and when `SetEntityProperty` changes its
@@ -345,8 +357,9 @@ one transaction, and fails with `ALREADY_EXISTS` if that day already has a Daily
 Clearing the date keeps the name it had.
 
 `RichTextService` only addresses declared rich-text properties. Both `GetRichText` and
-`PutRichText` return `NOT_FOUND` if the entity doesn't exist and `INVALID_ARGUMENT` if the property
-isn't in its structure's rich-text properties. `GetRichText` of a declared property with
+`PutRichText` return `INVALID_ARGUMENT` for an empty `entity_id` or `property_id`, `NOT_FOUND` if
+the entity doesn't exist and `INVALID_ARGUMENT` if the property isn't in its structure's
+rich-text properties. `GetRichText` of a declared property with
 nothing saved returns an empty `doc` and the epoch as `updated_at`.
 
 `PutRichText` is conditional when `expected_updated_at` is set: clients echo back the

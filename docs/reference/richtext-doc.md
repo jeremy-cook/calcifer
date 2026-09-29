@@ -59,9 +59,10 @@ chips (Tags) and `@` chips render and autocomplete differently.
 
 ### `dateChip`
 
-- `date` should be a canonical ISO day (`2026-06-13`). The server doesn't check it: any
-  string is stored as-is in `referenced_dates`. A missing or non-string `date` is
-  skipped.
+- `date` must be a real calendar day in canonical ISO form (`2026-06-13`). A chip whose
+  `date` isn't one (`2026-13-45`, `2026-6-13`, `June 13`, `""`) is skipped, as a missing
+  or non-string `date` is: it adds nothing to `referenced_dates` and doesn't fail the
+  save.
 - `Entity.referenced_dates` is the union of the date chips in **all** of the entity's
   rich-text documents, de-duplicated, recomputed on every save of any of them.
 
