@@ -140,7 +140,7 @@ async fn reembed_entity(
             .map_err(|e| AppError::Invalid(format!("embed task join error: {e}")))??
     };
 
-    let mut tx = pool.begin().await?;
+    let mut tx = crate::db::begin_write(pool).await?;
 
     // Drop the entity's prior rows; entity_vec keys on the same ids as chunks.
     let old_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM chunks WHERE entity_id = ?")

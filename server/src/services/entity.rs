@@ -5,6 +5,7 @@ use sqlx::SqlitePool;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tonic::{Request, Response, Status};
 
+use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
@@ -40,7 +41,7 @@ impl EntityService {
     async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
         let now = chrono::Utc::now().timestamp_millis();
         let date_key = date_key_for(entity);
-        let mut tx = self.pool.begin().await?;
+        let mut tx = begin_write(&self.pool).await?;
         sqlx::query!(
             "INSERT INTO entities (id, structure_type, name, date_key, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?)",
@@ -978,7 +979,7 @@ impl EntityServiceTrait for EntityService {
         }
         let now = chrono::Utc::now().timestamp_millis();
 
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
         let structure_type =
             sqlx::query_scalar!("SELECT structure_type FROM entities WHERE id = ?", id)
                 .fetch_optional(&mut *tx)
@@ -1033,7 +1034,7 @@ impl EntityServiceTrait for EntityService {
         let value = value.filter(|v| v.value.is_some());
         let now = chrono::Utc::now().timestamp_millis();
 
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
 
         let structure_type = sqlx::query_scalar!(
             "SELECT structure_type FROM entities WHERE id = ?",
@@ -1167,7 +1168,7 @@ impl EntityServiceTrait for EntityService {
         let id = req.into_inner().id;
         let now = chrono::Utc::now().timestamp_millis();
 
-        let mut tx = self.pool.begin().await.map_err(AppError::from)?;
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
 
         // ON DELETE CASCADE handles this entity's properties / links / referenced_dates.
         sqlx::query!("DELETE FROM entities WHERE id = ?", id)
@@ -1410,7 +1411,9 @@ mod tests {
     use super::*;
     use crate::proto::rich_text_service_server::RichTextService as _;
     use crate::proto::{EntityRefList, PutRichTextRequest};
-    use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag, todo};
+    use crate::test_support::{
+        entity_service, memory_pool, note, richtext_service, tag, todo, ScratchDb,
+    };
     use futures::StreamExt;
 
     async fn create(svc: &EntityService, req: CreateEntityRequest) -> Entity {
@@ -2114,6 +2117,31 @@ mod tests {
         let stored = svc.load_entity(&snapshot.id).await.expect("load");
         assert_eq!(select_value(&stored, "status").as_deref(), Some("done"));
         assert_eq!(select_value(&stored, "priority").as_deref(), Some("high"));
+    }
+
+    // I-40: two writers race on one entity. Each reads before it writes, so a
+    // DEFERRED transaction that loses would fail at once with SQLITE_BUSY
+    // (Internal) instead of waiting on busy_timeout. Both must succeed. A few
+    // rounds, because one race can miss the window.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn racing_set_property_writes_both_succeed() {
+        let scratch = ScratchDb::new().await;
+        let svc = entity_service(scratch.pool.clone());
+        let entity = create(&svc, todo("Water plants")).await;
+
+        for (status, priority) in [("done", "high"), ("open", "low"), ("done", "medium")] {
+            let (a, b) = tokio::join!(
+                set_property(&svc, &entity.id, "status", select(status)),
+                set_property(&svc, &entity.id, "priority", select(priority)),
+            );
+            a.expect("status write");
+            b.expect("priority write");
+
+            let stored = svc.load_entity(&entity.id).await.expect("load");
+            assert_eq!(select_value(&stored, "status").as_deref(), Some(status));
+            assert_eq!(select_value(&stored, "priority").as_deref(), Some(priority));
+        }
+        scratch.pool.close().await;
     }
 
     #[tokio::test]

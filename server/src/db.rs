@@ -3,7 +3,7 @@ use std::sync::Once;
 use std::time::Duration;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::SqlitePool;
+use sqlx::{Sqlite, SqlitePool, Transaction};
 
 static VEC_INIT: Once = Once::new();
 
@@ -26,6 +26,15 @@ pub(crate) fn register_sqlite_vec() {
             )));
         }
     });
+}
+
+/// Begin a write transaction. IMMEDIATE takes the write lock before the first
+/// read. A DEFERRED transaction that has already read can't upgrade to a writer
+/// once another connection commits: SQLite returns SQLITE_BUSY at once, ignoring
+/// busy_timeout, and the caller fails as Internal (I-37, I-40). With IMMEDIATE a
+/// contending writer waits on busy_timeout instead, then reads current data.
+pub async fn begin_write(pool: &SqlitePool) -> sqlx::Result<Transaction<'static, Sqlite>> {
+    pool.begin_with("BEGIN IMMEDIATE").await
 }
 
 pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {

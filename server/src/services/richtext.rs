@@ -1,6 +1,7 @@
 use sqlx::{SqliteConnection, SqlitePool};
 use tonic::{Request, Response, Status};
 
+use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::link_store::{live_targets, replace_scoped_links};
@@ -133,17 +134,9 @@ impl RichTextServiceTrait for RichTextService {
         require_ids(&r)?;
         let now = chrono::Utc::now().timestamp_millis();
 
-        // IMMEDIATE takes the write lock before the expectation check reads. A DEFERRED
-        // transaction that has already read can't upgrade to a writer once another
-        // connection commits: SQLite returns SQLITE_BUSY at once, ignoring
-        // busy_timeout, so a racing Put would fail as Internal. With IMMEDIATE the
-        // loser waits on busy_timeout, then reads the winner's updated_at and fails
-        // with FailedPrecondition (I-37).
-        let mut tx = self
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await
-            .map_err(AppError::from)?;
+        // The write lock comes first, so a racing Put waits, then reads the winner's
+        // updated_at and fails with FailedPrecondition (I-37).
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
 
         // 0. Validate the target and check the caller's expectation against what's stored.
         check_declared(&mut tx, &r).await?;
@@ -310,7 +303,9 @@ mod tests {
     use super::*;
     use crate::proto::entity_service_server::EntityService as _;
     use crate::proto::{CreateEntityRequest, Entity};
-    use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag};
+    use crate::test_support::{
+        entity_service, memory_pool, note, richtext_service, tag, ScratchDb,
+    };
 
     const DOC_A: &str =
         r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"a"}]}]}"#;
@@ -537,29 +532,10 @@ mod tests {
         }
     }
 
-    /// Removes a scratch SQLite file and its WAL sidecars when dropped, so the
-    /// file is cleaned up even if the test panics.
-    struct ScratchDb(std::path::PathBuf);
-
-    impl Drop for ScratchDb {
-        fn drop(&mut self) {
-            for suffix in ["", "-wal", "-shm"] {
-                let mut path = self.0.clone().into_os_string();
-                path.push(suffix);
-                let _ = std::fs::remove_file(path);
-            }
-        }
-    }
-
-    // `memory_pool` has a single connection, so the race needs a real file-backed
-    // pool (WAL, busy_timeout, several connections) as `main.rs` opens it.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn racing_conditional_puts_give_one_success_and_one_conflict() {
-        let scratch = ScratchDb(
-            std::env::temp_dir().join(format!("calcifer-race-{}.db", uuid::Uuid::new_v4())),
-        );
-        let url = format!("sqlite://{}", scratch.0.display());
-        let pool = crate::db::connect(&url).await.expect("open file pool");
+        let scratch = ScratchDb::new().await;
+        let pool = scratch.pool.clone();
         let svc = richtext_service(pool.clone(), WatchHub::new());
         let entity = create(&pool, note("N")).await;
         let r = rt_ref(&entity.id, "content");

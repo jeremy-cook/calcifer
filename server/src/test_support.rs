@@ -42,6 +42,34 @@ pub(crate) async fn unmigrated_memory_pool() -> SqlitePool {
         .expect("open in-memory pool")
 }
 
+/// A fresh file-backed database opened by `db::connect`, as `main.rs` opens it
+/// (WAL, busy_timeout, several connections), for tests that race two writers:
+/// `memory_pool` has a single connection, so nothing can race on it. The file
+/// and its WAL sidecars are removed when dropped, even if the test panics.
+pub(crate) struct ScratchDb {
+    pub pool: SqlitePool,
+    path: std::path::PathBuf,
+}
+
+impl ScratchDb {
+    pub async fn new() -> Self {
+        let path = std::env::temp_dir().join(format!("calcifer-race-{}.db", uuid::Uuid::new_v4()));
+        let url = format!("sqlite://{}", path.display());
+        let pool = crate::db::connect(&url).await.expect("open file pool");
+        Self { pool, path }
+    }
+}
+
+impl Drop for ScratchDb {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm"] {
+            let mut path = self.path.clone().into_os_string();
+            path.push(suffix);
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
 /// An `EntityService` on `pool`, wired as in `main.rs` but with embeddings
 /// disabled (the lightest legitimate handle: no model load or download).
 pub(crate) fn entity_service(pool: SqlitePool) -> EntityService {
