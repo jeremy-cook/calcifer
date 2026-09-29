@@ -29,6 +29,14 @@ pub struct DocReferences {
 
 const MENTION_TYPES: [&str; 2] = ["mention", "hashtag"];
 
+/// Whether `s` is a real calendar day in canonical `yyyy-MM-dd` form (no padding
+/// left out, no surrounding space). The one date check the server makes: date
+/// property values, Resolve's date key and a `dateChip`'s `date` all use it (I-52).
+pub(crate) fn is_iso_day(s: &str) -> bool {
+    chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d")
+        .is_ok_and(|d| d.format("%Y-%m-%d").to_string() == s)
+}
+
 pub fn extract_doc_references(doc_json: &str) -> Result<DocReferences, AppError> {
     let mut refs = DocReferences::default();
     if doc_json.trim().is_empty() {
@@ -69,6 +77,7 @@ fn walk(
                 .get("attrs")
                 .and_then(|a| a.get("date"))
                 .and_then(Value::as_str)
+                .filter(|d| is_iso_day(d))
             {
                 if seen_dates.insert(iso.to_string()) {
                     refs.dates.push(iso.to_string());
@@ -134,6 +143,40 @@ mod tests {
         assert_eq!(refs.entities[0].id, "e1");
         assert_eq!(refs.entities[1].structure_type, "Tag");
         assert_eq!(refs.dates, vec!["2026-06-15".to_string()]);
+    }
+
+    // I-52: a chip whose date isn't an ISO day is skipped, as a missing date is.
+    #[test]
+    fn date_chips_with_a_non_iso_date_are_skipped() {
+        let doc = r#"{"type":"doc","content":[
+            {"type":"paragraph","content":[
+                {"type":"dateChip","attrs":{"date":"2026-13-45"}},
+                {"type":"dateChip","attrs":{"date":"2026-02-03"}},
+                {"type":"dateChip","attrs":{"date":"2026-2-3"}},
+                {"type":"dateChip","attrs":{"date":"June 13"}},
+                {"type":"dateChip","attrs":{"date":""}},
+                {"type":"dateChip","attrs":{}}
+            ]}
+        ]}"#;
+        let refs = extract_doc_references(doc).unwrap();
+        assert_eq!(refs.dates, vec!["2026-02-03".to_string()]);
+    }
+
+    #[test]
+    fn is_iso_day_accepts_only_canonical_real_days() {
+        for good in ["2026-02-03", "2024-02-29"] {
+            assert!(is_iso_day(good), "{good}");
+        }
+        for bad in [
+            "2026-13-45",
+            "2026-2-3",
+            "2025-02-29",
+            "June 13",
+            "",
+            " 2026-02-03",
+        ] {
+            assert!(!is_iso_day(bad), "{bad:?}");
+        }
     }
 
     #[test]

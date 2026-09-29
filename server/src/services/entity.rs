@@ -8,6 +8,7 @@ use tonic::{Request, Response, Status};
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
+use crate::links::is_iso_day;
 use crate::proto::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, Backlink, CreateEntityRequest,
@@ -185,9 +186,7 @@ impl EntityService {
         }
         // Canonical form only, so one day can't get a second date_key spelling.
         let date = date.trim();
-        let canonical = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d")
-            .map(|d| d.format("%Y-%m-%d").to_string());
-        if canonical.as_deref() != Ok(date) {
+        if !is_iso_day(date) {
             return Err(Status::invalid_argument(format!(
                 "date must be an ISO calendar day (yyyy-MM-dd), got {date:?}"
             )));
@@ -601,13 +600,21 @@ fn validate_properties(entity: &Entity) -> Result<(), AppError> {
 /// allowed on a declared select (I-9).
 /// Other undeclared (ad-hoc) properties take any value. Structures missing from
 /// the registry (rows written before unknown types were rejected, I-24) have no
-/// schema and pass unchecked. Shared by Create and Resolve (via
+/// schema and pass unchecked. Any `date` value, declared or not and whatever
+/// the structure, must be an ISO day (I-52). Shared by Create and Resolve (via
 /// `validate_properties`) and SetProperty.
 fn validate_property(
     structure_type: &str,
     property_id: &str,
     value: Option<&property_value::Value>,
 ) -> Result<(), AppError> {
+    if let Some(property_value::Value::Date(d)) = value {
+        if !is_iso_day(d) {
+            return Err(AppError::Invalid(format!(
+                "{structure_type}.{property_id} must be an ISO calendar day (yyyy-MM-dd), got {d:?}"
+            )));
+        }
+    }
     if structures::structure(structure_type).is_none() {
         return Ok(());
     }
@@ -2174,6 +2181,60 @@ mod tests {
 
         let day = daily_note(&svc, "2026-06-13").await;
         assert_eq!(day.name, "June 13, 2026");
+    }
+
+    // I-52: a date value is a real day in canonical form, declared (Todo.due,
+    // DailyNote.date) or ad hoc (a Note's `when`), on Create and SetProperty.
+    #[tokio::test]
+    async fn date_values_must_be_iso_days() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let task = create(&svc, todo("Task")).await;
+        let memo = create(&svc, note("Memo")).await;
+        let day = daily_note(&svc, "2026-06-13").await;
+        let targets = [
+            (&task, "due", todo("T")),
+            (&memo, "when", note("M")),
+            (&day, "date", note("D")),
+        ];
+
+        for bad in ["2026-13-45", "2026-2-3", "June 13", ""] {
+            let value = property_value::Value::Date(bad.to_string());
+            for (entity, property_id, req) in &targets {
+                if entity.structure_type != "DailyNote" {
+                    let err = try_create(&svc, with_value(req.clone(), property_id, value.clone()))
+                        .await
+                        .expect_err("bad date on create");
+                    assert_eq!(err.code(), tonic::Code::InvalidArgument, "create {bad:?}");
+                }
+                let err = set_property(&svc, &entity.id, property_id, Some(value.clone()))
+                    .await
+                    .expect_err("bad date on set");
+                assert_eq!(err.code(), tonic::Code::InvalidArgument, "set {bad:?}");
+            }
+        }
+        assert_eq!(entity_count(&pool).await, 3);
+        assert_eq!(
+            stored_date_key(&pool, &day.id).await.as_deref(),
+            Some("2026-06-13")
+        );
+
+        let good = property_value::Value::Date("2026-02-03".to_string());
+        try_create(&svc, with_value(todo("T"), "due", good.clone()))
+            .await
+            .expect("declared date on create");
+        try_create(&svc, with_value(note("M"), "when", good.clone()))
+            .await
+            .expect("ad-hoc date on create");
+        for (entity, property_id, _) in &targets {
+            set_property(&svc, &entity.id, property_id, Some(good.clone()))
+                .await
+                .expect("good date on set");
+        }
+        assert_eq!(
+            stored_date_key(&pool, &day.id).await.as_deref(),
+            Some("2026-02-03")
+        );
     }
 
     #[tokio::test]
