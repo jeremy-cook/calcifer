@@ -96,7 +96,11 @@ async function pureRoundTrip(): Promise<void> {
   }
   assert((await dates('Due 2026-02-28.')).join() === '2026-02-28', '2026-02-28 is a date chip')
   assert((await dates('Due 2028-02-29.')).join() === '2028-02-29', 'a leap day is a date chip')
-  for (const bad of ['2026-02-30', '2026-13-45', '2027-02-29', '2026-04-31', '2026-00-10', '2026-01-00']) {
+  // A date glued to more digits on either side isn't a date; punctuation after one is fine.
+  assert((await dates('Due 2026-06-15.')).join() === '2026-06-15', 'a date before "." is a date chip')
+  assert((await dates('Due 2026-06-15, then')).join() === '2026-06-15', 'a date before "," is a date chip')
+  assert((await dates('Due 2026-06-15 then')).join() === '2026-06-15', 'a date before a space is a date chip')
+  for (const bad of ['2026-02-30', '2026-13-45', '2027-02-29', '2026-04-31', '2026-00-10', '2026-01-00', '2026-06-155', '2026-06-15123', '12026-06-15']) {
     assert((await dates(`Due ${bad}.`)).length === 0, `${bad} is not a date chip`)
     assert(toMd(await toTT(`Due ${bad}.`)) === `Due ${bad}.`, `${bad} stays plain text`)
   }
