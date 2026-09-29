@@ -6,19 +6,13 @@ import { entityClient, richTextClient, searchClient, structureClient } from './c
 import { PropertyKind, type PropertyDef, type StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { SearchMode as ProtoSearchMode, type MatchRange } from '@calcifer/proto/calcifer/v1/services_pb'
 import { toTipTap } from './markdown/parse.js'
-import { fromTipTap } from './markdown/serialize.js'
-import type { TTNode } from './markdown/types.js'
+import { chipIds, fromTipTap } from './markdown/serialize.js'
+import type { ChipTarget, Resolver, TTNode } from './markdown/types.js'
 
 // Get (or, with createIfMissing, create) the (structureType, name) entity.
 // NOT_FOUND when it's missing and createIfMissing is false.
 function resolveName(structureType: string, name: string, createIfMissing: boolean) {
   return entityClient.resolveEntity({ structureType, key: { case: 'name', value: name }, createIfMissing })
-}
-
-// [[wikilinks]] / #tags resolve to canonical entities (get-or-create) server-side.
-const resolver = async (structureType: string, name: string) => {
-  const r = await resolveName(structureType, name, true)
-  return { id: r.entity!.id, name: r.entity!.name }
 }
 
 // The structure registry, fetched once per process (it's static for a server's
@@ -40,6 +34,50 @@ function structures(): Promise<StructureDef[]> {
 function richTextIds(all: StructureDef[], structureType: string): string[] {
   const def = all.find((s) => s.type === structureType)
   return (def?.properties ?? []).filter((p) => p.kind === PropertyKind.RICHTEXT).map((p) => p.id)
+}
+
+async function structureTypes(): Promise<Set<string>> {
+  return new Set((await structures()).map((s) => s.type))
+}
+
+// [[wikilinks]] / #tags resolve to canonical entities server-side. A missing
+// target is created only for a creatable structure; otherwise (a DailyNote)
+// it's null and the chip becomes plain text.
+const resolver: Resolver = async (structureType, name) => {
+  const creatable = (await structures()).find((s) => s.type === structureType)?.creatable ?? false
+  try {
+    const r = await resolveName(structureType, name, creatable)
+    return { id: r.entity!.id, name: r.entity!.name }
+  } catch (e) {
+    if (!creatable && isNotFound(e)) return null
+    throw e
+  }
+}
+
+async function parseMarkdown(markdown: string): Promise<TTNode> {
+  return toTipTap(markdown, resolver, await structureTypes())
+}
+
+// Each chip target's current name and structure, fetched in parallel. A target
+// that no longer exists is left out.
+async function chipTargets(doc: TTNode): Promise<Map<string, ChipTarget>> {
+  const found = await Promise.all(
+    chipIds(doc).map(async (id) => {
+      try {
+        const e = (await entityClient.getEntity({ id })).entity!
+        return [id, { name: e.name, structureType: e.structureType }] as const
+      } catch (err) {
+        if (isNotFound(err)) return null
+        throw err
+      }
+    }),
+  )
+  return new Map(found.filter((f) => f !== null))
+}
+
+async function toMarkdown(doc: TTNode): Promise<string> {
+  const [targets, types] = await Promise.all([chipTargets(doc), structureTypes()])
+  return fromTipTap(doc, targets, types)
 }
 
 interface DocRef {
@@ -75,7 +113,7 @@ const APPEND_ATTEMPTS = 3
 // Read, merge, and PutRichText conditioned on the updated_at we read. A concurrent
 // save (e.g. the browser) makes the PutRichText fail with FAILED_PRECONDITION; re-read and retry.
 async function appendDoc(ref: DocRef, label: string, markdown: string): Promise<void> {
-  const addition = await toTipTap(markdown, resolver)
+  const addition = await parseMarkdown(markdown)
   for (let attempt = 1; attempt <= APPEND_ATTEMPTS; attempt++) {
     const { doc, updatedAt } = await getDoc(ref)
     const merged: TTNode = { type: 'doc', content: [...(doc.content ?? []), ...(addition.content ?? [])] }
@@ -117,8 +155,8 @@ function backlinkLabel({ name, structureType, propertyIds }: BacklinkSource, all
 }
 
 export async function createNote(name: string, markdown: string): Promise<string> {
-  const { id } = await resolver('Note', name)
-  const doc = await toTipTap(markdown, resolver)
+  const id = (await resolveName('Note', name, true)).entity!.id
+  const doc = await parseMarkdown(markdown)
   // Unconditional on purpose: create_note overwrites whatever the note held.
   await richTextClient.putRichText({ ...(await docRef('Note', id)), doc: JSON.stringify(doc) })
   const ent = (await entityClient.getEntity({ id })).entity!
@@ -127,7 +165,7 @@ export async function createNote(name: string, markdown: string): Promise<string
 }
 
 export async function appendToNote(name: string, markdown: string): Promise<string> {
-  const { id } = await resolver('Note', name)
+  const id = (await resolveName('Note', name, true)).entity!.id
   await appendDoc(await docRef('Note', id), `Note "${name}"`, markdown)
   const ent = (await entityClient.getEntity({ id })).entity!
   return `Appended to "${ent.name}" (${id}); now ${ent.links.length} link(s).`
@@ -144,7 +182,7 @@ export async function getNote(name: string): Promise<string> {
     if (isNotFound(e)) return `No note named "${name}". Use search_notes or create_note.`
     throw e
   }
-  const md = fromTipTap((await getDoc(await docRef('Note', entityId))).doc).trim()
+  const md = (await toMarkdown((await getDoc(await docRef('Note', entityId))).doc)).trim()
   const back = (await backlinkSources(entityId)).map((s) => s.name)
   return `# ${entityName}\n\n${md || '(empty)'}\n\n---\nLinked from: ${back.join(', ') || '(nothing)'}`
 }

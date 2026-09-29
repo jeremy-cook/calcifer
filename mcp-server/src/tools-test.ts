@@ -1,9 +1,30 @@
 // M5 verification: exercise the knowledge ops against the running server.
 // (The MCP server itself is a thin stdio wrapper over these.) Run: pnpm test:tools
+import { entityClient } from './calciferClient.js'
 import * as ops from './tools.js'
 
 function assert(cond: unknown, msg: string): void {
   if (!cond) throw new Error('FAIL: ' + msg)
+}
+
+async function noteId(name: string): Promise<string> {
+  const r = await entityClient.resolveEntity({ structureType: 'Note', key: { case: 'name', value: name }, createIfMissing: false })
+  return r.entity!.id
+}
+
+// A note's derived link targets, as sorted "Structure:id" strings.
+async function linkTargets(id: string): Promise<string[]> {
+  const ent = (await entityClient.getEntity({ id })).entity!
+  return ent.links.map((l) => `${l.target!.structureType}:${l.target!.id}`).sort()
+}
+
+async function entityCount(): Promise<number> {
+  return (await entityClient.listEntities({ structureType: '' })).entities.length
+}
+
+// get_note's body: between the "# Name" heading and the "---" footer.
+function noteBody(note: string): string {
+  return note.slice(note.indexOf('\n\n') + 2, note.lastIndexOf('\n\n---\nLinked from:'))
 }
 
 async function main(): Promise<void> {
@@ -45,6 +66,47 @@ async function main(): Promise<void> {
   await ops.appendToDailyNote(date, 'Read about [[Transformers]] today.')
   const dailyBack = await ops.getBacklinks('Transformers')
   assert(/June 13, 2026/.test(dailyBack), 'daily note links back to Transformers under its long-date name')
+
+  // I-53: get_note writes a chip from its target's current name, not the stored label.
+  const stamp = Date.now()
+  const oldName = `Rename Target ${stamp}`
+  const newName = `Renamed Target ${stamp}`
+  await ops.createNote(`Rename Source ${stamp}`, `Points at [[${oldName}]].`)
+  await entityClient.renameEntity({ id: await noteId(oldName), name: newName })
+  const renamedNote = await ops.getNote(`Rename Source ${stamp}`)
+  console.log('get_note after rename:', noteBody(renamedNote))
+  assert(renamedNote.includes(`[[${newName}]]`) && !renamedNote.includes(oldName), 'get_note shows a renamed target by its new name')
+
+  // I-53/I-58: get_note -> create_note links the same targets and creates nothing,
+  // for a Note, a Tag, an alias, a Todo and a DailyNote (2026-06-13, created above).
+  const todoName = `Ship ${stamp}`
+  await entityClient.createEntity({ structureType: 'Todo', name: todoName })
+  const rtName = `Round Trip ${stamp}`
+  await ops.createNote(
+    rtName,
+    `Uses [[RT Note ${stamp}]] and [[RT Alias ${stamp}|the alias]]. #rt${stamp}\n\n- do [[Todo/${todoName}]] on [[DailyNote/June 13, 2026]]`,
+  )
+  const rtId = await noteId(rtName)
+  const linksBefore = await linkTargets(rtId)
+  assert(linksBefore.length === 5, `round-trip note has 5 links, got ${JSON.stringify(linksBefore)}`)
+  assert(linksBefore.some((l) => l.startsWith('Todo:')) && linksBefore.some((l) => l.startsWith('DailyNote:')), 'Todo and DailyNote mentions keep their structure')
+  const countBefore = await entityCount()
+  const rtNote = await ops.getNote(rtName)
+  console.log('get_note(round trip):', noteBody(rtNote).replace(/\n/g, ' '))
+  assert(rtNote.includes(`[[Todo/${todoName}]]`), 'get_note writes a Todo mention as [[Todo/Name]]')
+  assert(rtNote.includes('[[DailyNote/June 13, 2026]]'), 'get_note writes a DailyNote mention as [[DailyNote/Name]]')
+  assert(rtNote.includes(`[[RT Alias ${stamp}]]`) && !rtNote.includes('the alias'), 'get_note writes an alias as the target name')
+  assert(rtNote.includes(`#rt${stamp}`), 'get_note keeps the hashtag as #tag')
+  await ops.createNote(rtName, noteBody(rtNote))
+  const linksAfter = await linkTargets(rtId)
+  assert(JSON.stringify(linksAfter) === JSON.stringify(linksBefore), `round trip keeps the links: ${JSON.stringify(linksBefore)} -> ${JSON.stringify(linksAfter)}`)
+  assert((await entityCount()) === countBefore, 'round trip creates no entity')
+
+  // I-58: a missing non-creatable target stays plain text instead of creating anything.
+  const countBeforeMiss = await entityCount()
+  const missing = await ops.createNote(`Missing Day ${stamp}`, 'On [[DailyNote/February 1, 1901]] nothing happened.')
+  assert(/Derived links: 0/.test(missing), 'a missing DailyNote mention derives no link')
+  assert((await entityCount()) === countBeforeMiss + 1, 'a missing DailyNote mention creates only the note itself')
 
   // Semantic retrieval (M8): two thematically related notes with NO shared
   // keywords. A paraphrased query that overlaps neither should surface both via

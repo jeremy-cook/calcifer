@@ -7,6 +7,10 @@ import * as ops from './tools.js'
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] })
 
+// How note markdown refers to other entities; shared by the tools that read or write it.
+const LINK_SYNTAX =
+  '[[Name]] links a note (created if missing); [[Structure/Name]] links another structure from list_structures, e.g. [[Todo/Ship]] or [[DailyNote/June 13, 2026]] (a missing DailyNote stays plain text); #tag applies a tag. These become real graph links automatically.'
+
 const server = new McpServer({ name: 'calcifer', version: '0.0.0' })
 
 server.tool(
@@ -22,21 +26,21 @@ server.tool(
 
 server.tool(
   'get_note',
-  'Read a note by name, returned as markdown, with the list of notes that link to it.',
+  `Read a note by name, returned as markdown, with the list of notes that link to it. Links are written with each target's current name: ${LINK_SYNTAX} Writing the markdown back unchanged links the same targets.`,
   { name: z.string() },
   async ({ name }) => text(await ops.getNote(name)),
 )
 
 server.tool(
   'create_note',
-  'Create (or replace) a note. The markdown body may reference other notes with [[Wikilinks]] and apply #tags; these become real graph links automatically. Search first to avoid duplicates.',
+  `Create (or replace) a note. In the markdown body, ${LINK_SYNTAX} Search first to avoid duplicates.`,
   { name: z.string(), markdown: z.string() },
   async ({ name, markdown }) => text(await ops.createNote(name, markdown)),
 )
 
 server.tool(
   'append_to_note',
-  'Append markdown to an existing note, growing it across turns. [[Wikilinks]] and #tags in the appended text become links.',
+  `Append markdown to an existing note, growing it across turns. In the appended text, ${LINK_SYNTAX}`,
   { name: z.string(), markdown: z.string() },
   async ({ name, markdown }) => text(await ops.appendToNote(name, markdown)),
 )
@@ -64,7 +68,7 @@ server.tool(
 
 server.tool(
   'append_to_daily_note',
-  'Append markdown to the journal entry for a calendar day (ISO date), creating it if needed. [[Wikilinks]], #tags and dates in the text become graph links automatically.',
+  `Append markdown to the journal entry for a calendar day (ISO date), creating it if needed. In the text, ${LINK_SYNTAX} ISO dates (e.g. 2026-06-13) become date references.`,
   { date: z.string(), markdown: z.string() },
   async ({ date, markdown }) => text(await ops.appendToDailyNote(date, markdown)),
 )
