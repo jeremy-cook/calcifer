@@ -14,6 +14,8 @@ interface SuggestionConfig {
 const MAX_RESULTS = 8
 
 export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions<EntitySuggestionItem>, 'editor'> {
+  let createInFlight = false
+
   return {
     char: config.char,
 
@@ -61,7 +63,15 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
     },
 
     command: ({ editor, range, props }) => {
-      void resolveMentionItem(props).then((item) => insertMention(editor, range, config.char, item))
+      // The suggestion stays open until the mention is inserted, so a second Enter or
+      // click can land while a create's ResolveEntity is pending. Ignore it (I-43).
+      if (createInFlight) return
+      createInFlight = props.isCreate === true
+      void resolveMentionItem(props)
+        .then((item) => insertMention(editor, range, config.char, item))
+        .finally(() => {
+          if (props.isCreate) createInFlight = false
+        })
     },
 
     render: createSuggestionPopup(MentionMenu),
