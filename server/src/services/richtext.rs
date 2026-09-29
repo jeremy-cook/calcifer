@@ -26,6 +26,17 @@ impl RichTextService {
     }
 }
 
+/// `InvalidArgument` if either id of `r` is empty, checked before any lookup (I-50).
+fn require_ids(r: &RichTextRef) -> Result<(), Status> {
+    if r.entity_id.is_empty() {
+        return Err(Status::invalid_argument("entity_id is required"));
+    }
+    if r.property_id.is_empty() {
+        return Err(Status::invalid_argument("property_id is required"));
+    }
+    Ok(())
+}
+
 /// Check that `r` names a declared rich-text property of an existing entity:
 /// `NotFound` if the entity is missing, `InvalidArgument` if its structure
 /// declares no such rich-text property.
@@ -76,6 +87,7 @@ impl RichTextServiceTrait for RichTextService {
             entity_id,
             property_id,
         };
+        require_ids(&r)?;
         let mut conn = self.pool.acquire().await.map_err(AppError::from)?;
         check_declared(&mut conn, &r).await?;
 
@@ -118,6 +130,7 @@ impl RichTextServiceTrait for RichTextService {
             entity_id: body.entity_id.clone(),
             property_id: body.property_id.clone(),
         };
+        require_ids(&r)?;
         let now = chrono::Utc::now().timestamp_millis();
 
         // IMMEDIATE takes the write lock before the expectation check reads. A DEFERRED
@@ -598,5 +611,23 @@ mod tests {
 
         assert_eq!(missing.code(), tonic::Code::NotFound);
         assert_eq!(undeclared.code(), tonic::Code::InvalidArgument);
+    }
+
+    // I-50: an empty id is a malformed request, not a missing entity.
+    #[tokio::test]
+    async fn rich_text_with_an_empty_id_is_invalid_argument() {
+        let f = fixture().await;
+        let entity = create(&f.pool, note("N")).await;
+
+        for r in [
+            rt_ref("", "content"),
+            rt_ref(&entity.id, ""),
+            rt_ref("", ""),
+        ] {
+            let got = get(&f.svc, r.clone()).await.expect_err("get");
+            assert_eq!(got.code(), tonic::Code::InvalidArgument, "get {r:?}");
+            let put = put(&f.svc, r.clone(), DOC_A, None).await.expect_err("put");
+            assert_eq!(put.code(), tonic::Code::InvalidArgument, "put {r:?}");
+        }
     }
 }
