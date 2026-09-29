@@ -88,7 +88,8 @@ export type PropertyValue = Message<"calcifer.v1.PropertyValue"> & {
   } | {
     /**
      * An ISO calendar day, "yyyy-MM-dd" (e.g. "2026-06-13"); not an instant, no
-     * time zone. The server doesn't check the format.
+     * time zone. The server rejects anything but a real day in that canonical
+     * form ("2026-13-45", "2026-2-3", "") with INVALID_ARGUMENT.
      *
      * @generated from field: string date = 3;
      */
@@ -168,7 +169,8 @@ export type RichText = Message<"calcifer.v1.RichText"> & {
   /**
    * TipTap (ProseMirror) JSON, or "" for a document never saved. The server
    * parses it on PutRichText: mention, hashtag and dateChip nodes become
-   * `Entity.links` and `Entity.referenced_dates`, and text nodes feed search.
+   * `Entity.links` and `Entity.referenced_dates` (a chip with a bad date is
+   * skipped), and text nodes and chip labels feed search.
    * The node types and attributes it reads are specified in
    * docs/reference/richtext-doc.md. Invalid JSON is INVALID_ARGUMENT.
    *
@@ -208,8 +210,8 @@ export type LinkRef = Message<"calcifer.v1.LinkRef"> & {
   id: string;
 
   /**
-   * For a relation link, the target's real type. For a rich-text link, the
-   * mention node's `structureType` attribute as written.
+   * The target's real type, read when the link was derived, for relation and
+   * rich-text links alike.
    *
    * @generated from field: calcifer.v1.EntityRef target = 2;
    */

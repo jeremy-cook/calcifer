@@ -29,7 +29,8 @@ message PropertyValue {
     string text = 1;
     double number = 2;
     // An ISO calendar day, "yyyy-MM-dd" (e.g. "2026-06-13"); not an instant, no
-    // time zone. The server doesn't check the format.
+    // time zone. The server rejects anything but a real day in that canonical
+    // form ("2026-13-45", "2026-2-3", "") with INVALID_ARGUMENT.
     string date = 3;
     string select = 4;             // an option key of the declared select property
     // A single-target relation. The server reads only the target `id` (see
@@ -53,7 +54,8 @@ message RichText {
   RichTextRef ref = 1;
   // TipTap (ProseMirror) JSON, or "" for a document never saved. The server
   // parses it on PutRichText: mention, hashtag and dateChip nodes become
-  // `Entity.links` and `Entity.referenced_dates`, and text nodes feed search.
+  // `Entity.links` and `Entity.referenced_dates` (a chip with a bad date is
+  // skipped), and text nodes and chip labels feed search.
   // The node types and attributes it reads are specified in
   // docs/reference/richtext-doc.md. Invalid JSON is INVALID_ARGUMENT.
   string doc = 2;
@@ -67,8 +69,8 @@ message RichText {
 // document or a relation property (ADR 3). No client writes links.
 message LinkRef {
   string id = 1;                              // link id; kept while the target stays
-  // For a relation link, the target's real type. For a rich-text link, the
-  // mention node's `structureType` attribute as written.
+  // The target's real type, read when the link was derived, for relation and
+  // rich-text links alike.
   EntityRef target = 2;
   string source_property_id = 3;              // the property it was derived from
   google.protobuf.Timestamp created_at = 4;   // when this edge was first derived
