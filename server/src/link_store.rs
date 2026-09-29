@@ -162,8 +162,8 @@ async fn check_relation_targets(
     property_id: &str,
     refs: &[&EntityRef],
 ) -> Result<Vec<MentionRef>, AppError> {
-    let expected = structures::property(structure_type, property_id)
-        .and_then(|def| def.target_structure);
+    let expected =
+        structures::property(structure_type, property_id).and_then(|def| def.target_structure);
     let mut targets = Vec::with_capacity(refs.len());
     for r in refs {
         let actual = sqlx::query_scalar!("SELECT structure_type FROM entities WHERE id = ?", r.id)

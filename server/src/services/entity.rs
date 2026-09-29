@@ -846,9 +846,7 @@ impl EntityServiceTrait for EntityService {
         let saved = self
             .persist_new_entity(&entity)
             .await
-            .map_err(|e| {
-                map_unique_violation(e, &entity.name, date_key_for(&entity).as_deref())
-            })?;
+            .map_err(|e| map_unique_violation(e, &entity.name, date_key_for(&entity).as_deref()))?;
         self.hub
             .publish(watch_entities_response::Event::Upserted(saved.clone()));
         Ok(Response::new(CreateEntityResponse {
@@ -1428,7 +1426,9 @@ mod tests {
         let svc = entity_service(pool.clone());
         let entity = create(&svc, note("Before")).await;
 
-        let renamed = rename(&svc, &entity.id, "  After \n").await.expect("rename");
+        let renamed = rename(&svc, &entity.id, "  After \n")
+            .await
+            .expect("rename");
 
         assert_eq!(renamed.name, "After");
         assert_eq!(fts_name(&pool, &entity.id).await, "After");
@@ -1634,7 +1634,11 @@ mod tests {
             let err = try_create(&svc, untitled(structure_type))
                 .await
                 .expect_err("create of an unknown type");
-            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{structure_type:?}");
+            assert_eq!(
+                err.code(),
+                tonic::Code::InvalidArgument,
+                "{structure_type:?}"
+            );
         }
         let err = resolve(&svc, "Custom", by_name("Anything"), true)
             .await
@@ -2544,7 +2548,12 @@ mod tests {
         assert_eq!(all.len(), 7);
 
         // By id: only the named entities that exist, each as `load_entity` has it.
-        let ids = [ideas.id.clone(), "missing".to_string(), plants.id.clone(), day.id.clone()];
+        let ids = [
+            ideas.id.clone(),
+            "missing".to_string(),
+            plants.id.clone(),
+            day.id.clone(),
+        ];
         let by_id = load_entities_by_id(&pool, &ids).await.expect("load by id");
         let mut expected: Vec<&Entity> = all
             .iter()
@@ -2554,7 +2563,10 @@ mod tests {
         let mut got: Vec<&Entity> = by_id.iter().collect();
         got.sort_by_key(|e| e.id.clone());
         assert_eq!(got, expected);
-        assert!(load_entities_by_id(&pool, &[]).await.expect("empty").is_empty());
+        assert!(load_entities_by_id(&pool, &[])
+            .await
+            .expect("empty")
+            .is_empty());
 
         let ideas = all.iter().find(|e| e.id == ideas.id).expect("ideas");
         assert_eq!(ideas.links.len(), 3);

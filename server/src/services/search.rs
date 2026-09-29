@@ -6,8 +6,8 @@ use tonic::{Request, Response, Status};
 use crate::embed::{vector_blob, EmbedHandle};
 use crate::error::AppError;
 use crate::proto::{
-    search_service_server::SearchService as SearchServiceTrait, MatchRange, SearchHit,
-    SearchMode, SearchRequest, SearchResponse,
+    search_service_server::SearchService as SearchServiceTrait, MatchRange, SearchHit, SearchMode,
+    SearchRequest, SearchResponse,
 };
 use crate::services::entity::load_entities_by_id;
 
@@ -141,11 +141,7 @@ impl SearchService {
     /// `query_vec` is the already-embedded search string. Over-fetches chunks
     /// (k * 4) before collapsing so several chunks of one entity don't crowd out
     /// other entities from the top-k.
-    async fn vector_hits(
-        &self,
-        query_vec: &[f32],
-        k: i64,
-    ) -> Result<Vec<(String, f64)>, AppError> {
+    async fn vector_hits(&self, query_vec: &[f32], k: i64) -> Result<Vec<(String, f64)>, AppError> {
         let blob = vector_blob(query_vec);
         let rows = sqlx::query_as::<_, (String, f64)>(
             r#"SELECT c.entity_id, v.distance
@@ -175,7 +171,10 @@ impl SearchService {
                 })
                 .or_insert(distance);
         }
-        Ok(order.into_iter().map(|id| (id.clone(), best[&id])).collect())
+        Ok(order
+            .into_iter()
+            .map(|id| (id.clone(), best[&id]))
+            .collect())
     }
 
     /// Rank for `mode`. Semantic embeds the query and runs vector KNN; hybrid
@@ -265,28 +264,27 @@ impl SearchServiceTrait for SearchService {
 /// rewarded by the sum. Snippet comes from FTS when available, else empty (so a
 /// vector-only hit has no matches).
 /// Returns the top-`k` fused tuples, highest score first.
-fn rrf_fuse(
-    vector: &[(String, f64)],
-    fts: &[(String, Snippet)],
-    k: usize,
-) -> Ranked {
+fn rrf_fuse(vector: &[(String, f64)], fts: &[(String, Snippet)], k: usize) -> Ranked {
     let mut scores: HashMap<String, f64> = HashMap::new();
     let mut snippets: HashMap<String, Snippet> = HashMap::new();
     let mut order: Vec<String> = Vec::new();
 
-    let bump = |id: &str, rank: usize, scores: &mut HashMap<String, f64>, order: &mut Vec<String>| {
-        if !scores.contains_key(id) {
-            order.push(id.to_string());
-        }
-        *scores.entry(id.to_string()).or_insert(0.0) += 1.0 / (RRF_K + rank as f64);
-    };
+    let bump =
+        |id: &str, rank: usize, scores: &mut HashMap<String, f64>, order: &mut Vec<String>| {
+            if !scores.contains_key(id) {
+                order.push(id.to_string());
+            }
+            *scores.entry(id.to_string()).or_insert(0.0) += 1.0 / (RRF_K + rank as f64);
+        };
 
     for (rank, (id, _dist)) in vector.iter().enumerate() {
         bump(id, rank, &mut scores, &mut order);
     }
     for (rank, (id, snippet)) in fts.iter().enumerate() {
         bump(id, rank, &mut scores, &mut order);
-        snippets.entry(id.clone()).or_insert_with(|| snippet.clone());
+        snippets
+            .entry(id.clone())
+            .or_insert_with(|| snippet.clone());
     }
 
     let mut fused: Ranked = order
@@ -370,7 +368,9 @@ mod tests {
     }
 
     fn names(hits: &[SearchHit]) -> Vec<&str> {
-        hits.iter().map(|h| h.entity.as_ref().unwrap().name.as_str()).collect()
+        hits.iter()
+            .map(|h| h.entity.as_ref().unwrap().name.as_str())
+            .collect()
     }
 
     /// The text a range covers, counting UTF-16 code units as clients do.
@@ -382,7 +382,10 @@ mod tests {
     #[test]
     fn builds_prefix_match_with_implicit_and() {
         assert_eq!(to_prefix_match("trans"), "\"trans\"*");
-        assert_eq!(to_prefix_match("attention model"), "\"attention\"* \"model\"*");
+        assert_eq!(
+            to_prefix_match("attention model"),
+            "\"attention\"* \"model\"*"
+        );
     }
 
     #[test]
@@ -396,7 +399,10 @@ mod tests {
     fn rrf_rewards_agreement_across_lists() {
         let snip = Snippet::parse("\u{E000}snip\u{E001}");
         let vector = vec![("a".to_string(), 0.1), ("b".to_string(), 0.2)];
-        let fts = vec![("b".to_string(), snip.clone()), ("c".to_string(), Snippet::parse("x"))];
+        let fts = vec![
+            ("b".to_string(), snip.clone()),
+            ("c".to_string(), Snippet::parse("x")),
+        ];
         let fused = rrf_fuse(&vector, &fts, 10);
         // `b` appears in both lists, so it should outrank a/c which appear once.
         assert_eq!(fused[0].0, "b");
@@ -425,7 +431,10 @@ mod tests {
         assert_eq!(hits[0].snippet, "Café 😀 Transformers");
         // "Café " is 5 units and the emoji is a surrogate pair: 5 + 2 + 1 = 8.
         assert_eq!(hits[0].matches, vec![MatchRange { start: 8, end: 20 }]);
-        assert_eq!(covered(&hits[0].snippet, &hits[0].matches[0]), "Transformers");
+        assert_eq!(
+            covered(&hits[0].snippet, &hits[0].matches[0]),
+            "Transformers"
+        );
     }
 
     #[tokio::test]
@@ -440,7 +449,11 @@ mod tests {
         let hit = &hits[0];
         assert_eq!(hit.snippet, "Attention models and attention heads");
         assert!(!hit.snippet.contains(['[', ']', MATCH_OPEN, MATCH_CLOSE]));
-        let matched: Vec<String> = hit.matches.iter().map(|m| covered(&hit.snippet, m)).collect();
+        let matched: Vec<String> = hit
+            .matches
+            .iter()
+            .map(|m| covered(&hit.snippet, m))
+            .collect();
         assert_eq!(matched, vec!["Attention", "attention"]);
     }
 
@@ -483,7 +496,11 @@ mod tests {
         let svc = SearchService::new(pool, EmbedHandle::disabled());
 
         let lexical = search(&svc, "vessel", SearchMode::Lexical).await;
-        for mode in [SearchMode::Semantic, SearchMode::Hybrid, SearchMode::Unspecified] {
+        for mode in [
+            SearchMode::Semantic,
+            SearchMode::Hybrid,
+            SearchMode::Unspecified,
+        ] {
             assert_eq!(search(&svc, "vessel", mode).await, lexical, "{mode:?}");
         }
     }
@@ -495,16 +512,25 @@ mod tests {
         create(&pool, "Transformers and transformers").await;
         create(&pool, "Transformer notes").await;
         // An index row whose entity is gone, as a stale index would leave.
-        sqlx::query("INSERT INTO entity_fts (entity_id, name, body) VALUES ('ghost', 'Transformers', '')")
-            .execute(&pool)
-            .await
-            .expect("insert stale fts row");
+        sqlx::query(
+            "INSERT INTO entity_fts (entity_id, name, body) VALUES ('ghost', 'Transformers', '')",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert stale fts row");
         let svc = SearchService::new(pool.clone(), EmbedHandle::disabled());
 
         let hits = search(&svc, "transformer", SearchMode::Lexical).await;
-        let ranked = svc.lexical("transformer", DEFAULT_LIMIT).await.expect("rank");
+        let ranked = svc
+            .lexical("transformer", DEFAULT_LIMIT)
+            .await
+            .expect("rank");
 
-        let live: Vec<&String> = ranked.iter().map(|(id, _, _)| id).filter(|id| *id != "ghost").collect();
+        let live: Vec<&String> = ranked
+            .iter()
+            .map(|(id, _, _)| id)
+            .filter(|id| *id != "ghost")
+            .collect();
         assert_eq!(ranked.len(), 4);
         assert_eq!(hits.len(), 3);
         for (hit, id) in hits.iter().zip(live) {

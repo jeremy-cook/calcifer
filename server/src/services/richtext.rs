@@ -185,9 +185,15 @@ impl RichTextServiceTrait for RichTextService {
         let refs = extract_doc_references(&body.doc).map_err(Status::from)?;
 
         // 3. Scoped link replace for THIS property, preserving link_id/created_at per target.
-        replace_scoped_links(&mut tx, &entity_id, &property_id, &refs.entities, updated_at)
-            .await
-            .map_err(Status::from)?;
+        replace_scoped_links(
+            &mut tx,
+            &entity_id,
+            &property_id,
+            &refs.entities,
+            updated_at,
+        )
+        .await
+        .map_err(Status::from)?;
 
         // 4. Recompute referenced_dates as the entity-scoped union across all richtext docs.
         let all_docs = sqlx::query_scalar!(
@@ -207,10 +213,13 @@ impl RichTextServiceTrait for RichTextService {
             }
         }
 
-        sqlx::query!("DELETE FROM referenced_dates WHERE entity_id = ?", entity_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::from)?;
+        sqlx::query!(
+            "DELETE FROM referenced_dates WHERE entity_id = ?",
+            entity_id
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
         for iso in &date_set {
             sqlx::query!(
                 "INSERT INTO referenced_dates (entity_id, iso_date) VALUES (?, ?)",
@@ -358,8 +367,12 @@ mod tests {
         let f = fixture().await;
         let entity = create(&f.pool, note("N")).await;
         let r = rt_ref(&entity.id, "content");
-        let first = put(&f.svc, r.clone(), DOC_A, None).await.expect("first put");
-        put(&f.svc, r.clone(), DOC_B, None).await.expect("second put");
+        let first = put(&f.svc, r.clone(), DOC_A, None)
+            .await
+            .expect("first put");
+        put(&f.svc, r.clone(), DOC_B, None)
+            .await
+            .expect("second put");
 
         let err = put(&f.svc, r.clone(), DOC_A, first.updated_at)
             .await
@@ -374,7 +387,9 @@ mod tests {
         let f = fixture().await;
         let entity = create(&f.pool, note("N")).await;
         let r = rt_ref(&entity.id, "content");
-        let first = put(&f.svc, r.clone(), DOC_A, None).await.expect("first put");
+        let first = put(&f.svc, r.clone(), DOC_A, None)
+            .await
+            .expect("first put");
 
         let second = put(&f.svc, r.clone(), DOC_B, first.updated_at)
             .await
@@ -403,11 +418,18 @@ mod tests {
         let f = fixture().await;
         let entity = create(&f.pool, note("N")).await;
         let r = rt_ref(&entity.id, "content");
-        put(&f.svc, r.clone(), DOC_A, None).await.expect("first put");
-
-        let err = put(&f.svc, r.clone(), DOC_B, Some(prost_types::Timestamp::default()))
+        put(&f.svc, r.clone(), DOC_A, None)
             .await
-            .expect_err("epoch expectation should fail once a doc exists");
+            .expect("first put");
+
+        let err = put(
+            &f.svc,
+            r.clone(),
+            DOC_B,
+            Some(prost_types::Timestamp::default()),
+        )
+        .await
+        .expect_err("epoch expectation should fail once a doc exists");
 
         assert_eq!(err.code(), tonic::Code::FailedPrecondition);
         assert_eq!(get(&f.svc, r).await.expect("get").doc, DOC_A);
@@ -538,8 +560,10 @@ mod tests {
             put(&svc, r.clone(), DOC_B, seeded.updated_at),
         );
 
-        let codes: Vec<Option<tonic::Code>> =
-            [&a, &b].iter().map(|res| res.as_ref().err().map(Status::code)).collect();
+        let codes: Vec<Option<tonic::Code>> = [&a, &b]
+            .iter()
+            .map(|res| res.as_ref().err().map(Status::code))
+            .collect();
         assert!(
             codes.contains(&None) && codes.contains(&Some(tonic::Code::FailedPrecondition)),
             "expected one success and one FailedPrecondition, got {a:?} and {b:?}"
@@ -552,7 +576,9 @@ mod tests {
         let f = fixture().await;
         let entity = create(&f.pool, note("N")).await;
 
-        let rt = get(&f.svc, rt_ref(&entity.id, "content")).await.expect("get");
+        let rt = get(&f.svc, rt_ref(&entity.id, "content"))
+            .await
+            .expect("get");
 
         assert_eq!(rt.doc, "");
         assert_eq!(rt.updated_at, Some(prost_types::Timestamp::default()));
@@ -563,8 +589,12 @@ mod tests {
         let f = fixture().await;
         let entity = create(&f.pool, note("N")).await;
 
-        let missing = get(&f.svc, rt_ref("ghost", "content")).await.expect_err("missing");
-        let undeclared = get(&f.svc, rt_ref(&entity.id, "nope")).await.expect_err("undeclared");
+        let missing = get(&f.svc, rt_ref("ghost", "content"))
+            .await
+            .expect_err("missing");
+        let undeclared = get(&f.svc, rt_ref(&entity.id, "nope"))
+            .await
+            .expect_err("undeclared");
 
         assert_eq!(missing.code(), tonic::Code::NotFound);
         assert_eq!(undeclared.code(), tonic::Code::InvalidArgument);

@@ -132,6 +132,10 @@ mod tests {
             ]}}"#
         );
         let chunks = chunk_doc(&doc);
-        assert_eq!(chunks.len(), 2, "two ~400-token blocks split into two chunks");
+        assert_eq!(
+            chunks.len(),
+            2,
+            "two ~400-token blocks split into two chunks"
+        );
     }
 }

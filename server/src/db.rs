@@ -62,8 +62,11 @@ mod tests {
     const BEFORE_DROP_RICHTEXT_VALUES: i64 = 20260614000000;
 
     /// The `(structure_type, property_id)` pairs the migration lists by hand.
-    const MIGRATION_RICHTEXT_PAIRS: [(&str, &str); 3] =
-        [("Note", "content"), ("DailyNote", "content"), ("Todo", "content")];
+    const MIGRATION_RICHTEXT_PAIRS: [(&str, &str); 3] = [
+        ("Note", "content"),
+        ("DailyNote", "content"),
+        ("Todo", "content"),
+    ];
 
     /// An old-style stored value: a `PropertyValue` whose (now reserved) field 6
     /// holds a `RichTextRef`, encoded by hand since the case is gone.

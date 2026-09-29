@@ -183,7 +183,9 @@ mod tests {
         let entity = svc
             .resolve_entity(Request::new(ResolveEntityRequest {
                 structure_type: "Todo".to_string(),
-                key: Some(resolve_entity_request::Key::Name("Water plants".to_string())),
+                key: Some(resolve_entity_request::Key::Name(
+                    "Water plants".to_string(),
+                )),
                 create_if_missing: true,
             }))
             .await
