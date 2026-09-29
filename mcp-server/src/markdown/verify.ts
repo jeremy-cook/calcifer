@@ -84,6 +84,23 @@ async function pureRoundTrip(): Promise<void> {
   const us = toMd(await toTT('the one_daily_note_per_day index'))
   assert(us === 'the one_daily_note_per_day index', `snake_case mangled: ${us}`)
 
+  // Only real calendar days become date chips; impossible ones stay plain text.
+  const dates = async (md: string) => {
+    const out: string[] = []
+    const walk = (n: TTNode) => {
+      if (n.type === 'dateChip') out.push(String(n.attrs?.date))
+      ;(n.content ?? []).forEach(walk)
+    }
+    walk(await toTT(md))
+    return out
+  }
+  assert((await dates('Due 2026-02-28.')).join() === '2026-02-28', '2026-02-28 is a date chip')
+  assert((await dates('Due 2028-02-29.')).join() === '2028-02-29', 'a leap day is a date chip')
+  for (const bad of ['2026-02-30', '2026-13-45', '2027-02-29', '2026-04-31', '2026-00-10', '2026-01-00']) {
+    assert((await dates(`Due ${bad}.`)).length === 0, `${bad} is not a date chip`)
+    assert(toMd(await toTT(`Due ${bad}.`)) === `Due ${bad}.`, `${bad} stays plain text`)
+  }
+
   // [[Structure/Name]] targets that structure only when the prefix is a registry type.
   const [todo] = mentions(await toTT('[[Todo/Ship]]'))
   assert(todo.structureType === 'Todo' && todo.id === 'Todo:Ship' && todo.label === 'Ship', `[[Todo/Ship]] is a Todo mention: ${JSON.stringify(todo)}`)
