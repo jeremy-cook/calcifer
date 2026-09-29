@@ -36,9 +36,11 @@ discriminated union, so the sum type is exhaustively checked in TS.
 - Exhaustive `switch` over `PropertyValue.value.case` in TS, with the compiler
   catching every unhandled variant when a new property type is added.
 - Editing the schema means regenerating for **two** TS consumers separately
-  (`calcifer/` and `mcp-server/`), because they pin different `@bufbuild/protobuf`
-  versions and keep independent generated stubs. This is a known wart; consolidating
-  it is a roadmap item.
+  (`calcifer/` and `mcp-server/`), because each keeps its own generated stubs. This is
+  a known wart; consolidating it is a roadmap item. *(Updated 2026-09-29: the two
+  consumers used to pin different `@bufbuild/protobuf` versions. Both now pin
+  `@bufbuild/protobuf`, `@bufbuild/protoc-gen-es` and `@bufbuild/buf` to the same exact
+  versions and generate with a local plugin, so only the separate stubs remain.)*
 - Proto naming leaks into both languages: `structure_type` becomes `structureType` in
   TS, and the `ref` field becomes `r#ref` in Rust.
 - Generated code is committed for TS (`calcifer/gen/ts`) but gitignored for
