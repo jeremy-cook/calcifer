@@ -131,7 +131,7 @@ pub const STRUCTURES: &[StructureDef] = &[
         name: "To-do",
         plural: "To-dos",
         description:
-            "an actionable item with status, priority, due date, and tags (reference with [[Name]])",
+            "an actionable item with status, priority, due date, and tags (reference with [[Todo/Name]])",
         properties: &[
             select(
                 "status",
