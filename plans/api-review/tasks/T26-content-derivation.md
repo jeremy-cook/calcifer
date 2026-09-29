@@ -1,6 +1,6 @@
 # T26 · Content links use the target's real type; search text includes chips
 
-**Area:** server, docs · **Issues:** I-51, I-54 · **Decisions:** D12
+**Area:** server, docs · **Issues:** I-51, I-54, I-59 · **Decisions:** D12
 
 ## Background
 `server/src/links.rs` walks a rich-text doc for chips (`walk`) and for plain text
@@ -36,6 +36,10 @@ defects. Read I-51 and I-54 in `ISSUES.md`.
   - Labels are the stored snapshot, which can be stale after a rename. That's accepted.
 - **D12:** no reindex of existing documents. Each doc's FTS text and chunks update the
   next time it's saved. Say so in the docs.
+- **I-59:** in `server/src/structures.rs`, the Todo `description` says "reference with
+  [[Name]]". Since T28 the MCP server reads `[[Name]]` as a Note and writes a Todo as
+  `[[Todo/Name]]`. Change the Todo description to `[[Todo/Name]]`; leave Note's
+  `[[Name]]`. Description text only.
 
 ## Tests
 - `links.rs`: `extract_plain_text` joins `bold` + `er` into `bolder`, includes a
@@ -57,9 +61,10 @@ chip format (done in T24). `proto/`.
 - `docs/reference/richtext-doc.md`: the `mention`/`hashtag` rules (only `id` is needed;
   the link records the real type) and the "Text" section (chip text, inline joins, the
   two "consequences" bullets replaced, no reindex) match the code.
-- `ISSUES.md`: move I-51 and I-54 to Resolved.
+- `ISSUES.md`: move I-51, I-54 and I-59 to Resolved.
 
 ## Commits
 1. `server: record content links with the target's real type (I-51)`
 2. `server: index chip text and join inline text without spaces (I-54)`
-3. `docs: resolve I-51 and I-54`
+3. `server: name the Todo reference syntax in its description (I-59)`
+4. `docs: resolve I-51, I-54 and I-59`

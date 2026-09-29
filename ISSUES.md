@@ -299,6 +299,51 @@ and `create_note` with the same links and no new entity.
 
 ---
 
+### I-59 · Structure descriptions tell the agent to reference a Todo with `[[Name]]` · low · confirmed
+
+**Where:** `server/src/structures.rs` (Note and Todo `description`)
+
+**Problem:** The Todo description says "reference with [[Name]]", but since T28 the MCP
+parser reads `[[Name]]` as a Note, and a Todo is written `[[Todo/Name]]`.
+`list_structures` shows this text to the agent, so following it links a Note instead.
+Found in T28.
+
+**Fix:** Say `[[Todo/Name]]` for Todo, and keep `[[Name]]` for Note.
+
+**Done when:** each description names the syntax the MCP parser reads for that structure.
+
+---
+
+### I-60 · `parse.ts` contains a literal NUL byte · low · confirmed
+
+**Where:** `mcp-server/src/markdown/parse.ts` (`refKey` separator)
+
+**Problem:** `refKey` joins its parts with a literal NUL character in the source, so git
+treats the file as binary and shows no diff for it. Predates T28. Found in T28.
+
+**Fix:** Write the separator as an escape (`'\u0000'`) or use another separator.
+
+**Done when:** `git diff` shows `parse.ts` as text.
+
+---
+
+### I-61 · MCP link syntax isn't escaped for names containing `|`, `]]` or a structure prefix · low · confirmed
+
+**Where:** `mcp-server/src/tools.ts` (`linkNotes`), `mcp-server/src/markdown/serialize.ts` (`mentionToMd`)
+
+**Problem:** `link_notes` writes `[[${to}]]` raw, and `get_note` writes a Note's name
+unescaped. A name containing `|` or `]]` is misparsed, and a name like `Todo/X` passed
+to `link_notes` targets a Todo (the serializer already writes such a Note as
+`[[Note/Todo/X]]`). Found in T28.
+
+**Fix:** Define an escape for `|` and `]]` in names and use it in both writers and the
+parser; have `link_notes` go through the serializer instead of formatting by hand.
+
+**Done when:** Notes named `A|B`, `x]]y` and `Todo/X` round-trip through `link_notes`,
+`get_note` and `create_note`.
+
+---
+
 ## Resolved
 
 - **I-57 · Relation pickers: any-structure `relations` renders nothing; self is offered.** Fixed 2026-09-28. The entity page no longer skips a `relations` property with an empty `target_structure`, so it renders `EntityRelationsField`, whose picker lists every structure and offers no "Create". `EntityRelationField` and `EntityRelationsField` take `selfId`, which is always in the picker's `excludeIds`. No structure declares an any-structure or self-typed relation, so this was checked by reading, not in the browser.

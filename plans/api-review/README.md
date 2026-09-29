@@ -233,6 +233,9 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-56 | Create and resolve callbacks are never stable (found in T22) | low | T27 |
 | I-57 | Relation pickers: any-structure `relations` renders nothing; self is offered (found in T23) | low | T27 |
 | I-58 | `get_note` → write-back moves non-Note mentions onto a Note of that name (found in triage) | low | T28 |
+| I-59 | Structure descriptions tell the agent to reference a Todo with `[[Name]]` (found in T28) | low | T26 |
+| I-60 | `parse.ts` contains a literal NUL byte, so git shows it as binary (found in T28) | low | T29 |
+| I-61 | MCP link syntax isn't escaped for names with `\|`, `]]` or a structure prefix (found in T28) | low | *unassigned* (ask user) |
 | I-14 | Deleting an entity leaves dead refs in other entities' relation values (pre-existing) | medium | T25 (D10, D11) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**

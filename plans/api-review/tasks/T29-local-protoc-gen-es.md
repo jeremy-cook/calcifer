@@ -1,6 +1,6 @@
 # T29 · Generate stubs with a local, pinned `protoc-gen-es`; refresh stale proto comments
 
-**Area:** fe, mcp, proto · **Issues:** I-55, I-52 (proto comment)
+**Area:** fe, mcp, proto · **Issues:** I-55, I-52 (proto comment), I-60
 
 ## Background
 - **I-55:** `calcifer/buf.gen.yaml` and `mcp-server/buf.gen.yaml` both use the remote
@@ -27,6 +27,9 @@
   stale. Comments only; no schema change (`buf lint` still passes).
 - Regenerate both TS stubs with the new setup. Apart from the comment changes, the
   committed `calcifer/gen/ts/` should be byte-identical.
+- **I-60:** `mcp-server/src/markdown/parse.ts` has a literal NUL byte as `refKey`'s
+  separator, so git treats the file as binary. Write it as the escape `'\u0000'` (same
+  runtime value). No other change to that file.
 
 ## Tests
 - `pnpm proto:gen` in both packages, then `pnpm build && pnpm lint` (`calcifer`) and
@@ -42,7 +45,8 @@ Upgrading other dependencies. Any `.proto` change beyond comments.
 - `git diff` on `calcifer/gen/ts/` shows only the comment changes.
 - The README's proto dev loop (and `engineer-brief.md`'s commands, if they mention it)
   still describes how to regenerate.
-- `ISSUES.md`: move I-55 to Resolved. Move I-52 to Resolved if T24 and T28 have already
+- `git diff --stat` shows `parse.ts` as text, not `Bin`.
+- `ISSUES.md`: move I-55 and I-60 to Resolved. Move I-52 to Resolved if T24 and T28 have already
   marked both halves done.
 
 ## Commits
@@ -50,4 +54,5 @@ Upgrading other dependencies. Any `.proto` change beyond comments.
 2. `mcp: generate stubs with a local pinned protoc-gen-es (I-55)`
 3. `proto: say the server checks dates and records real link types (I-52)` (with the
    regenerated `calcifer/gen/ts/`)
-4. `docs: resolve I-55 (and I-52)`
+4. `mcp: escape the NUL separator in parse.ts (I-60)`
+5. `docs: resolve I-55, I-60 (and I-52)`
