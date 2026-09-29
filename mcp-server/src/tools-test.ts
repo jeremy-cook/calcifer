@@ -115,9 +115,10 @@ async function main(): Promise<void> {
   await ops.createNote('Aircraft Servicing', 'Mechanics inspect the fuselage and tune the engines so a plane stays aloft through the sky.')
   const semQuery = 'keeping a craft moving through its medium'
 
-  // Embedding runs on an async background worker, so poll until both notes are
-  // retrievable (or give up after a few seconds) before asserting.
-  for (let i = 0; i < 30; i++) {
+  // Embedding runs on an async background worker, and on a fresh server the
+  // model may still be loading, so poll for up to 60 s until both notes are
+  // retrievable. The assertions below fail loudly if they never appear.
+  for (let i = 0; i < 120; i++) {
     const s = await ops.searchNotes(semQuery, 5, 'semantic')
     if (/Sailboat/.test(s) && /Aircraft/.test(s)) break
     await new Promise((r) => setTimeout(r, 500))
