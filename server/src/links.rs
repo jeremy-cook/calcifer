@@ -12,11 +12,11 @@ use serde_json::Value;
 
 use crate::error::AppError;
 
-/// A mention extracted from a doc: the target entity id and its structure type.
+/// A link target: an entity id. Its structure type isn't carried; the link store
+/// reads the target's real `structure_type` when it writes the row (I-51).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MentionRef {
     pub id: String,
-    pub structure_type: String,
 }
 
 /// References extracted from a richtext doc. Entities are de-duped by id
@@ -59,17 +59,14 @@ fn walk(
 ) {
     if let Some(node_type) = node.get("type").and_then(Value::as_str) {
         if MENTION_TYPES.contains(&node_type) {
-            let attrs = node.get("attrs");
-            let id = attrs.and_then(|a| a.get("id")).and_then(Value::as_str);
-            let structure_type = attrs
-                .and_then(|a| a.get("structureType"))
+            // Only `attrs.id` matters; `structureType` is ignored (I-51).
+            let id = node
+                .get("attrs")
+                .and_then(|a| a.get("id"))
                 .and_then(Value::as_str);
-            if let (Some(id), Some(structure_type)) = (id, structure_type) {
+            if let Some(id) = id {
                 if seen_ids.insert(id.to_string()) {
-                    refs.entities.push(MentionRef {
-                        id: id.to_string(),
-                        structure_type: structure_type.to_string(),
-                    });
+                    refs.entities.push(MentionRef { id: id.to_string() });
                 }
             }
         } else if node_type == "dateChip" {
@@ -141,8 +138,24 @@ mod tests {
         let refs = extract_doc_references(doc).unwrap();
         assert_eq!(refs.entities.len(), 2, "e1 deduped, t1 kept");
         assert_eq!(refs.entities[0].id, "e1");
-        assert_eq!(refs.entities[1].structure_type, "Tag");
+        assert_eq!(refs.entities[1].id, "t1");
         assert_eq!(refs.dates, vec!["2026-06-15".to_string()]);
+    }
+
+    // I-51: a mention needs only an id; its structureType is ignored.
+    #[test]
+    fn mentions_without_a_string_structure_type_still_count() {
+        let doc = r#"{"type":"doc","content":[
+            {"type":"paragraph","content":[
+                {"type":"mention","attrs":{"id":"e1","structureType":null}},
+                {"type":"hashtag","attrs":{"id":"t1"}},
+                {"type":"mention","attrs":{"id":null,"structureType":"Note"}},
+                {"type":"mention","attrs":{}}
+            ]}
+        ]}"#;
+        let refs = extract_doc_references(doc).unwrap();
+        let ids: Vec<&str> = refs.entities.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["e1", "t1"]);
     }
 
     // I-52: a chip whose date isn't an ISO day is skipped, as a missing date is.

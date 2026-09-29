@@ -11,6 +11,7 @@ use crate::structures::{self, relation_properties};
 /// link_id/created_at pairs for that scope, delete them, then re-insert one row per
 /// target, reusing the prior link_id/created_at when a target repeats (preserves
 /// backlink recency across an edit) and skipping targets with no `entities` row.
+/// Each row's `target_structure` is the target's real `structure_type`.
 /// Runs inside an already-open transaction. Shared by `RichTextService.PutRichText`
 /// (content-derived links) and `sync_relation_property` (relation-property links).
 pub(crate) async fn replace_scoped_links(
@@ -46,14 +47,15 @@ pub(crate) async fn replace_scoped_links(
         // authoritative — unlike the FE, where such a chip is a tombstone, not a deletion.
         // Runtime (non-macro) query: same vec0-virtual-table compile-time
         // introspection hazard documented at fts_upsert_name forces unchecked here.
-        let exists = sqlx::query_scalar::<_, i64>("SELECT 1 FROM entities WHERE id = ?")
-            .bind(&m.id)
-            .fetch_optional(&mut **tx)
-            .await?
-            .is_some();
-        if !exists {
+        // The link records the target's real type, never a type the caller claims (I-51).
+        let structure_type =
+            sqlx::query_scalar::<_, String>("SELECT structure_type FROM entities WHERE id = ?")
+                .bind(&m.id)
+                .fetch_optional(&mut **tx)
+                .await?;
+        let Some(structure_type) = structure_type else {
             continue;
-        }
+        };
 
         let (link_id, created_at) = match prev.get(&m.id) {
             Some((lid, ts)) => (lid.clone(), *ts),
@@ -65,7 +67,7 @@ pub(crate) async fn replace_scoped_links(
             entity_id,
             link_id,
             m.id,
-            m.structure_type,
+            structure_type,
             source_property_id,
             created_at,
         )
@@ -149,13 +151,13 @@ pub(crate) async fn sync_relation_property(
 }
 
 /// Check a relation property's refs against the targets' real `structure_type`
-/// (I-2) and return them as link targets carrying that real type, so the stored
-/// value and its links never disagree. Rejects a ref whose claimed type (when
-/// non-empty) isn't the target's, or whose target isn't the property's declared
-/// `target_structure`. Ad-hoc properties have no declared target to check.
-/// Refs to ids with no `entities` row are dropped, not rejected: a deleted
-/// target stays in other entities' stored values, and rejecting it would block
-/// every later write of those relation values.
+/// (I-2) and return them as link targets (the link store records that real
+/// type), so the stored value and its links never disagree. Rejects a ref whose
+/// claimed type (when non-empty) isn't the target's, or whose target isn't the
+/// property's declared `target_structure`. Ad-hoc properties have no declared
+/// target to check. Refs to ids with no `entities` row are dropped, not
+/// rejected: a deleted target stays in other entities' stored values, and
+/// rejecting it would block every later write of those relation values.
 async fn check_relation_targets(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     structure_type: &str,
@@ -186,10 +188,7 @@ async fn check_relation_targets(
                 )));
             }
         }
-        targets.push(MentionRef {
-            id: r.id.clone(),
-            structure_type: actual,
-        });
+        targets.push(MentionRef { id: r.id.clone() });
     }
     Ok(targets)
 }

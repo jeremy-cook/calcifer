@@ -630,4 +630,43 @@ mod tests {
             assert_eq!(put.code(), tonic::Code::InvalidArgument, "put {r:?}");
         }
     }
+
+    // I-51: a content link records the target's real type, whatever the chip claims.
+    #[tokio::test]
+    async fn content_links_record_the_targets_real_type() {
+        let f = fixture().await;
+        let source = create(&f.pool, note("Source")).await;
+        let target = create(&f.pool, tag("topic")).await;
+        let chip = |structure_type: &str| {
+            format!(
+                r#"{{"type":"doc","content":[{{"type":"paragraph","content":[
+                    {{"type":"mention","attrs":{{"id":"{}","structureType":{structure_type}}}}},
+                    {{"type":"mention","attrs":{{"id":"ghost","structureType":"Note"}}}}
+                ]}}]}}"#,
+                target.id
+            )
+        };
+
+        for structure_type in [r#""Note""#, "null"] {
+            put(
+                &f.svc,
+                rt_ref(&source.id, "content"),
+                &chip(structure_type),
+                None,
+            )
+            .await
+            .expect("put");
+            let links: Vec<(String, String)> =
+                sqlx::query_as("SELECT target_id, target_structure FROM links WHERE entity_id = ?")
+                    .bind(&source.id)
+                    .fetch_all(&f.pool)
+                    .await
+                    .unwrap();
+            assert_eq!(
+                links,
+                vec![(target.id.clone(), "Tag".to_string())],
+                "structureType {structure_type}; the dead target gives no link"
+            );
+        }
+    }
 }
