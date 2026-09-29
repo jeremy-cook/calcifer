@@ -257,11 +257,11 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
         )
       }
       case PropertyKind.RELATIONS: {
-        if (!def.targetStructure) return null
         const refs = value?.case === 'relations' ? value.value.refs : []
         return (
           <EntityRelationsField
             key={def.id}
+            selfId={entity.id}
             label={def.label || def.id}
             targetStructure={def.targetStructure}
             refs={refs}
@@ -273,6 +273,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
         return (
           <EntityRelationField
             key={def.id}
+            selfId={entity.id}
             label={def.label || def.id}
             targetStructure={def.targetStructure}
             target={value?.case === 'relation' ? value.value : undefined}

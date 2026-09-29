@@ -5,6 +5,8 @@ import { EntityPicker } from '~/components/entity/EntityPicker'
 import { useAllEntities, type RelationTarget } from '~/model/store'
 
 export interface EntityRelationFieldProps {
+  // The entity being edited, left out of the picker's candidates.
+  selfId: string
   label: string
   // Empty: any structure.
   targetStructure: string
@@ -13,15 +15,16 @@ export interface EntityRelationFieldProps {
 }
 
 // A single-target relation: the target's name opens the picker to replace it.
-export function EntityRelationField({ label, targetStructure, target, onChange }: EntityRelationFieldProps) {
+export function EntityRelationField({ selfId, label, targetStructure, target, onChange }: EntityRelationFieldProps) {
   const entities = useAllEntities()
   // A target with no entity (deleted) shows as unset.
   const targetEntity = target && entities.find((e) => e.id === target.id)
+  const excludeIds = target ? [selfId, target.id] : [selfId]
 
   return (
     <div className="flex items-center gap-3 px-12 py-3">
       <span className="w-24 shrink-0 text-sm text-muted-foreground">{label}</span>
-      <EntityPicker targetStructure={targetStructure} excludeIds={target ? [target.id] : []} onPick={onChange}>
+      <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onChange}>
         <Button variant="ghost" size="sm" className="h-8 px-2 font-normal">
           {targetEntity ? targetEntity.name : <span className="text-muted-foreground">Set {label.toLowerCase()}</span>}
         </Button>

@@ -6,13 +6,16 @@ import { EntityPicker } from '~/components/entity/EntityPicker'
 import { useAllEntities, type RelationTarget } from '~/model/store'
 
 export interface EntityRelationsFieldProps {
+  // The entity being edited, left out of the picker's candidates.
+  selfId: string
   label: string
+  // Empty: any structure.
   targetStructure: string
   refs: readonly EntityRef[]
   onChange: (refs: RelationTarget[]) => void
 }
 
-export function EntityRelationsField({ label, targetStructure, refs, onChange }: EntityRelationsFieldProps) {
+export function EntityRelationsField({ selfId, label, targetStructure, refs, onChange }: EntityRelationsFieldProps) {
   const entities = useAllEntities()
 
   const resolvedRefs = refs
@@ -26,6 +29,8 @@ export function EntityRelationsField({ label, targetStructure, refs, onChange }:
   const addRef = (target: RelationTarget) => {
     onChange([...refs, target])
   }
+
+  const excludeIds = [selfId, ...refs.map((r) => r.id)]
 
   return (
     <div className="flex items-start gap-3 px-12 py-3">
@@ -44,7 +49,7 @@ export function EntityRelationsField({ label, targetStructure, refs, onChange }:
             </button>
           </Badge>
         ))}
-        <EntityPicker targetStructure={targetStructure} excludeIds={refs.map((r) => r.id)} onPick={addRef}>
+        <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={addRef}>
           <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs font-normal text-muted-foreground">
             <PlusIcon className="size-3" />
             Add
