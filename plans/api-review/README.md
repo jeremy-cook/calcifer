@@ -289,7 +289,7 @@ is fixed in Phase 6 (T25).
 | T27 | [FE: one resolve per mention create, stable callbacks, relation pickers](tasks/T27-fe-editor-and-picker-fixes.md) | fe | T23 | T24, T25, T26, T28 | done (0abc497, d6aa592, 1561537) |
 | T28 | [MCP: registry-driven doc property, faithful `get_note`, strict dates, test poll](tasks/T28-mcp-round-trip.md) | mcp | T23 | T24, T25, T26, T27 | done (a260bc7, 8d7ae88, af8be1b, f8863ea, dc5ccac) |
 | T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | done (d7e8a20, eae5e48, fcbf6d0, 3692303, a4bda15, 9535686) |
-| T30 | [One type read per relation target; ADR 2 versions; quiet `pnpm install`](tasks/T30-phase6-leftovers.md) | server, docs, fe, mcp | T29 | none | done |
+| T30 | [One type read per relation target; ADR 2 versions; quiet `pnpm install`](tasks/T30-phase6-leftovers.md) | server, docs, fe, mcp | T29 | none | done (ecb4bd7, 1c64b97, 7b05e7a, 5b56341) |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
 
