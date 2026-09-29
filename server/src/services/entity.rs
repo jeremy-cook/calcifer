@@ -128,7 +128,7 @@ impl EntityService {
                 "structure_type is required to resolve by name",
             ));
         }
-        known_structure(structure_type)?;
+        let def = known_structure(structure_type)?;
         if name.is_empty() {
             return Err(Status::invalid_argument("name is required"));
         }
@@ -148,6 +148,17 @@ impl EntityService {
         if !create_if_missing {
             return Err(Status::not_found(format!(
                 "{structure_type} named {name:?}"
+            )));
+        }
+        // As CreateEntity refuses them (I-46): a DailyNote is created by its date.
+        if !def.creatable {
+            let hint = if structure_type == "DailyNote" {
+                "; use ResolveEntity by date to get or create one"
+            } else {
+                ""
+            };
+            return Err(Status::failed_precondition(format!(
+                "{structure_type} can't be created by name{hint}"
             )));
         }
 
@@ -2433,6 +2444,33 @@ mod tests {
             .await
             .expect("count entities");
         assert_eq!(rows, 1);
+    }
+
+    // I-46: DailyNote isn't creatable, so Resolve by name can only look one up.
+    #[tokio::test]
+    async fn resolve_by_name_of_a_missing_daily_note_is_failed_precondition() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = resolve(&svc, "DailyNote", by_name("Someday"), true)
+            .await
+            .expect_err("DailyNote isn't creatable");
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(err.message().contains("by date"), "{}", err.message());
+        assert_eq!(entity_count(&pool).await, 0);
+
+        let err = resolve(&svc, "DailyNote", by_name("Someday"), false)
+            .await
+            .expect_err("no such DailyNote");
+        assert_eq!(err.code(), tonic::Code::NotFound);
+
+        // A lookup of an existing one still works.
+        let day = daily_note(&svc, "2026-06-13").await;
+        let found = resolve(&svc, "DailyNote", by_name("june 13, 2026"), true)
+            .await
+            .expect("lookup");
+        assert!(!found.created);
+        assert_eq!(found.entity.expect("entity").id, day.id);
     }
 
     /// Put `content` on `entity_id` as a paragraph of the given inline nodes.
