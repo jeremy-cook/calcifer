@@ -1,9 +1,9 @@
 //! Chunk a TipTap JSON doc into ~500-token text slices for embedding.
 //!
 //! We walk the doc's top-level blocks (paragraphs, headings, list items, …),
-//! flatten each block to plain text via the same node walker `extract_plain_text`
-//! uses, then greedily pack whole blocks into chunks until adding the next block
-//! would exceed the token budget. Blocks are never split mid-way (a single
+//! flatten each block to plain text with `links::collect_text`, the same rule
+//! `extract_plain_text` uses for FTS (I-54), then greedily pack whole blocks into
+//! chunks until adding the next block would exceed the token budget. Blocks are never split mid-way (a single
 //! oversized block becomes its own chunk) so a chunk stays a coherent unit.
 //!
 //! "Tokens" here are approximated by whitespace-delimited words — close enough to
@@ -11,6 +11,8 @@
 //! tokenizer. Empty/blank blocks are dropped.
 
 use serde_json::Value;
+
+use crate::links::collect_text;
 
 /// Target chunk size in approximate tokens (whitespace words). MiniLM truncates
 /// past ~256 wordpieces; 500 words sits near that once subword expansion is
@@ -83,22 +85,6 @@ fn pack(blocks: Vec<String>) -> Vec<String> {
     chunks
 }
 
-/// Concatenate the text nodes under `node` (mirrors links::collect_text, kept
-/// local so chunking owns its own walk and stays decoupled).
-fn collect_text(node: &Value, out: &mut String) {
-    if let Some(text) = node.get("text").and_then(Value::as_str) {
-        if !out.is_empty() {
-            out.push(' ');
-        }
-        out.push_str(text);
-    }
-    if let Some(content) = node.get("content").and_then(Value::as_array) {
-        for child in content {
-            collect_text(child, out);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -136,6 +122,26 @@ mod tests {
             chunks.len(),
             2,
             "two ~400-token blocks split into two chunks"
+        );
+    }
+
+    // I-54: a chunk follows the FTS text rule inside each block.
+    #[test]
+    fn chunk_text_joins_inline_nodes_and_includes_chip_text() {
+        let doc = r#"{"type":"doc","content":[
+            {"type":"paragraph","content":[
+                {"type":"text","marks":[{"type":"italic"}],"text":"bold"},
+                {"type":"text","text":"er with "},
+                {"type":"mention","attrs":{"id":"e1","label":"Ada"}},
+                {"type":"hashtag","attrs":{"id":"t1","label":"math"}},
+                {"type":"hardBreak"},
+                {"type":"dateChip","attrs":{"date":"2026-06-15"}}
+            ]},
+            {"type":"paragraph","content":[{"type":"text","text":"next"}]}
+        ]}"#;
+        assert_eq!(
+            chunk_doc(doc),
+            vec!["bolder with Adamath 2026-06-15\nnext".to_string()]
         );
     }
 }

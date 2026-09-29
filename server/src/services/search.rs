@@ -308,9 +308,12 @@ mod tests {
     use super::*;
     use crate::embed::provider::{Embedder, EMBED_DIM};
     use crate::proto::entity_service_server::EntityService as _;
+    use crate::proto::rich_text_service_server::RichTextService as _;
     use crate::proto::Entity;
+    use crate::proto::PutRichTextRequest;
     use crate::services::entity::load_entity;
-    use crate::test_support::{entity_service, memory_pool, note};
+    use crate::test_support::{entity_service, memory_pool, note, richtext_service};
+    use crate::watch::WatchHub;
 
     /// Embeds every text as the unit vector on axis 0, so a chunk stored on axis
     /// 0 is the nearest neighbour of any query.
@@ -537,6 +540,37 @@ mod tests {
             let entity = hit.entity.as_ref().unwrap();
             assert_eq!(&entity.id, id);
             assert_eq!(entity, &load_entity(&pool, id).await.expect("load"));
+        }
+    }
+
+    // I-54: body text joins a word split across marks and includes a chip's label.
+    #[tokio::test]
+    async fn lexical_search_finds_split_words_and_mentioned_names() {
+        let pool = memory_pool().await;
+        let ada = create(&pool, "Ada").await;
+        let source = create(&pool, "Journal").await;
+        let doc = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[
+                {{"type":"text","marks":[{{"type":"bold"}}],"text":"Bab"}},
+                {{"type":"text","text":"bage met "}},
+                {{"type":"mention","attrs":{{"id":"{}","label":"Lovelace"}}}}
+            ]}}]}}"#,
+            ada.id
+        );
+        richtext_service(pool.clone(), WatchHub::new())
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: source.id.clone(),
+                property_id: "content".to_string(),
+                doc,
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put");
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        for query in ["babbage", "lovelace"] {
+            let hits = search(&svc, query, SearchMode::Lexical).await;
+            assert_eq!(names(&hits), vec!["Journal"], "{query}");
         }
     }
 }
