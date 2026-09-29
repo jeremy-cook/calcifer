@@ -62,7 +62,9 @@ batch. Found during T06a of the API review; confirmed by reading, not reproduced
 **Fix:** Open them with `begin_with("BEGIN IMMEDIATE")`, as `RichText.Put` does since
 I-37.
 
-**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
+**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen. Observed once on 2026-09-29: the first `test:tools` run against a fresh scratch server
+failed with `database is locked` while the embed worker logged two failed batches; the
+rerun passed. Still deferred.
 
 **Done when:** each one takes the write lock before its first read, and a race test
 covers `set_property`.
@@ -153,62 +155,19 @@ to `link_notes` targets a Todo (the serializer already writes such a Note as
 **Fix:** Define an escape for `|` and `]]` in names and use it in both writers and the
 parser; have `link_notes` go through the serializer instead of formatting by hand.
 
+**Deferred:** by the user, 2026-09-29. It needs an escape syntax for names in links first
+(the proposal: a backslash escapes the next character inside `[[…]]`).
+
 **Done when:** Notes named `A|B`, `x]]y` and `Todo/X` round-trip through `link_notes`,
 `get_note` and `create_note`.
 
 ---
 
-### I-62 · Relation writes look up each target's structure type twice · low · confirmed
-
-**Where:** `server/src/link_store.rs` (`check_relation_targets`, `replace_scoped_links`)
-
-**Problem:** Since T26, `replace_scoped_links` reads each target's `structure_type` to
-record the real type, and `check_relation_targets` already read it to validate the
-target. A relation write runs two point queries per ref where one would do. Harmless at
-single-user scale. Found in T26.
-
-**Fix:** Have `check_relation_targets` return (id, structure_type) pairs and pass them
-through, or let the link store skip its lookup for pre-checked relation targets.
-
-**Done when:** a relation write reads each target's row once.
-
----
-
-### I-63 · ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions · low · confirmed
-
-**Where:** `docs/adr/0002-schema-first-protobuf.md` (Consequences)
-
-**Problem:** Since T29 both `calcifer` and `mcp-server` pin `@bufbuild/protobuf`,
-`@bufbuild/protoc-gen-es` (2.15.0) and `@bufbuild/buf` (1.68.2) exactly, and generate
-with a local plugin. The ADR still gives "different versions" as the reason for
-regenerating twice; the real reason now is only the separate generated stubs. Found in
-T29.
-
-**Fix:** Add a dated note to the ADR (or amend the bullet) saying the versions are now
-pinned together.
-
-**Done when:** the ADR matches both `package.json`s.
-
----
-
-### I-64 · pnpm ignores `@bufbuild/buf`'s build script · low · confirmed
-
-**Where:** `calcifer/package.json`, `mcp-server/package.json`
-
-**Problem:** `pnpm install` reports "Ignored build scripts: @bufbuild/buf@1.68.2" in
-both packages. `buf` still runs from its platform binary package, so nothing is broken,
-but every install prints the warning. Found in T29.
-
-**Fix:** Approve the script (`pnpm.onlyBuiltDependencies`) or record that it isn't
-needed and silence the warning.
-
-**Done when:** `pnpm install` in both packages prints no ignored-build-script warning,
-and `pnpm proto:gen` still works.
-
----
-
 ## Resolved
 
+- **I-64 · pnpm ignores `@bufbuild/buf`'s build script.** Fixed 2026-09-29. `calcifer/pnpm-workspace.yaml` and `mcp-server/pnpm-workspace.yaml` list `@bufbuild/buf` and `esbuild` (and `msw` in `calcifer`) under `ignoredBuiltDependencies`: their scripts only link a binary the optional platform package already provides. A clean `pnpm install` in each package prints no warning, and `pnpm proto:gen` leaves the stubs unchanged. An existing `node_modules` keeps replaying the old warning (even with `--force`) until it's removed and reinstalled.
+- **I-63 · ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions.** Fixed 2026-09-29. The Consequences bullet now says both consumers pin the same exact versions and generate with a local plugin; only the separate stubs remain.
+- **I-62 · Relation writes look up each target's structure type twice.** Fixed 2026-09-29. `replace_scoped_links` takes `LinkTarget { id, structure_type }` and does no lookup. `check_relation_targets` returns the type it read to validate; `PutRichText` gets its targets from `live_targets`, which reads each mention's type and drops a gone target, as before.
 - **I-60 · `parse.ts` contains a literal NUL byte.** Fixed 2026-09-28. `refKey`'s separator is written as the escape `\u0000` (same runtime value), so git diffs `parse.ts` as text.
 - **I-55 · `proto:gen` depends on the remote buf plugin and fails under rate limits.** Fixed 2026-09-28. Both `buf.gen.yaml`s use `local: protoc-gen-es`, and `calcifer` and `mcp-server` pin `@bufbuild/protoc-gen-es` 2.15.0, `@bufbuild/buf` 1.68.2 and `@bufbuild/protobuf` 2.15.0 (the plugin's exact peer) as exact versions; `mcp-server` no longer needs a global `buf`. Regenerating left `calcifer/gen/ts/` byte-identical.
 - **I-52 · Date strings aren't format-checked.** Fixed 2026-09-28. The server rejects a date value that isn't a real ISO day with `INVALID_ARGUMENT` in `CreateEntity`, `ResolveEntity` and `SetEntityProperty`, and skips a `dateChip` with a bad `date` (T24; `date_values_must_be_iso_days`, `date_chips_with_a_non_iso_date_are_skipped`). The MCP parser makes a `dateChip` only for a real day with no digit on either side (T28). The proto comments on `PropertyValue.date`, `RichText.doc` and `LinkRef.target` now say so (T29). Existing stored values aren't checked or cleaned up.
