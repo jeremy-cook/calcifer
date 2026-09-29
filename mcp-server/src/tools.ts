@@ -3,7 +3,7 @@
 import { Code, ConnectError } from '@connectrpc/connect'
 import { timestampFromMs, type Timestamp } from '@bufbuild/protobuf/wkt'
 import { entityClient, richTextClient, searchClient, structureClient } from './calciferClient.js'
-import { PropertyKind, type PropertyDef } from '@calcifer/proto/calcifer/v1/structures_pb'
+import { PropertyKind, type PropertyDef, type StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { SearchMode as ProtoSearchMode, type MatchRange } from '@calcifer/proto/calcifer/v1/services_pb'
 import { toTipTap } from './markdown/parse.js'
 import { fromTipTap } from './markdown/serialize.js'
@@ -21,7 +21,39 @@ const resolver = async (structureType: string, name: string) => {
   return { id: r.entity!.id, name: r.entity!.name }
 }
 
-const contentRef = (entityId: string) => ({ entityId, propertyId: 'content' })
+// The structure registry, fetched once per process (it's static for a server's
+// lifetime). A failed fetch isn't cached, so the next call retries.
+let registry: Promise<StructureDef[]> | undefined
+
+function structures(): Promise<StructureDef[]> {
+  registry ??= structureClient.listStructures({}).then(
+    (r) => r.structures,
+    (e: unknown) => {
+      registry = undefined
+      throw e
+    },
+  )
+  return registry
+}
+
+// A structure's declared rich-text property ids, in registry order.
+function richTextIds(all: StructureDef[], structureType: string): string[] {
+  const def = all.find((s) => s.type === structureType)
+  return (def?.properties ?? []).filter((p) => p.kind === PropertyKind.RICHTEXT).map((p) => p.id)
+}
+
+interface DocRef {
+  entityId: string
+  propertyId: string
+}
+
+// The body doc of an entity: its structure's first declared rich-text property.
+export async function docRef(structureType: string, entityId: string): Promise<DocRef> {
+  const [propertyId] = richTextIds(await structures(), structureType)
+  if (!propertyId) throw new Error(`Structure "${structureType}" declares no rich-text property, so it has no body to read or write.`)
+  return { entityId, propertyId }
+}
+
 const emptyDoc = (): TTNode => ({ type: 'doc', content: [] })
 
 function isNotFound(e: unknown): boolean {
@@ -30,8 +62,8 @@ function isNotFound(e: unknown): boolean {
 
 // A declared-but-unsaved doc comes back empty at the epoch (see RichTextService.GetRichText),
 // so `updatedAt` is always something a conditional PutRichText can echo back.
-async function getDoc(entityId: string): Promise<{ doc: TTNode; updatedAt: Timestamp }> {
-  const rt = (await richTextClient.getRichText(contentRef(entityId))).richText!
+async function getDoc(ref: DocRef): Promise<{ doc: TTNode; updatedAt: Timestamp }> {
+  const rt = (await richTextClient.getRichText(ref)).richText!
   return {
     doc: rt.doc ? (JSON.parse(rt.doc) as TTNode) : emptyDoc(),
     updatedAt: rt.updatedAt ?? timestampFromMs(0),
@@ -42,13 +74,13 @@ const APPEND_ATTEMPTS = 3
 
 // Read, merge, and PutRichText conditioned on the updated_at we read. A concurrent
 // save (e.g. the browser) makes the PutRichText fail with FAILED_PRECONDITION; re-read and retry.
-async function appendDoc(entityId: string, label: string, markdown: string): Promise<void> {
+async function appendDoc(ref: DocRef, label: string, markdown: string): Promise<void> {
   const addition = await toTipTap(markdown, resolver)
   for (let attempt = 1; attempt <= APPEND_ATTEMPTS; attempt++) {
-    const { doc, updatedAt } = await getDoc(entityId)
+    const { doc, updatedAt } = await getDoc(ref)
     const merged: TTNode = { type: 'doc', content: [...(doc.content ?? []), ...(addition.content ?? [])] }
     try {
-      await richTextClient.putRichText({ ...contentRef(entityId), doc: JSON.stringify(merged), expectedUpdatedAt: updatedAt })
+      await richTextClient.putRichText({ ...ref, doc: JSON.stringify(merged), expectedUpdatedAt: updatedAt })
       return
     } catch (e) {
       if (!(e instanceof ConnectError && e.code === Code.FailedPrecondition)) throw e
@@ -59,6 +91,7 @@ async function appendDoc(entityId: string, label: string, markdown: string): Pro
 
 interface BacklinkSource {
   name: string
+  structureType: string
   propertyIds: string[]
 }
 
@@ -70,23 +103,24 @@ async function backlinkSources(targetId: string): Promise<BacklinkSource[]> {
   const byId = new Map<string, BacklinkSource>()
   for (const b of res.backlinks) {
     const source = b.source!
-    const entry = byId.get(source.id) ?? { name: source.name, propertyIds: [] }
+    const entry = byId.get(source.id) ?? { name: source.name, structureType: source.structureType, propertyIds: [] }
     entry.propertyIds.push(b.sourcePropertyId)
     byId.set(source.id, entry)
   }
   return [...byId.values()]
 }
 
-// The source's name, plus the linking properties unless it's only the body.
-function backlinkLabel({ name, propertyIds }: BacklinkSource): string {
-  return propertyIds.every((p) => p === 'content') ? name : `${name} (via ${propertyIds.join(', ')})`
+// The source's name, plus the linking properties unless they're all rich-text docs.
+function backlinkLabel({ name, structureType, propertyIds }: BacklinkSource, all: StructureDef[]): string {
+  const docs = richTextIds(all, structureType)
+  return propertyIds.every((p) => docs.includes(p)) ? name : `${name} (via ${propertyIds.join(', ')})`
 }
 
 export async function createNote(name: string, markdown: string): Promise<string> {
   const { id } = await resolver('Note', name)
   const doc = await toTipTap(markdown, resolver)
   // Unconditional on purpose: create_note overwrites whatever the note held.
-  await richTextClient.putRichText({ ...contentRef(id), doc: JSON.stringify(doc) })
+  await richTextClient.putRichText({ ...(await docRef('Note', id)), doc: JSON.stringify(doc) })
   const ent = (await entityClient.getEntity({ id })).entity!
   const linked = ent.links.map((l) => l.target?.structureType).join(', ') || 'none'
   return `Saved note "${ent.name}" (${id}). Derived links: ${ent.links.length} [${linked}]; dates: ${ent.referencedDates.length}.`
@@ -94,7 +128,7 @@ export async function createNote(name: string, markdown: string): Promise<string
 
 export async function appendToNote(name: string, markdown: string): Promise<string> {
   const { id } = await resolver('Note', name)
-  await appendDoc(id, `Note "${name}"`, markdown)
+  await appendDoc(await docRef('Note', id), `Note "${name}"`, markdown)
   const ent = (await entityClient.getEntity({ id })).entity!
   return `Appended to "${ent.name}" (${id}); now ${ent.links.length} link(s).`
 }
@@ -110,7 +144,7 @@ export async function getNote(name: string): Promise<string> {
     if (isNotFound(e)) return `No note named "${name}". Use search_notes or create_note.`
     throw e
   }
-  const md = fromTipTap((await getDoc(entityId)).doc).trim()
+  const md = fromTipTap((await getDoc(await docRef('Note', entityId))).doc).trim()
   const back = (await backlinkSources(entityId)).map((s) => s.name)
   return `# ${entityName}\n\n${md || '(empty)'}\n\n---\nLinked from: ${back.join(', ') || '(nothing)'}`
 }
@@ -155,9 +189,9 @@ export async function searchNotes(
 export async function getBacklinks(name: string): Promise<string> {
   const r = await resolveName('Note', name, false).catch(() => null)
   if (!r?.entity) return `No note named "${name}".`
-  const sources = await backlinkSources(r.entity.id)
+  const [sources, all] = await Promise.all([backlinkSources(r.entity.id), structures()])
   return sources.length
-    ? sources.map((s) => `- ${backlinkLabel(s)}`).join('\n')
+    ? sources.map((s) => `- ${backlinkLabel(s, all)}`).join('\n')
     : `Nothing links to "${name}" yet.`
 }
 
@@ -181,7 +215,7 @@ export async function createDailyNote(date: string): Promise<string> {
 
 export async function appendToDailyNote(date: string, markdown: string): Promise<string> {
   const { id, name } = await resolveDailyNote(date)
-  await appendDoc(id, `Daily note "${name}"`, markdown)
+  await appendDoc(await docRef('DailyNote', id), `Daily note "${name}"`, markdown)
   const ent = (await entityClient.getEntity({ id })).entity!
   return `Appended to daily note "${name}" (${id}); now ${ent.links.length} link(s).`
 }
@@ -212,8 +246,7 @@ function describeProperty(p: PropertyDef): string {
 
 // The registry lives on the server (StructureService); this only formats it.
 export async function listStructures(): Promise<string> {
-  const { structures } = await structureClient.listStructures({})
-  return structures
+  return (await structures())
     .map((s) => {
       const line = `- ${s.type}: ${s.description}`
       if (s.properties.length === 0) return line

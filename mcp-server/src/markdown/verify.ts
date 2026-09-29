@@ -1,6 +1,7 @@
 // M4 verification: pure round-trips (no server) + live link-derivation (against
 // the running tonic server). Run: pnpm test:md   (server must be up)
 import { entityClient, richTextClient } from '../calciferClient.js'
+import { docRef } from '../tools.js'
 import { toTipTap } from './parse.js'
 import { fromTipTap } from './serialize.js'
 import type { TTNode } from './types.js'
@@ -63,7 +64,7 @@ async function liveDerivation(): Promise<void> {
 
   const { id: srcId } = (await entityClient.createEntity({ structureType: 'Note', name: `MD test ${Date.now()}` }))
     .entity!
-  await richTextClient.putRichText({ entityId: srcId, propertyId: 'content', doc: JSON.stringify(doc) })
+  await richTextClient.putRichText({ ...(await docRef('Note', srcId)), doc: JSON.stringify(doc) })
 
   const ent = (await entityClient.getEntity({ id: srcId })).entity!
   assert(ent.links.length === 2, `expected 2 derived links, got ${ent.links.length}`)
