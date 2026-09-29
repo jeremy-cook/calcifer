@@ -174,6 +174,39 @@ through, or let the link store skip its lookup for pre-checked relation targets.
 
 ---
 
+### I-63 · ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions · low · confirmed
+
+**Where:** `docs/adr/0002-schema-first-protobuf.md` (Consequences)
+
+**Problem:** Since T29 both `calcifer` and `mcp-server` pin `@bufbuild/protobuf`,
+`@bufbuild/protoc-gen-es` (2.15.0) and `@bufbuild/buf` (1.68.2) exactly, and generate
+with a local plugin. The ADR still gives "different versions" as the reason for
+regenerating twice; the real reason now is only the separate generated stubs. Found in
+T29.
+
+**Fix:** Add a dated note to the ADR (or amend the bullet) saying the versions are now
+pinned together.
+
+**Done when:** the ADR matches both `package.json`s.
+
+---
+
+### I-64 · pnpm ignores `@bufbuild/buf`'s build script · low · confirmed
+
+**Where:** `calcifer/package.json`, `mcp-server/package.json`
+
+**Problem:** `pnpm install` reports "Ignored build scripts: @bufbuild/buf@1.68.2" in
+both packages. `buf` still runs from its platform binary package, so nothing is broken,
+but every install prints the warning. Found in T29.
+
+**Fix:** Approve the script (`pnpm.onlyBuiltDependencies`) or record that it isn't
+needed and silence the warning.
+
+**Done when:** `pnpm install` in both packages prints no ignored-build-script warning,
+and `pnpm proto:gen` still works.
+
+---
+
 ## Resolved
 
 - **I-60 · `parse.ts` contains a literal NUL byte.** Fixed 2026-09-28. `refKey`'s separator is written as the escape `\u0000` (same runtime value), so git diffs `parse.ts` as text.

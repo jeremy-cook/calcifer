@@ -104,24 +104,20 @@ Remember the Node PATH pin before any pnpm command:
 
 ---
 
-## Status (2026-09-26)
+## Status (2026-09-28)
 
-Every task (T01–T23) is done and reviewed. The branch is green (`cargo test` 82
-passed, `buf lint`, `calcifer` build + lint, `mcp-server` typecheck; `pnpm smoke` and
-`pnpm test:tools` passed against a fresh scratch server after T19). Phases 1–3 and T16
-were checked in the browser.
+Every task (T01–T29) is done and reviewed. Phase 6 closed 2026-09-28. Checks on the
+final head: `cargo fmt --check`, `cargo test` (98 passed), `calcifer` build, lint and
+`proto:lint`, `mcp-server` typecheck, `pnpm test:md`, and `pnpm test:tools` (first run on
+a fresh scratch server, after T28). Browser checks on a scratch DB: T27's single
+`ResolveEntity` per mention create; T25's live tag drop across tabs; T26's search by
+split word and mention label (through the MCP tools); after T29, load and edit on
+`@bufbuild/protobuf` 2.15.0. The browser pass over T19–T23 (renamed RPCs, write helpers,
+merged create/delete, daily-note moves) passed on 2026-09-28 (`93b5d9e`); T23's
+`text`/`number`/`relation` editors aren't reachable, since no structure declares them.
 
-**Browser pass since T19 (2026-09-28, scratch DB):** passed. Create To-do from "+ New",
-rename, status, priority, due set/clear and tag add/remove all survive a reload; `#tag`
-and `@Note/Name` create from the editor (backlink shows on the target); delete asks,
-then navigates home; a daily note created from the Calendar lists newest first, moving
-its date renames it, and moving onto a taken date shows "A daily note already exists
-for that day." Server log clean. T23's `text`/`number`/`relation` editors aren't
-reachable: no structure declares those kinds, so they were checked only by T23's
-engineer against a temporary structure.
-
-**Left:** the Phase 6 follow-ups (T24–T29). The user decides when to merge
-`api-review` to `main`.
+**Open, waiting on the user:** I-61, I-62, I-63, I-64 (all low, found in Phase 6): fix in
+a follow-up task or defer. The user decides when to merge `api-review` to `main`.
 
 **Triage (2026-09-26):** every unassigned issue was checked against the code and still
 holds. All of them are fixed in Phase 6 (D12); I-58 is new, found during triage. None
@@ -237,6 +233,8 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-60 | `parse.ts` contains a literal NUL byte, so git shows it as binary (found in T28) | low | T29 |
 | I-61 | MCP link syntax isn't escaped for names with `\|`, `]]` or a structure prefix (found in T28) | low | *unassigned* (ask user) |
 | I-62 | Relation writes look up each target's structure type twice (found in T26) | low | *unassigned* (ask user) |
+| I-63 | ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions (found in T29) | low | *unassigned* (ask user) |
+| I-64 | pnpm ignores `@bufbuild/buf`'s build script (found in T29) | low | *unassigned* (ask user) |
 | I-14 | Deleting an entity leaves dead refs in other entities' relation values (pre-existing) | medium | T25 (D10, D11) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
@@ -285,7 +283,7 @@ is fixed in Phase 6 (T25).
 | T26 | [Content links use the target's real type; search text includes chips](tasks/T26-content-derivation.md) | server, docs | T25 | T27, T28 | done (ce66900, 3557ccc, 949aac0, d92d85a) |
 | T27 | [FE: one resolve per mention create, stable callbacks, relation pickers](tasks/T27-fe-editor-and-picker-fixes.md) | fe | T23 | T24, T25, T26, T28 | done (0abc497, d6aa592, 1561537) |
 | T28 | [MCP: registry-driven doc property, faithful `get_note`, strict dates, test poll](tasks/T28-mcp-round-trip.md) | mcp | T23 | T24, T25, T26, T27 | done (a260bc7, 8d7ae88, af8be1b, f8863ea, dc5ccac) |
-| T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | in progress |
+| T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | done (d7e8a20, eae5e48, fcbf6d0, 3692303, a4bda15, 9535686) |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
 
