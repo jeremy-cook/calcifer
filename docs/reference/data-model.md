@@ -195,7 +195,10 @@ All of this is recomputed server-side on write; none of it is client-authored. S
   `InvalidArgument` if a ref's target isn't the property's declared
   `target_structure`, or if the ref's non-empty `structure_type` isn't the target's
   real type; the link row records the real type. Refs to ids with no entity get no
-  link row but aren't rejected (a deleted target stays in stored values).
+  link row but aren't rejected. `DeleteEntity` strips the deleted id from other
+  entities' `relation`/`relations` values in its transaction (a `relation`, or a
+  `relations` left empty, is cleared) and publishes `upserted` for each entity it
+  changed. Dead refs stored before this change aren't cleaned up.
 - **`referenced_dates`** — entity-scoped; the union of date chips across all of the
   entity's richtext documents, recomputed per save.
 - **Backlinks** — never stored. Derived by `EntityService.ListBacklinks` from the
@@ -203,7 +206,8 @@ All of this is recomputed server-side on write; none of it is client-authored. S
   linking to itself is excluded, on the server and in the frontend's backlinks panel
   (`calcifer/src/model/backlinks.ts`) alike.
 - **Deletion** — mention chips in other documents survive as clickable tombstones; the
-  server sweeps `links WHERE target_id = ?` to keep the relational index clean.
+  server sweeps `links WHERE target_id = ?` to keep the relational index clean, and
+  strips the id from other entities' relation values (see above).
 
 ---
 
@@ -218,6 +222,7 @@ document wraps it (`GetEntityResponse { Entity entity = 1; }`). `pnpm proto:lint
 ```proto
 service EntityService {
   rpc GetEntity(GetEntityRequest) returns (GetEntityResponse);            // id -> entity
+  // Also strips the id from other entities' relation values (see Graph derivation).
   rpc DeleteEntity(DeleteEntityRequest) returns (DeleteEntityResponse);   // id -> {}
   // For the agent; the frontend's replica comes from WatchEntities (ADR 9).
   rpc ListEntities(ListEntitiesRequest) returns (ListEntitiesResponse);  // structure_type filter
@@ -394,7 +399,8 @@ and the filtered `ListEntities`, `ListBacklinks` and `Search` are there for the 
 
 Every write publishes after its transaction commits: `CreateEntity`, `RenameEntity`,
 `SetEntityProperty` and a creating `ResolveEntity` publish `upserted`, `DeleteEntity` publishes
-`deleted_id`, and `PutRichText` publishes `rich_text_changed` then `upserted`. The
+`deleted_id` then one `upserted` per entity whose relation values it stripped (in id
+order), and `PutRichText` publishes `rich_text_changed` then `upserted`. The
 server reads the current revision before loading a snapshot and skips queued events at
 or below it, which the snapshot already includes.
 
