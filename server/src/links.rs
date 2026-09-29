@@ -1,10 +1,10 @@
-//! Doc-walker: extract mention targets and date references from a TipTap JSON doc.
+//! Doc-walker: extract mention targets, date references and plain text from a TipTap
+//! JSON doc.
 //!
-//! This is the Rust mirror of the FE's `extractDocReferences`
-//! (calcifer/src/model/linkSync.ts). It is the single source of truth for "what
-//! does this doc reference", used by `RichTextService.PutRichText` to derive links and
-//! referenced_dates server-side — so every writer (browser, MCP agent, future
-//! extraction) gets identical graph edges and no client authors a link directly.
+//! This is the only implementation of "what does this doc reference"; no client has a
+//! copy. `RichTextService.PutRichText` uses it to derive a doc's content links and
+//! referenced dates server-side, so every writer (browser, MCP agent, future extraction)
+//! gets identical graph edges and no client authors a content link directly.
 
 use std::collections::HashSet;
 
