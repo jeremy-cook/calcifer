@@ -1,6 +1,6 @@
 version: v2
 plugins:
-  - remote: buf.build/bufbuild/es
+  - local: protoc-gen-es
     out: gen/ts
     # ts_nocheck: generated enums (e.g. PropertyKind) are not erasable syntax,
     # which tsconfig.app.json forbids; esbuild still compiles them.

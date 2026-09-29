@@ -14,7 +14,7 @@
     "proto:lint": "cd .. && buf lint"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.11.0",
+    "@bufbuild/protobuf": "2.15.0",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-web": "^2.1.2",
     "@floating-ui/dom": "^1.7.6",
@@ -86,8 +86,8 @@
     "zustand": "^5.0.12"
   },
   "devDependencies": {
-    "@bufbuild/buf": "^1.68.2",
-    "@bufbuild/protoc-gen-es": "^2.11.0",
+    "@bufbuild/buf": "1.68.2",
+    "@bufbuild/protoc-gen-es": "2.15.0",
     "@eslint/js": "^9.39.4",
     "@tailwindcss/typography": "^0.5.19",
     "@tanstack/router-plugin": "^1.167.22",
