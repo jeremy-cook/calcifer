@@ -236,6 +236,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-59 | Structure descriptions tell the agent to reference a Todo with `[[Name]]` (found in T28) | low | T26 |
 | I-60 | `parse.ts` contains a literal NUL byte, so git shows it as binary (found in T28) | low | T29 |
 | I-61 | MCP link syntax isn't escaped for names with `\|`, `]]` or a structure prefix (found in T28) | low | *unassigned* (ask user) |
+| I-62 | Relation writes look up each target's structure type twice (found in T26) | low | *unassigned* (ask user) |
 | I-14 | Deleting an entity leaves dead refs in other entities' relation values (pre-existing) | medium | T25 (D10, D11) |
 
 Existing issues touched along the way: **I-15** (closed by T08), **I-16**
@@ -281,10 +282,10 @@ is fixed in Phase 6 (T25).
 | **Phase 6: triage follow-ups (D12)** |||||
 | T24 | [`cargo fmt`, then request guards (Resolve, ordering, empty ids, dates)](tasks/T24-server-fmt-and-guards.md) | server, docs | T23 | T27, T28 | done (7526517, 7a701f0, 09040bc, 8853d3b, 8b28427, 267b72e, 9b6c4f2) |
 | T25 | [Deleting an entity strips it from relation values](tasks/T25-strip-dead-relation-refs.md) | server, docs | T24 | T27, T28 | done (4b71cab, 87d1cc4) |
-| T26 | [Content links use the target's real type; search text includes chips](tasks/T26-content-derivation.md) | server, docs | T25 | T27, T28 | in progress |
+| T26 | [Content links use the target's real type; search text includes chips](tasks/T26-content-derivation.md) | server, docs | T25 | T27, T28 | done (ce66900, 3557ccc, 949aac0, d92d85a) |
 | T27 | [FE: one resolve per mention create, stable callbacks, relation pickers](tasks/T27-fe-editor-and-picker-fixes.md) | fe | T23 | T24, T25, T26, T28 | done (0abc497, d6aa592, 1561537) |
 | T28 | [MCP: registry-driven doc property, faithful `get_note`, strict dates, test poll](tasks/T28-mcp-round-trip.md) | mcp | T23 | T24, T25, T26, T27 | done (a260bc7, 8d7ae88, af8be1b, f8863ea, dc5ccac) |
-| T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | todo |
+| T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | in progress |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
 

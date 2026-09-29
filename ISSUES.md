@@ -199,6 +199,22 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ---
 
+### I-62 · Relation writes look up each target's structure type twice · low · confirmed
+
+**Where:** `server/src/link_store.rs` (`check_relation_targets`, `replace_scoped_links`)
+
+**Problem:** Since T26, `replace_scoped_links` reads each target's `structure_type` to
+record the real type, and `check_relation_targets` already read it to validate the
+target. A relation write runs two point queries per ref where one would do. Harmless at
+single-user scale. Found in T26.
+
+**Fix:** Have `check_relation_targets` return (id, structure_type) pairs and pass them
+through, or let the link store skip its lookup for pre-checked relation targets.
+
+**Done when:** a relation write reads each target's row once.
+
+---
+
 ## Resolved
 
 - **I-59 · Structure descriptions tell the agent to reference a Todo with `[[Name]]`.** Fixed 2026-09-28. The Todo description says `[[Todo/Name]]`, the syntax the MCP parser reads for a Todo; Note keeps `[[Name]]`.

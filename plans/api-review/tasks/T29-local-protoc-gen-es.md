@@ -30,6 +30,16 @@
 - **I-60:** `mcp-server/src/markdown/parse.ts` has a literal NUL byte as `refKey`'s
   separator, so git treats the file as binary. Write it as the escape `'\u0000'` (same
   runtime value). No other change to that file.
+- **Docs:** `docs/reference/richtext-doc.md`'s "MCP server" table and the
+  `serialize.ts` paragraph under it describe the pre-T28 syntax (`[[name]]` is always a
+  Note mention written from its label). Bring them in line with
+  `mcp-server/src/markdown/parse.ts` and `serialize.ts` as they are now:
+  `[[Structure/Name]]` for a registry structure, `[[Note/…]]` for a Note whose name
+  starts with a registry prefix, chips written from the target's current name, a gone
+  or missing non-creatable target as plain text, and dates only when no digit touches
+  them. Read the code; don't change it.
+- **I-52 entry:** its line references to `links.rs` are stale. When you resolve I-52,
+  the Resolved line needn't cite them.
 
 ## Tests
 - `pnpm proto:gen` in both packages, then `pnpm build && pnpm lint` (`calcifer`) and
@@ -55,4 +65,5 @@ Upgrading other dependencies. Any `.proto` change beyond comments.
 3. `proto: say the server checks dates and records real link types (I-52)` (with the
    regenerated `calcifer/gen/ts/`)
 4. `mcp: escape the NUL separator in parse.ts (I-60)`
-5. `docs: resolve I-55, I-60 (and I-52)`
+5. `docs: describe the MCP link syntax in richtext-doc.md`
+6. `docs: resolve I-55, I-60 (and I-52)`
