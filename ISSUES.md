@@ -141,18 +141,6 @@ published last.
 
 ---
 
-### I-51 · Content mention links trust the doc's `structureType` · low · confirmed
-
-**Where:** `server/src/link_store.rs` (`replace_scoped_links`), `server/src/links.rs:53-64`
-
-**Problem:** A rich-text `mention` or `hashtag` records `attrs.structureType` as the link's `target.structure_type` without checking the target's real type, so a wrong attribute produces a `LinkRef` that lies (relation links are checked since I-2). A chip whose `structureType` is null is skipped silently: no link and no error. The editor's default for that attribute is `null` (`entityMention.ts:10`), so chips pasted from HTML without `data-structure-type` lose their link. Found during T20 of the API review.
-
-**Fix:** Look up each target's type when deriving content links: use the real type, and drop (or report) a dead target. Don't depend on `structureType` being present.
-
-**Done when:** a mention with a wrong or null `structureType` produces a link with the target's real type, and a test covers both.
-
----
-
 ### I-52 · Date strings aren't format-checked · low · confirmed
 
 **Where:** `server/src/links.rs:66-76` (dateChip), `server/src/services/entity.rs` (`validate_property`, `date_key_from`), `mcp-server/src/markdown/parse.ts:66`
@@ -169,21 +157,6 @@ published last.
 
 ---
 
-### I-54 · Search text drops chips and splits words across marks · low · confirmed
-
-**Where:** `server/src/links.rs:88-112` (`extract_plain_text`), `server/src/embed/chunk.rs:89-101`
-
-**Problem:** Plain text for FTS and embeddings leaves out chips, so a mention's label, a tag's name and a date in the body aren't searchable. It also joins adjacent text nodes with a space, so `**bold**er` is indexed as `bold er`. Documented in `docs/reference/richtext-doc.md`. Found during T20 of the API review.
-
-**Fix:** Emit chip labels (and dates) into the plain text, and join adjacent inline text nodes without a separator (separate only between blocks).
-
-**Done when:** a note is found by a word split across marks and by a mentioned name, with tests on `extract_plain_text`.
-
-**Decided (2026-09-26, D12):** no reindex of existing documents; each one's FTS text and
-chunks update on its next save.
-
----
-
 ### I-55 · `proto:gen` depends on the remote buf plugin and fails under rate limits · low · confirmed
 
 **Where:** `calcifer/buf.gen.yaml`, `mcp-server/buf.gen.yaml`
@@ -193,21 +166,6 @@ chunks update on its next save.
 **Fix:** Use a local `protoc-gen-es` pinned to one version in both packages.
 
 **Done when:** `proto:gen` works offline in both packages and both produce the same generated code version.
-
----
-
-### I-59 · Structure descriptions tell the agent to reference a Todo with `[[Name]]` · low · confirmed
-
-**Where:** `server/src/structures.rs` (Note and Todo `description`)
-
-**Problem:** The Todo description says "reference with [[Name]]", but since T28 the MCP
-parser reads `[[Name]]` as a Note, and a Todo is written `[[Todo/Name]]`.
-`list_structures` shows this text to the agent, so following it links a Note instead.
-Found in T28.
-
-**Fix:** Say `[[Todo/Name]]` for Todo, and keep `[[Name]]` for Note.
-
-**Done when:** each description names the syntax the MCP parser reads for that structure.
 
 ---
 
@@ -243,6 +201,9 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ## Resolved
 
+- **I-59 · Structure descriptions tell the agent to reference a Todo with `[[Name]]`.** Fixed 2026-09-28. The Todo description says `[[Todo/Name]]`, the syntax the MCP parser reads for a Todo; Note keeps `[[Name]]`.
+- **I-54 · Search text drops chips and splits words across marks.** Fixed 2026-09-28. One rule (`links::collect_text`) feeds FTS and embedding chunks: inline nodes join with no separator, a mention or hashtag gives its `label`, a date chip its `date`, a `hardBreak` a space, and blocks are separated by one space. Existing documents aren't reindexed (D12); each updates on its next save. Covered by `plain_text_joins_inline_nodes_and_includes_chip_text`, `chunk_text_joins_inline_nodes_and_includes_chip_text` and `lexical_search_finds_split_words_and_mentioned_names`.
+- **I-51 · Content mention links trust the doc's `structureType`.** Fixed 2026-09-28. A `mention`/`hashtag` needs only a string `id`; `replace_scoped_links` records the target's real `structure_type`, read in the query that drops a dead target. Covered by `content_links_record_the_targets_real_type`.
 - **I-58 · `get_note` → write-back moves non-Note mentions onto a Note.** Fixed 2026-09-28. `get_note` writes a non-Note mention as `[[Structure/Name]]` (and a Note whose name starts with a registry prefix as `[[Note/…]]`); the parser retargets `[[X/Name]]` when `X` is exactly a registry type. The resolver creates a missing target only for a `creatable` structure; a missing DailyNote stays plain text. Observed 2026-09-28 in `test:tools` on a fresh scratch server: a note mentioning a Note, an alias, a Tag, a Todo and a DailyNote round-trips through `get_note` and `create_note` with the same links and no new entity.
 - **I-53 · `get_note` renders stale mention labels and loses `[[name|label]]` targets.** Fixed 2026-09-28. `get_note` fetches each chip's target (parallel `GetEntity`, one per id) and writes it by its current name; an alias is written as the target's name, and a target that's gone is written as its label in plain text. Covered in `verify.ts` and `test:tools` (`get_note shows a renamed target by its new name`).
 - **I-47 · The MCP server hard-codes the `content` rich-text property.** Fixed 2026-09-28. `tools.ts` reads `ListStructures` once per process (a failed fetch isn't cached) and addresses a body by the structure's first declared rich-text property (`docRef`); backlink labels compare against the declared ids. No `'content'` doc address is left in `mcp-server/src`.

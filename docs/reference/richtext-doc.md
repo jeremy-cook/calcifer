@@ -24,7 +24,7 @@ the end. See [`data-model.md`](data-model.md) for the RPCs and graph derivation.
   depth. A mention inside a list item, table cell, blockquote or `details` block counts
   like one in a top-level paragraph.
 - On each node it reads only `type`, `attrs` and `text`, plus `content` to recurse. It
-  never reads `marks`.
+  never reads `marks`, so marks don't change links or search text.
 
 ---
 
@@ -33,25 +33,26 @@ the end. See [`data-model.md`](data-model.md) for the RPCs and graph derivation.
 | Node `type` | Attributes read | Type | Derives |
 |---|---|---|---|
 | `mention` | `attrs.id` | string: the target entity's id | a link |
-| | `attrs.structureType` | string: the target's structure type (`Note`, `Todo`, …) | the link's `target.structure_type` |
-| `hashtag` | `attrs.id`, `attrs.structureType` | as for `mention` (a Tag in practice) | a link |
-| `dateChip` | `attrs.date` | string: an ISO calendar day, `yyyy-MM-dd` | a `referenced_dates` entry |
-| any node | `text` | string | plain text for search and embeddings |
+| | `attrs.label` | string: the display name when the chip was inserted | search text |
+| `hashtag` | `attrs.id`, `attrs.label` | as for `mention` (a Tag in practice) | a link, search text |
+| `dateChip` | `attrs.date` | string: an ISO calendar day, `yyyy-MM-dd` | a `referenced_dates` entry, search text |
+| `text` | `text` | string | search text |
+| `hardBreak` | none | | a space in search text |
 
 ### `mention` and `hashtag`
 
 The server treats the two types the same way. The editor keeps them separate so `#`
 chips (Tags) and `@` chips render and autocomplete differently.
 
-- Both `id` and `structureType` must be strings. If either is missing, `null` or not a
-  string, the node is skipped: no link, and no error.
+- Only `id` is needed, and it must be a string. If it's missing, `null` or not a
+  string, the node gives no link, and no error.
+- `structureType` is ignored for links. It can be wrong, `null` or missing. The link's
+  `target.structure_type` is the target entity's real structure type, read when the
+  document is saved.
 - Each distinct `id` in the document gives one link row, scoped to the document's
-  property (`LinkRef.source_property_id`, e.g. `content`). If an `id` appears more than
-  once, the first occurrence's `structureType` is used.
+  property (`LinkRef.source_property_id`, e.g. `content`).
 - An `id` with no entity gives no link row, and isn't an error. The chip stays in the
   document; the editor renders it as a tombstone.
-- `structureType` isn't checked against the target's real type. It's recorded on the
-  link as written. Relation properties, by contrast, are checked (see `EntityRef`).
 - A link keeps its `LinkRef.id` and `created_at` across saves for as long as the
   document still mentions that target.
 - A document's links replace that property's previous rich-text links on every save.
@@ -68,29 +69,38 @@ chips (Tags) and `@` chips render and autocomplete differently.
 
 ### Text
 
-Every string `text` field is collected, depth-first in document order:
+One rule gives the text for both search and embeddings (`collect_text` in `links.rs`),
+walking the tree depth-first in document order:
 
-- **Full-text search.** `extract_plain_text` joins a document's text fields with single
-  spaces and trims the result. An entity's FTS `body` is the plain text of all its
-  rich-text documents, joined with spaces.
+- Inline nodes are joined with no separator. A `text` node gives its `text`; a
+  `mention` or `hashtag` gives its `attrs.label` and a `dateChip` its `attrs.date`,
+  each only if it's a string. A `hardBreak` gives a space. So `**bold**er` (two text
+  nodes, `bold` and `er`) is indexed as `bolder`, and a chip reads as its label.
+- Any other node with `content` is a block. Blocks are separated by one space.
+
+It feeds two indexes:
+
+- **Full-text search.** `extract_plain_text` applies the rule to a document and trims
+  the result. An entity's FTS `body` is the plain text of all its rich-text documents,
+  joined with spaces. A document is found by a mentioned entity's name, a tag's name or
+  a date chip's day.
 - **Embeddings.** `chunk_doc` flattens each top-level block (each child of the root's
-  `content`) to plain text the same way, drops blank blocks, and packs whole blocks into
-  chunks of about 500 words, joined by newlines. A block is never split, so one very
-  long block becomes one chunk.
+  `content`) with the same rule, drops blank blocks, and packs whole blocks into chunks
+  of about 500 words, joined by newlines. A block is never split, so one very long
+  block becomes one chunk.
 
-Two consequences:
+Labels are the snapshot stored in the chip, so after a rename the old name is what's
+indexed until the chip's label is rewritten.
 
-- Chips have no `text`, so they add nothing to search. A mention's label, a tag's name
-  and a date chip's day aren't in the body. Searching for a mentioned name finds the
-  mentioned entity by its own name, not the document that mentions it.
-- Text nodes are joined with a space even inside one word. `**bold**er` is two text
-  nodes, `bold` and `er`, and is indexed as `bold er`.
+Existing documents aren't reindexed when this rule changes. Each document's FTS text
+and embedding chunks follow the current rule from its next save; until then they keep
+the text they were indexed with.
 
 ---
 
 ## What the server ignores
 
-- `mention` and `hashtag` attributes other than `id` and `structureType`: `label`,
+- `mention` and `hashtag` attributes other than `id` and `label`: `structureType`,
   `char` and `mentionSuggestionChar`. `label` is a display snapshot taken when the chip
   was inserted; the server never updates it on a rename.
 - All marks: `bold`, `italic`, `strike`, `code`, `underline`, `link` (its `href` is not
@@ -98,8 +108,8 @@ Two consequences:
 - Every other node type's attributes: heading `level`, code block `language`, image
   `src`, task item `checked`, text alignment and so on. These nodes still contribute
   the `text` of their descendants.
-- Nodes with neither `text` nor any of the attributes above (`image`, `hardBreak`,
-  `horizontalRule`) contribute nothing.
+- Nodes with neither `text` nor any of the attributes above (`image`,
+  `horizontalRule`) contribute nothing, apart from `hardBreak`'s space.
 
 ---
 
@@ -128,12 +138,12 @@ A document with one paragraph mentioning a Note and a Tag and holding a date chi
 
 On `PutRichText` to the entity's `content`, the server derives:
 
-- `links`: two rows with `source_property_id: "content"`, to `3f2c…` (Note) and `9a1e…`
-  (Tag), if both entities exist;
+- `links`: two rows with `source_property_id: "content"`, to `3f2c…` and `9a1e…`, if
+  both entities exist, each with its entity's real structure type;
 - `referenced_dates`: `["2026-06-13"]`, merged with the dates in the entity's other
   rich-text documents;
-- search text: the three text nodes (`"Plan with "`, `" for "`, `" "`) joined with
-  spaces and trimmed. The chips add no text.
+- search text: `Plan with Roadmap for 2026-06-13 planning`, the text nodes and chips
+  joined with no separator.
 
 ---
 
