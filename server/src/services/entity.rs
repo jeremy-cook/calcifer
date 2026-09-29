@@ -293,7 +293,7 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
         r#"SELECT link_id AS "link_id!", target_id AS "target_id!",
                   target_structure AS "target_structure!",
                   source_property_id AS "source_property_id!", created_at AS "created_at!"
-           FROM links WHERE entity_id = ?"#,
+           FROM links WHERE entity_id = ? ORDER BY link_id"#,
         id
     )
     .fetch_all(pool)
@@ -313,7 +313,8 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
         .collect();
 
     let referenced_dates = sqlx::query_scalar!(
-        r#"SELECT iso_date AS "iso_date!" FROM referenced_dates WHERE entity_id = ?"#,
+        r#"SELECT iso_date AS "iso_date!" FROM referenced_dates
+           WHERE entity_id = ? ORDER BY iso_date"#,
         id
     )
     .fetch_all(pool)
@@ -341,10 +342,9 @@ struct EntityRow {
 }
 
 /// Hydrate every entity, or every entity of `structure_type`, most recently
-/// updated first, in four queries however many there are. Returns what
-/// `load_entity` returns for each, field for field. `load_entity` reads child rows
-/// through each table's `(entity_id, …)` primary-key index, so they come back in
-/// key order; the `ORDER BY`s below spell out that same order.
+/// updated first (ties by id), in four queries however many there are. Returns
+/// what `load_entity` returns for each, field for field: both order links by
+/// `link_id` and referenced dates by `iso_date` explicitly (I-48).
 pub(crate) async fn load_entities(
     pool: &SqlitePool,
     structure_type: Option<&str>,
@@ -373,16 +373,16 @@ async fn load_entities_where(
     structure_type: Option<&str>,
     ids_json: Option<&str>,
 ) -> Result<Vec<Entity>, AppError> {
-    // Literal queries per filter rather than `? IS NULL OR …`, so the List ones
-    // keep the plan (and the tie order within equal `updated_at`s) that List has
-    // always had.
+    // Literal queries per filter rather than `? IS NULL OR …`, so each List query
+    // gets a plan for its own filter. The order is explicit either way: most
+    // recently updated first, ties broken by id (I-48).
     let rows = match (structure_type, ids_json) {
         (None, None) => {
             sqlx::query_as!(
                 EntityRow,
                 r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
                           created_at AS "created_at!", updated_at AS "updated_at!"
-                   FROM entities ORDER BY updated_at DESC"#
+                   FROM entities ORDER BY updated_at DESC, id"#
             )
             .fetch_all(pool)
             .await?
@@ -392,7 +392,7 @@ async fn load_entities_where(
                 EntityRow,
                 r#"SELECT id AS "id!", structure_type AS "structure_type!", name AS "name!",
                           created_at AS "created_at!", updated_at AS "updated_at!"
-                   FROM entities WHERE structure_type = ? ORDER BY updated_at DESC"#,
+                   FROM entities WHERE structure_type = ? ORDER BY updated_at DESC, id"#,
                 structure_type
             )
             .fetch_all(pool)
@@ -406,7 +406,7 @@ async fn load_entities_where(
                    FROM entities
                    WHERE id IN (SELECT value FROM json_each(?1))
                      AND (?2 IS NULL OR structure_type = ?2)
-                   ORDER BY updated_at DESC"#,
+                   ORDER BY updated_at DESC, id"#,
                 ids_json,
                 structure_type
             )
@@ -2504,12 +2504,12 @@ mod tests {
     /// Ids in List's order before batching: the query List ran for its ids.
     async fn listed_ids(pool: &SqlitePool, structure_type: Option<&str>) -> Vec<String> {
         match structure_type {
-            None => sqlx::query_scalar("SELECT id FROM entities ORDER BY updated_at DESC")
+            None => sqlx::query_scalar("SELECT id FROM entities ORDER BY updated_at DESC, id")
                 .fetch_all(pool)
                 .await
                 .expect("ids"),
             Some(s) => sqlx::query_scalar(
-                "SELECT id FROM entities WHERE structure_type = ? ORDER BY updated_at DESC",
+                "SELECT id FROM entities WHERE structure_type = ? ORDER BY updated_at DESC, id",
             )
             .bind(s)
             .fetch_all(pool)
@@ -2609,6 +2609,64 @@ mod tests {
         let ideas = all.iter().find(|e| e.id == ideas.id).expect("ideas");
         assert_eq!(ideas.links.len(), 3);
         assert_eq!(ideas.referenced_dates, ["2026-01-02", "2026-09-01"]);
+    }
+
+    // I-48: entities written in the same millisecond come back in id order.
+    #[tokio::test]
+    async fn list_ties_are_broken_by_id() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let mut ids = Vec::new();
+        for name in ["C", "A", "B", "D"] {
+            ids.push(create(&svc, note(name)).await.id);
+        }
+        let newest = create(&svc, todo("Newest")).await;
+        sqlx::query("UPDATE entities SET updated_at = 1000 WHERE id != ?")
+            .bind(&newest.id)
+            .execute(&pool)
+            .await
+            .expect("tie updated_at");
+        sqlx::query("UPDATE entities SET updated_at = 2000 WHERE id = ?")
+            .bind(&newest.id)
+            .execute(&pool)
+            .await
+            .expect("newest");
+        ids.sort();
+
+        let listed = |structure_type: &str| {
+            svc.list_entities(Request::new(ListEntitiesRequest {
+                structure_type: structure_type.to_string(),
+            }))
+        };
+        let all: Vec<String> = listed("")
+            .await
+            .expect("list")
+            .into_inner()
+            .entities
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        let mut expected = vec![newest.id.clone()];
+        expected.extend(ids.iter().cloned());
+        assert_eq!(all, expected);
+
+        let notes: Vec<String> = listed("Note")
+            .await
+            .expect("list notes")
+            .into_inner()
+            .entities
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        assert_eq!(notes, ids);
+
+        let by_id: Vec<String> = load_entities_by_id(&pool, &ids)
+            .await
+            .expect("by id")
+            .into_iter()
+            .map(|e| e.id)
+            .collect();
+        assert_eq!(by_id, ids);
     }
 
     async fn list_backlinks_of(svc: &EntityService, id: &str) -> Result<Vec<Backlink>, Status> {
