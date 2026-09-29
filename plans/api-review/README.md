@@ -111,10 +111,17 @@ passed, `buf lint`, `calcifer` build + lint, `mcp-server` typecheck; `pnpm smoke
 `pnpm test:tools` passed against a fresh scratch server after T19). Phases 1–3 and T16
 were checked in the browser.
 
-**Left:** one browser pass over the frontend changes since T19 (renamed RPCs, T21's
-write helpers, T22's merged create/delete paths, T23's new kinds), which was blocked
-when the Firefox tools disconnected. Then the Phase 6 follow-ups (T24–T29). The user
-decides when to merge `api-review` to `main`.
+**Browser pass since T19 (2026-09-28, scratch DB):** passed. Create To-do from "+ New",
+rename, status, priority, due set/clear and tag add/remove all survive a reload; `#tag`
+and `@Note/Name` create from the editor (backlink shows on the target); delete asks,
+then navigates home; a daily note created from the Calendar lists newest first, moving
+its date renames it, and moving onto a taken date shows "A daily note already exists
+for that day." Server log clean. T23's `text`/`number`/`relation` editors aren't
+reachable: no structure declares those kinds, so they were checked only by T23's
+engineer against a temporary structure.
+
+**Left:** the Phase 6 follow-ups (T24–T29). The user decides when to merge
+`api-review` to `main`.
 
 **Triage (2026-09-26):** every unassigned issue was checked against the code and still
 holds. All of them are fixed in Phase 6 (D12); I-58 is new, found during triage. None
