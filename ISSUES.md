@@ -14,42 +14,6 @@ running app. Nothing below has been reproduced yet.
 
 ---
 
-## Open
-
-> **RPC names.** Entries written before 2026-09-26 use the RPC names from before I-13's
-> buf rename. Read `Get`/`List`/`Create`/`Rename`/`SetProperty`/`Delete`/`Watch`/`Resolve`
-> as `GetEntity`/`ListEntities`/`CreateEntity`/`RenameEntity`/`SetEntityProperty`/
-> `DeleteEntity`/`WatchEntities`/`ResolveEntity`, and `RichText.Get`/`Put` as
-> `GetRichText`/`PutRichText`. Server handlers follow the same names in snake_case
-> (e.g. `delete_entity`). `ResolveByName` was replaced by `ResolveEntity` in T07.
-
-### I-14 · Deleting an entity leaves dead refs in other entities' relation values · medium · confirmed
-
-**Where:** `server/src/services/entity.rs` (`delete`), `calcifer/src/components/entity/EntityRelationsField.tsx`
-
-**Problem:** `Delete` removes `links WHERE target_id = ?` but never strips the deleted id
-from other entities' `relation`/`relations` property values. The live database already
-has one: a Todo whose `tags` still holds a ref to a Tag that no longer exists.
-`EntityRelationsField` hides unresolved refs, but `addRef`/`removeRef` build from the raw
-list, so the dead ref is resent on every edit and can't be removed from the UI. It is
-harmless today only because relation link sync silently skips missing targets; any
-stricter check (e.g. rejecting unknown targets, considered for I-2) would lock such
-entities out of every `Update`. Found while doing I-2.
-
-**Fix:** In `delete`, remove the deleted id from other entities' relation property values
-in the same transaction (and publish upserts for the entities it changed). Clean up
-existing dead refs once; that changes stored data, so confirm with the user first.
-
-**Done when:** after deleting a Tag, no Todo's `tags` value still refers to it, and a test
-covers it.
-
-**Decided (2026-09-26, D10, D11):** the server strips the id on delete; no frontend
-change. No cleanup code for existing dead refs: the live DB's one (Todo "Ship" → deleted
-Tag `b744dbdd…`) is the user's to remove with a one-off or by recreating the DB (the
-checked `UPDATE` is in `plans/api-review/README.md`). Planned as T25.
-
----
-
 ### I-34 · Relation edits resend the whole list · low · confirmed
 
 **Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:32-40`, `calcifer/src/routes/e.$id.tsx:246-252`
@@ -126,21 +90,6 @@ once the server returns without further typing.
 
 ---
 
-### I-44 · `test:tools` semantic assertion fails on a cold embedding model · low · confirmed
-
-**Where:** `mcp-server/src/tools-test.ts` (semantic retrieval poll, about l.57)
-
-**Problem:** On a fresh server the embedding worker is still loading its model, and
-the test's 15 s poll can run out before both notes are embedded. The first run after a
-server start failed `semantic retrieval surfaces both related notes`; a second run
-passed. Found during T07's integration check.
-
-**Fix:** Poll longer, or wait for the embed queue to drain before asserting.
-
-**Done when:** `pnpm test:tools` passes on the first run against a fresh scratch server.
-
----
-
 ### I-45 · Two untitled Tags created at once can pick the same free name · low · confirmed
 
 **Where:** `server/src/services/entity.rs` (`create`, `free_name`)
@@ -156,23 +105,6 @@ the insert transaction.
 **Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
 
 **Done when:** concurrent untitled Tag creates both succeed with distinct names.
-
----
-
-### I-47 · The MCP server hard-codes the `content` rich-text property · low · confirmed
-
-**Where:** `mcp-server/src/tools.ts:23`, `mcp-server/src/markdown/verify.ts:65`
-
-**Problem:** Since T12 a rich-text doc is addressed by (entity id, declared rich-text
-property id), and the frontend reads the declared id from the structure registry. The
-MCP server still writes `propertyId: 'content'` directly. It works today because every
-rich-text structure declares `content`, but a structure with another rich-text property
-would break it. Found during T12 of the API review.
-
-**Fix:** Read the declared rich-text property from `StructureService` (as the frontend's
-`richTextPropertyIds` does).
-
-**Done when:** no `'content'` literal addresses a rich-text doc in `mcp-server/src`.
 
 ---
 
@@ -233,22 +165,7 @@ published last.
 
 **Server half done (T24, 2026-09-28):** `CreateEntity`, `ResolveEntity` and `SetEntityProperty` reject a date value that isn't a real ISO day with `INVALID_ARGUMENT`, and a `dateChip` with a bad `date` is skipped (`is_iso_day` in `links.rs`; `date_values_must_be_iso_days`, `date_chips_with_a_non_iso_date_are_skipped`). Still open: the MCP parser regex (T28) and the proto comment on `PropertyValue.date` (T29). Existing stored values aren't checked or cleaned up.
 
----
-
-### I-53 · `get_note` renders stale mention labels and loses `[[name|label]]` targets · low · confirmed
-
-**Where:** `mcp-server/src/markdown/serialize.ts:22-25`
-
-**Problem:** `get_note` writes each mention from its stored `label`, which nothing updates when the target is renamed, so the agent reads old names. A `[[name|label]]` link serializes back as `[[label]]`, so a read-modify-write through the agent can point it at a different note. Found during T20 of the API review.
-
-**Fix:** Serialize mentions from the target entity's current name (the MCP server can resolve ids), and keep the alias form when the label differs.
-
-**Done when:** a renamed target shows its new name in `get_note`, and `[[name|label]]` round-trips.
-
-**Triage (2026-09-26):** the browser never shows a mention's `label` for a live target
-(`MentionNodeView` renders the current name), so there are no aliases to keep. T28
-writes chips from current names and drops the alias form. Writing `get_note`'s output
-back must link the same targets; that replaces the round-trip clause above. See I-58.
+**MCP half done (T28, 2026-09-28):** `parse.ts` makes a `dateChip` only for a real calendar day with no digit on either side (`2026-02-30` and `2026-06-155` stay text). Only the proto comment on `PropertyValue.date` is left (T29).
 
 ---
 
@@ -276,26 +193,6 @@ chunks update on its next save.
 **Fix:** Use a local `protoc-gen-es` pinned to one version in both packages.
 
 **Done when:** `proto:gen` works offline in both packages and both produce the same generated code version.
-
----
-
-### I-58 · `get_note` → write-back moves non-Note mentions onto a Note · low · confirmed
-
-**Where:** `mcp-server/src/markdown/serialize.ts` (`mention`), `mcp-server/src/markdown/parse.ts` (`[[…]]`)
-
-**Problem:** `get_note` writes every `mention` as `[[label]]`, whatever the target's
-structure, and the parser reads every `[[…]]` as a Note. Writing a note back through the
-agent (e.g. `create_note`, which replaces the body) moves a mention of a Todo or a
-DailyNote onto a Note with that name, and creates that Note if it's missing. The live DB
-has one DailyNote mention in a doc (counted read-only 2026-09-26). Found while triaging
-I-53.
-
-**Fix:** Write non-Note mentions with their structure (e.g. `[[Todo/Ship]]`), and parse
-that form back when the prefix is a registry structure type. Resolve with create only
-for `creatable` structures; a missing non-creatable target becomes plain text.
-
-**Done when:** a note mentioning a Note, a Tag and a Todo round-trips through `get_note`
-and `create_note` with the same links and no new entity.
 
 ---
 
@@ -346,6 +243,11 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ## Resolved
 
+- **I-58 · `get_note` → write-back moves non-Note mentions onto a Note.** Fixed 2026-09-28. `get_note` writes a non-Note mention as `[[Structure/Name]]` (and a Note whose name starts with a registry prefix as `[[Note/…]]`); the parser retargets `[[X/Name]]` when `X` is exactly a registry type. The resolver creates a missing target only for a `creatable` structure; a missing DailyNote stays plain text. Observed 2026-09-28 in `test:tools` on a fresh scratch server: a note mentioning a Note, an alias, a Tag, a Todo and a DailyNote round-trips through `get_note` and `create_note` with the same links and no new entity.
+- **I-53 · `get_note` renders stale mention labels and loses `[[name|label]]` targets.** Fixed 2026-09-28. `get_note` fetches each chip's target (parallel `GetEntity`, one per id) and writes it by its current name; an alias is written as the target's name, and a target that's gone is written as its label in plain text. Covered in `verify.ts` and `test:tools` (`get_note shows a renamed target by its new name`).
+- **I-47 · The MCP server hard-codes the `content` rich-text property.** Fixed 2026-09-28. `tools.ts` reads `ListStructures` once per process (a failed fetch isn't cached) and addresses a body by the structure's first declared rich-text property (`docRef`); backlink labels compare against the declared ids. No `'content'` doc address is left in `mcp-server/src`.
+- **I-44 · `test:tools` semantic assertion fails on a cold embedding model.** Fixed 2026-09-28. `test:tools` polls semantic search for up to 60 s (120 × 500 ms) before asserting. Observed 2026-09-28: passed on the first run against a freshly started scratch server.
+- **I-14 · Deleting an entity leaves dead refs in other entities' relation values.** Fixed 2026-09-28. `DeleteEntity` reads the inbound `links` rows before sweeping them and, in the same transaction, removes the deleted id from those entities' `relation`/`relations` values; a `relation`, or a `relations` left empty, is deleted. It bumps their `updated_at` and, after commit, publishes `deleted_id` then one `upserted` per changed entity in id order (D10; no frontend change). Rich-text mentions are left alone. Dead refs stored before this change aren't cleaned up (D11): the live DB's one (Todo "Ship" → deleted Tag) needs the one-off `UPDATE` in the API review plan or a fresh DB. Covered by `delete_strips_the_id_from_relations_values` and four more tests. Observed 2026-09-28 on a scratch DB: deleting a Tag in one tab dropped it from an open Todo's tags in another tab, live.
 - **I-57 · Relation pickers: any-structure `relations` renders nothing; self is offered.** Fixed 2026-09-28. The entity page no longer skips a `relations` property with an empty `target_structure`, so it renders `EntityRelationsField`, whose picker lists every structure and offers no "Create". `EntityRelationField` and `EntityRelationsField` take `selfId`, which is always in the picker's `excludeIds`. No structure declares an any-structure or self-typed relation, so this was checked by reading, not in the browser.
 - **I-56 · Create and resolve callbacks are never stable.** Fixed 2026-09-28. `useCreateEntity` and `useResolveDailyNote` depend on the destructured `mutateAsync`, which is stable, not on the mutation object, which isn't. `dailyNoteDate` reads through `propertyValueOf`.
 - **I-50 · `PutRichText` with an empty `entity_id` answers `NOT_FOUND`.** Fixed 2026-09-28. `GetRichText` and `PutRichText` return `INVALID_ARGUMENT` for an empty `entity_id` or `property_id` before any lookup (`require_ids`). Covered by `rich_text_with_an_empty_id_is_invalid_argument`.
