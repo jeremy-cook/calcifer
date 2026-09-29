@@ -1,0 +1,5 @@
+# Their install scripts only link a platform binary that the optional platform
+# package already provides, so pnpm needn't run them (I-64).
+ignoredBuiltDependencies:
+  - '@bufbuild/buf'
+  - esbuild
