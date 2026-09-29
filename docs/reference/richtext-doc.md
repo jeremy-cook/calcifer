@@ -162,15 +162,27 @@ The rest of the schema is StarterKit plus the extensions listed in
 [`../specs/mentions.md`](../specs/mentions.md) covers how chips are inserted.
 
 **MCP server** (`mcp-server/src/markdown/`). `parse.ts` turns agent markdown into a
-subset of the same schema:
+subset of the same schema. Chip ids come from `ResolveEntity` by name, which creates a
+missing target when its structure is `creatable`; a target that doesn't exist and can't
+be created (a DailyNote) leaves the chip's label as plain text.
 
 | Markdown | Node |
 |---|---|
-| `[[name]]`, `[[name\|label]]` | `mention`, `structureType: "Note"`, `char: "@"`, `id` from `ResolveEntity` by `name` |
-| `#name` | `hashtag`, `structureType: "Tag"`, `char: "#"`, `id` from `ResolveEntity` by `name` |
-| `yyyy-MM-dd` at a word boundary | `dateChip` |
+| `[[Name]]`, `[[Name\|label]]` | `mention` of a Note, `char: "@"` |
+| `[[Structure/Name]]`, `[[Structure/Name\|label]]` | `mention` of that structure, when `Structure` is exactly a registry structure type (e.g. `[[Todo/Ship]]`); otherwise the whole text is a Note name |
+| `#name` after whitespace or at the start of a line (letters, digits, `_`, `-`) | `hashtag`, `structureType: "Tag"`, `char: "#"` |
+| `yyyy-MM-dd` after whitespace or at the start of a line, with no digit after it, naming a real day | `dateChip` |
 | headings, `-`/`*` and `1.` lists, `>` quotes, fenced code | `heading` (`level`), `bulletList`/`orderedList`/`listItem`, `blockquote`, `codeBlock` (`language`) |
 | `**…**`, `*…*`, `` `…` `` | `bold`, `italic`, `code` marks |
 
-`serialize.ts` goes the other way for `get_note`, writing a mention as `[[label]]`, a
-hashtag as `#label` and a date chip as its `date`.
+A mention's `structureType` is the structure it resolved in, and its `label` is the
+`label` after `|` if given, else the name without any `Structure/` prefix.
+
+`serialize.ts` goes the other way for `get_note`. Each chip is written from its
+target's **current** name and structure, looked up by id, not from its stored `label`:
+a Note mention as `[[Name]]`, a mention of any other structure as `[[Structure/Name]]`,
+a hashtag as `#Name`. A Note whose name itself starts with a registry prefix (a Note
+named `Todo/Ship`) is written `[[Note/Todo/Ship]]`, so it reads back as the same Note.
+A chip whose target no longer exists is written as its stored `label` in plain text, so
+writing the markdown back creates nothing. A date chip is written as its `date`. Marks
+round-trip as `` `…` ``, `**…**` and `*…*`.
