@@ -105,23 +105,6 @@ covers `set_property`.
 
 ---
 
-### I-41 · `cargo fmt --check` fails on committed server code · low · confirmed
-
-**Where:** `server/src/services/entity.rs`, `search.rs`, `link_store.rs`, `embed/chunk.rs`, parts of `services/richtext.rs`
-
-**Problem:** Several committed files aren't rustfmt-clean, so any engineer who runs
-`cargo fmt` produces unrelated churn. Nothing checks formatting today. Found during
-T06a of the API review.
-
-**Fix:** One `cargo fmt` commit with no other changes, then optionally a check.
-
-**Done when:** `cargo fmt --check` passes.
-
-
-**Also (found in T20):** the module comment at `server/src/links.rs:3-4` points at `extractDocReferences` in `calcifer/src/model/linkSync.ts`, which no longer exists. Fix it in the same pass.
-
----
-
 ### I-42 · A rich-text save that fails for a non-conflict reason is dropped silently · medium · confirmed
 
 **Where:** `calcifer/src/model/richtext.ts` (`putOnce`, the non-`FailedPrecondition` branch)
@@ -140,22 +123,6 @@ skip the delete while a doc has an unsaved local change.
 
 **Done when:** typing while the server is down shows the notice, and the text is saved
 once the server returns without further typing.
-
----
-
-### I-43 · Creating a mention or tag in the editor sends `Resolve` twice · low · confirmed
-
-**Where:** `calcifer/src/editors/tiptap/components/mention/makeSuggestion.ts` (`command` → `resolveMentionItem`)
-
-**Problem:** Picking "Create new Note: …" or "Create new Tag: …" sent two `Resolve`
-calls for one entity (observed in the browser during T07's checks). The server
-dedupes by name, so only one entity is made. The cause wasn't traced; the call path
-predates T07.
-
-**Fix:** Find why the suggestion command runs twice (e.g. Enter handled by both the
-menu and the suggestion plugin) and send one call.
-
-**Done when:** creating a mention or tag sends one `Resolve`.
 
 ---
 
@@ -192,24 +159,6 @@ the insert transaction.
 
 ---
 
-### I-46 · `Resolve` by name can create an undated DailyNote, getting around `creatable` · low · confirmed
-
-**Where:** `server/src/services/entity.rs` (`resolve_name`)
-
-**Problem:** Since T09, `Create` refuses a DailyNote (`creatable = false`) and points at
-`Resolve` by date. `Resolve` by name with `structure_type: "DailyNote"` and
-`create_if_missing` still creates one, with no date. The browser avoids this path
-(`makeSuggestion.ts`), but the server doesn't refuse it. Found during T09 of the API
-review.
-
-**Fix:** In `resolve_name`, return `FailedPrecondition` when it would create an entity
-of a non-creatable structure (a lookup without create still works).
-
-**Done when:** `Resolve { name, structure_type: "DailyNote", create_if_missing }` for a
-missing name is `FailedPrecondition`, and a test covers it.
-
----
-
 ### I-47 · The MCP server hard-codes the `content` rich-text property · low · confirmed
 
 **Where:** `mcp-server/src/tools.ts:23`, `mcp-server/src/markdown/verify.ts:65`
@@ -224,22 +173,6 @@ would break it. Found during T12 of the API review.
 `richTextPropertyIds` does).
 
 **Done when:** no `'content'` literal addresses a rich-text doc in `mcp-server/src`.
-
----
-
-### I-48 · Entity ordering relies on the query plan in two places · low · confirmed
-
-**Where:** `server/src/services/entity.rs` (`load_entity`, `load_entities`)
-
-**Problem:** `load_entity` has no `ORDER BY`, so the order of an entity's properties,
-links and referenced dates comes from the primary-key index the plan happens to use.
-`load_entities` (T13) orders them explicitly and matches it today. Also, `List` orders
-by `updated_at DESC` with no tie-breaker, so entities written in the same millisecond
-come back in plan order. Found during T13 of the API review.
-
-**Fix:** Add the same explicit `ORDER BY`s to `load_entity`, and `, id` to List's order.
-
-**Done when:** both loaders order explicitly and a List tie is broken by id.
 
 ---
 
@@ -276,22 +209,6 @@ published last.
 
 ---
 
-### I-50 · `PutRichText` with an empty `entity_id` answers `NOT_FOUND` · low · confirmed
-
-**Where:** `server/src/services/richtext.rs` (`put_rich_text`, `check_declared`)
-
-**Problem:** Since T19 the request is flat (`entity_id`, `property_id`, …), so there's no
-`ref` to be missing. An empty `entity_id` now fails `check_declared` with `NOT_FOUND`
-"entity " instead of the old `INVALID_ARGUMENT` "richtext missing ref". Found during
-T19 of the API review.
-
-**Fix:** Return `INVALID_ARGUMENT` for an empty `entity_id` or `property_id` in
-`GetRichText` and `PutRichText`, before the lookup.
-
-**Done when:** both RPCs answer `INVALID_ARGUMENT` for an empty id, and a test covers it.
-
----
-
 ### I-51 · Content mention links trust the doc's `structureType` · low · confirmed
 
 **Where:** `server/src/link_store.rs` (`replace_scoped_links`), `server/src/links.rs:53-64`
@@ -313,6 +230,8 @@ T19 of the API review.
 **Fix:** Validate `yyyy-MM-dd` as a real calendar day in all three server paths (`INVALID_ARGUMENT` for a property; skip a bad chip), and tighten the MCP regex to real days.
 
 **Done when:** a bad date is rejected by `SetEntityProperty` and `CreateEntity`, ignored in a chip, and not produced by the MCP parser, with tests.
+
+**Server half done (T24, 2026-09-28):** `CreateEntity`, `ResolveEntity` and `SetEntityProperty` reject a date value that isn't a real ISO day with `INVALID_ARGUMENT`, and a `dateChip` with a bad `date` is skipped (`is_iso_day` in `links.rs`; `date_values_must_be_iso_days`, `date_chips_with_a_non_iso_date_are_skipped`). Still open: the MCP parser regex (T28) and the proto comment on `PropertyValue.date` (T29). Existing stored values aren't checked or cleaned up.
 
 ---
 
@@ -360,40 +279,6 @@ chunks update on its next save.
 
 ---
 
-### I-56 · Create and resolve callbacks are never stable · low · confirmed
-
-**Where:** `calcifer/src/model/store.ts` (`useCreateEntity`, `useResolveDailyNote`, `dailyNoteDate`)
-
-**Problem:** Both hooks list the whole `useMutation` result in their `useCallback`
-dependencies. That object changes on every render, so the returned callbacks are new on
-every render and anything memoised on them re-runs. Also, `dailyNoteDate` reads
-`entity.properties.date` directly instead of through `propertyValueOf` (safe, since the
-key is fixed, but inconsistent). Found during T22 of the API review.
-
-**Fix:** Depend on `m.mutateAsync` (stable) instead of `m`, and read the date through
-`propertyValueOf`.
-
-**Done when:** both callbacks keep their identity across renders.
-
----
-
-### I-57 · Relation pickers: any-structure `relations` renders nothing; self is offered · low · confirmed
-
-**Where:** `calcifer/src/routes/e.$id.tsx` (about l.260), `calcifer/src/components/entity/EntityPicker.tsx`
-
-**Problem:** A `relations` property with an empty `target_structure` (the proto says
-empty means any structure) still renders nothing, though T23's shared `EntityPicker`
-supports "any". Neither relation picker leaves the current entity out of its
-candidates, so an entity can relate to itself. Found during T23 of the API review.
-
-**Fix:** Drop the empty-target guard for `relations`, and pass the current entity's id
-in `excludeIds`.
-
-**Done when:** an any-structure `relations` property renders a picker, and neither
-picker lists the entity being edited.
-
----
-
 ### I-58 · `get_note` → write-back moves non-Note mentions onto a Note · low · confirmed
 
 **Where:** `mcp-server/src/markdown/serialize.ts` (`mention`), `mcp-server/src/markdown/parse.ts` (`[[…]]`)
@@ -416,6 +301,13 @@ and `create_note` with the same links and no new entity.
 
 ## Resolved
 
+- **I-57 · Relation pickers: any-structure `relations` renders nothing; self is offered.** Fixed 2026-09-28. The entity page no longer skips a `relations` property with an empty `target_structure`, so it renders `EntityRelationsField`, whose picker lists every structure and offers no "Create". `EntityRelationField` and `EntityRelationsField` take `selfId`, which is always in the picker's `excludeIds`. No structure declares an any-structure or self-typed relation, so this was checked by reading, not in the browser.
+- **I-56 · Create and resolve callbacks are never stable.** Fixed 2026-09-28. `useCreateEntity` and `useResolveDailyNote` depend on the destructured `mutateAsync`, which is stable, not on the mutation object, which isn't. `dailyNoteDate` reads through `propertyValueOf`.
+- **I-50 · `PutRichText` with an empty `entity_id` answers `NOT_FOUND`.** Fixed 2026-09-28. `GetRichText` and `PutRichText` return `INVALID_ARGUMENT` for an empty `entity_id` or `property_id` before any lookup (`require_ids`). Covered by `rich_text_with_an_empty_id_is_invalid_argument`.
+- **I-48 · Entity ordering relies on the query plan in two places.** Fixed 2026-09-28. `load_entity` orders links by `link_id` and dates by `iso_date`, as `load_entities` does, and every `ListEntities` query orders by `updated_at DESC, id`. Documented in `data-model.md`. Covered by `list_ties_are_broken_by_id` and the tightened `load_entities_matches_load_entity`.
+- **I-46 · `Resolve` by name can create an undated DailyNote, getting around `creatable`.** Fixed 2026-09-28. `ResolveEntity` by name with `create_if_missing` returns `FAILED_PRECONDITION` for a structure that isn't `creatable`; for DailyNote the message points to resolving by date. A lookup without create is unchanged. Covered by `resolve_by_name_of_a_missing_daily_note_is_failed_precondition`.
+- **I-43 · Creating a mention or tag in the editor sends `Resolve` twice.** Fixed 2026-09-28. The root cause was never confirmed. The suggestion popup stays open while a create's `ResolveEntity` is pending, so a second Enter or click (or cmdk's own Enter on its focused root) could run `command` again. `makeSuggestion` now keeps a per-suggestion in-flight flag and ignores `command` until the create settles. Observed 2026-09-28 on a scratch DB: `#tag` by Enter and `@Note/Name` by click each sent one `ResolveEntity` and inserted one chip.
+- **I-41 · `cargo fmt --check` fails on committed server code.** Fixed 2026-09-28. `cargo fmt` applied in its own commit (`7526517`), and the stale `links.rs` module comment rewritten. `cargo fmt --check` is on the API review checklist from T24.
 - **I-26 · Unused property kinds, and structure flags only the frontend enforces.** Fixed 2026-09-26. The server refuses `CreateEntity` of a non-creatable structure and `RenameEntity` of a structure whose name isn't editable, both with `FAILED_PRECONDITION` (`create_of_a_daily_note_is_failed_precondition`, `rename_of_a_daily_note_is_failed_precondition`). The `text`, `number` and `relation` kinds stay and the entity page renders them (D6, variant "render"): text and number get an inline input that writes on blur or Enter (empty clears), and a single relation gets a picker (`EntityRelationField`), sharing `EntityPicker` with `EntityRelationsField`; the pickers list any structure when `target_structure` is empty. `usePropertyWriters` gains `setText`, `setNumber` and `setRelation`. On the server, `validate_property` names kinds in one exhaustive match on the declared kind, so `kind_name`'s unreachable `Richtext` arm is gone. No structure declares these kinds yet. Not yet observed in the browser.
 - **I-33 · Duplicated code in the model layer.** Fixed 2026-09-26. T15 removed the duplicate `List` query functions, the raw `['entities']` keys and the Watch consumer in `App.tsx` (the list comes only from `entitiesQuery` in `model/sync.ts`). The three hand-written Timestamp-to-milliseconds conversions are gone: `timestampMsOrZero` in `model/dates.ts` wraps `timestampMs` from `@bufbuild/protobuf/wkt` (an unset Timestamp reads as 0) and backs `backlinks.ts`, `listByStructure`, `entityUpdatedAtDate` and the to-do created/updated sorts; `timestampMs` rounds to whole milliseconds, where the old code kept fractions. Delete has one path, `deleteEntity(id)` in `model/store.ts` (fire-and-forget, logs a failure); `useDeleteEntity` and `deleteEntityImperative` are gone. Create has one path per RPC: `useCreateEntity` for `CreateEntity`, and the private `resolveOrCreateEntity` for get-or-create through `ResolveEntity`, which `useResolveDailyNote` and `getOrCreateEntityForMention` both call. `useSetTodoStatus` writes through `usePropertyWriters().setSelect`, and property reads in `todos.ts` and the entity page go through the exported `propertyValueOf` (an `Object.hasOwn` check). Not yet observed in the browser.
 - **I-32 · Proto and Connect details leak into components.** Fixed 2026-09-26. Components no longer build proto messages or check `ConnectError` codes. `usePropertyWriters()` in `model/store.ts` wraps `useSetProperty` with `setDate(entity, id, iso | null)`, `setSelect(entity, id, key)` and `setRelations(entity, id, targets)` (an empty list clears the property); `EntityRelationsField` emits plain `{ id, structureType }` targets. `DailyNoteDateField` detects a collision with the new `isAlreadyExists` in `model/api.ts`, and the unused `isNotFound` is gone. `withProperty` is module-private, and property reads in `store.ts` go through an `Object.hasOwn` check. Nothing under `components/`, `routes/` or `layouts/` imports `@bufbuild/protobuf` or `@connectrpc`. Not yet observed in the browser.

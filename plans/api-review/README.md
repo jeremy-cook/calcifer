@@ -276,11 +276,11 @@ is fixed in Phase 6 (T25).
 | T22 | [FE model-layer duplicates](tasks/T22-fe-duplicates.md) | fe | T21 | none | done (5a14ac1, 42cfb3b) |
 | T23 | [Unused property kinds (remove or render, per D6)](tasks/T23-unused-kinds.md) | proto, server, fe, mcp | T22, G4 | none | done (0e98e65, 09958dd, a2d2368) |
 | **Phase 6: triage follow-ups (D12)** |||||
-| T24 | [`cargo fmt`, then request guards (Resolve, ordering, empty ids, dates)](tasks/T24-server-fmt-and-guards.md) | server, docs | T23 | T27, T28 | todo |
+| T24 | [`cargo fmt`, then request guards (Resolve, ordering, empty ids, dates)](tasks/T24-server-fmt-and-guards.md) | server, docs | T23 | T27, T28 | done (7526517, 7a701f0, 09040bc, 8853d3b, 8b28427, 267b72e, 9b6c4f2) |
 | T25 | [Deleting an entity strips it from relation values](tasks/T25-strip-dead-relation-refs.md) | server, docs | T24 | T27, T28 | todo |
 | T26 | [Content links use the target's real type; search text includes chips](tasks/T26-content-derivation.md) | server, docs | T25 | T27, T28 | todo |
-| T27 | [FE: one resolve per mention create, stable callbacks, relation pickers](tasks/T27-fe-editor-and-picker-fixes.md) | fe | T23 | T24, T25, T26, T28 | todo |
-| T28 | [MCP: registry-driven doc property, faithful `get_note`, strict dates, test poll](tasks/T28-mcp-round-trip.md) | mcp | T23 | T24, T25, T26, T27 | todo |
+| T27 | [FE: one resolve per mention create, stable callbacks, relation pickers](tasks/T27-fe-editor-and-picker-fixes.md) | fe | T23 | T24, T25, T26, T28 | done (0abc497, d6aa592, 1561537) |
+| T28 | [MCP: registry-driven doc property, faithful `get_note`, strict dates, test poll](tasks/T28-mcp-round-trip.md) | mcp | T23 | T24, T25, T26, T27 | in progress |
 | T29 | [Local pinned `protoc-gen-es`; refresh stale proto comments](tasks/T29-local-protoc-gen-es.md) | fe, mcp, proto | T24–T28 | none (regenerates stubs) | todo |
 
 Status values: `todo` · `in progress (engineer: <agent name>)` · `review` · `done (<commit>)` · `blocked (<why>)`.
