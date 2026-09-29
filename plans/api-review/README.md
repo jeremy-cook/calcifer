@@ -120,8 +120,9 @@ merged create/delete, daily-note moves) passed on 2026-09-28 (`93b5d9e`); T23's
 --check`, `cargo test` (98 passed), `calcifer` `proto:gen`, build, lint and `proto:lint`,
 `mcp-server` `proto:gen`, typecheck, `pnpm test:md`, and `pnpm test:tools` on a fresh
 scratch server (the first run failed once with `database is locked` during embedding,
-I-40; the rerun passed). I-61 is deferred. The user decides when to merge `api-review`
-to `main`.
+I-40; the rerun passed). I-61 is deferred. T31 then fixed I-40 (D14): `cargo test` (99
+passed), and `test:tools` passed twice on a fresh scratch server, first run included, with
+no embed worker warnings. The user decides when to merge `api-review` to `main`.
 
 **Triage (2026-09-26):** every unassigned issue was checked against the code and still
 holds. All of them are fixed in Phase 6 (D12); I-58 is new, found during triage. None
@@ -183,6 +184,7 @@ answer and the date.
 | D11 | I-14: clean up the live DB's one existing dead ref (Todo "Ship" → deleted Tag)? | An idempotent sweep at server start | **No cleanup code** (not the recommendation): "just do a one-off script, or delete the database and we can create it again from new". The product gets no sweep or migration. The tech lead recorded a checked one-off `UPDATE` under Status for the user to run, if they don't recreate the DB. 2026-09-26 |
 | D12 | Triage of the unassigned issues: verdicts and grouping | Fix all 15 (none defer or won't-fix; all small, none a race) in T24–T29; log I-58 (found in triage) and fix it with I-53; no reindex of existing docs for I-54 (each updates on its next save); add `cargo fmt --check` to the review checklist | Approved as proposed. 2026-09-26 |
 | D13 | Phase 6 leftovers I-61 to I-64: fix or defer? | Fix I-62, I-63, I-64 in one small task (T30); I-61 needs an escape syntax first (proposed: backslash inside `[[…]]`) | Fix I-62 to I-64 in T30; **defer I-61** (user, 2026-09-29) |
+| D14 | I-40 was seen on 2026-09-29 (first `test:tools` run; the embed worker is the competing writer). Fix it now? | Yes: every write transaction opens `BEGIN IMMEDIATE`, plus a `set_entity_property` race test | Fix it now, as T31 (user, 2026-09-29). D9 still covers I-36, I-42, I-45 and I-49 |
 
 ---
 
@@ -215,7 +217,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-37 | A racing RichText.Put fails with Internal, not FailedPrecondition (found in T04) | medium | T06a |
 | I-38 | Stale comment in watch.rs (found in T04; richtext.ts half fixed in T06) | low | T14 (note) |
 | I-39 | Leaving a new daily note within the save debounce deletes what was typed (found in T06) | medium | T06b |
-| I-40 | Entity write transactions that read first fail with Internal under a race (found in T06a) | medium | deferred (D9) |
+| I-40 | Entity write transactions that read first fail with Internal under a race (found in T06a) | medium | T31 (D14) |
 | I-41 | `cargo fmt --check` fails on committed server code (found in T06a) | low | T24 |
 | I-42 | A rich-text save that fails for a non-conflict reason is dropped silently (found in T06b) | medium | deferred (D9) |
 | I-43 | Creating a mention or tag sends Resolve twice (found in T07 checks) | low | T27 |
@@ -238,6 +240,7 @@ T01 logs these in `ISSUES.md`. Every task cites them, so the numbering is fixed 
 | I-60 | `parse.ts` contains a literal NUL byte, so git shows it as binary (found in T28) | low | T29 |
 | I-61 | MCP link syntax isn't escaped for names with `\|`, `]]` or a structure prefix (found in T28) | low | deferred (D13) |
 | I-62 | Relation writes look up each target's structure type twice (found in T26) | low | T30 |
+| T31 | [Every write transaction takes the write lock first](tasks/T31-write-transactions-immediate.md) | server | T30 | none | done (56f0fd5) |
 | I-63 | ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions (found in T29) | low | T30 |
 | I-64 | pnpm ignores `@bufbuild/buf`'s build script (found in T29) | low | T30 |
 | I-14 | Deleting an entity leaves dead refs in other entities' relation values (pre-existing) | medium | T25 (D10, D11) |

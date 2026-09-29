@@ -49,28 +49,6 @@ test covers it.
 
 ---
 
-### I-40 · Entity write transactions that read first fail with `Internal` under a race · medium · confirmed
-
-**Where:** `server/src/services/entity.rs` (`set_property`), `server/src/embed/worker.rs:133`
-
-**Problem:** Same class as I-37. These transactions start DEFERRED, read (the
-structure type, the previous property value, the old chunk ids), then write. If another
-connection commits in between, the upgrade to a writer fails with `SQLITE_BUSY` right
-away, ignoring `busy_timeout`. The caller gets `Internal`, or the embed worker drops a
-batch. Found during T06a of the API review; confirmed by reading, not reproduced.
-
-**Fix:** Open them with `begin_with("BEGIN IMMEDIATE")`, as `RichText.Put` does since
-I-37.
-
-**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen. Observed once on 2026-09-29: the first `test:tools` run against a fresh scratch server
-failed with `database is locked` while the embed worker logged two failed batches; the
-rerun passed. Still deferred.
-
-**Done when:** each one takes the write lock before its first read, and a race test
-covers `set_property`.
-
----
-
 ### I-42 · A rich-text save that fails for a non-conflict reason is dropped silently · medium · confirmed
 
 **Where:** `calcifer/src/model/richtext.ts` (`putOnce`, the non-`FailedPrecondition` branch)
@@ -165,6 +143,7 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ## Resolved
 
+- **I-40 · Entity write transactions that read first fail with `Internal` under a race.** Fixed 2026-09-29. Every server write transaction opens through `db::begin_write` (`BEGIN IMMEDIATE`): `rename_entity`, `set_entity_property`, `delete_entity`, `persist_new_entity`, `PutRichText` and the embed worker's chunk replace. A contending writer now waits on `busy_timeout` instead of failing at once. Covered by `racing_set_property_writes_both_succeed` (it failed with `Internal: database is locked` before the fix; passed 20 repeated runs after). Observed 2026-09-29: `test:tools` passed on the first run against a fresh scratch server, with no embed worker warnings; before the fix the same first run had failed.
 - **I-64 · pnpm ignores `@bufbuild/buf`'s build script.** Fixed 2026-09-29. `calcifer/pnpm-workspace.yaml` and `mcp-server/pnpm-workspace.yaml` list `@bufbuild/buf` and `esbuild` (and `msw` in `calcifer`) under `ignoredBuiltDependencies`: their scripts only link a binary the optional platform package already provides. A clean `pnpm install` in each package prints no warning, and `pnpm proto:gen` leaves the stubs unchanged. An existing `node_modules` keeps replaying the old warning (even with `--force`) until it's removed and reinstalled.
 - **I-63 · ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions.** Fixed 2026-09-29. The Consequences bullet now says both consumers pin the same exact versions and generate with a local plugin; only the separate stubs remain.
 - **I-62 · Relation writes look up each target's structure type twice.** Fixed 2026-09-29. `replace_scoped_links` takes `LinkTarget { id, structure_type }` and does no lookup. `check_relation_targets` returns the type it read to validate; `PutRichText` gets its targets from `live_targets`, which reads each mention's type and drops a gone target, as before.
