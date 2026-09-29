@@ -56,14 +56,14 @@ interface CreateEntityVars {
 // Create by intent: the server mints the id and builds the defaults, including
 // the default name when `name` is omitted. Resolves to the saved entity.
 export function useCreateEntity() {
-  const m = useMutation({
+  const { mutateAsync } = useMutation({
     mutationFn: async ({ structureType, name }: CreateEntityVars) =>
       requireEntity(await entityClient.createEntity({ structureType, name })),
     onSuccess: writeEntity,
   })
   return useCallback(
-    (structureType: string, name?: string) => m.mutateAsync({ structureType, name }),
-    [m],
+    (structureType: string, name?: string) => mutateAsync({ structureType, name }),
+    [mutateAsync],
   )
 }
 
@@ -77,10 +77,10 @@ async function resolveOrCreateEntity(structureType: string, key: ResolveEntityRe
 
 // Get-or-create the day's DailyNote. The server builds it and names it for the day.
 export function useResolveDailyNote() {
-  const m = useMutation({
+  const { mutateAsync } = useMutation({
     mutationFn: (iso: string) => resolveOrCreateEntity('', { case: 'date', value: iso }),
   })
-  return useCallback((iso: string) => m.mutateAsync(iso), [m])
+  return useCallback((iso: string) => mutateAsync(iso), [mutateAsync])
 }
 
 interface RenameEntityVars {
@@ -334,7 +334,7 @@ export function listByStructure(entities: Entity[], structureType: string): Enti
 
 export function dailyNoteDate(entity: Entity): string | undefined {
   if (entity.structureType !== 'DailyNote') return undefined
-  const value = entity.properties.date?.value
+  const value = propertyValueOf(entity, 'date')
   return value?.case === 'date' ? value.value : undefined
 }
 
