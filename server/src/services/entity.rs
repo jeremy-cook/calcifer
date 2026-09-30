@@ -66,7 +66,7 @@ impl EntityService {
 
     /// Case-insensitive lookup of an entity id by (structure_type, name). Only
     /// Tag names are unique, so for other structures several entities can match:
-    /// the oldest `created_at` wins and `id` breaks ties (D2), so a lookup always
+    /// the oldest `created_at` wins and `id` breaks ties, so a lookup always
     /// returns the same one.
     async fn find_by_name(
         &self,
