@@ -1,7 +1,7 @@
 // Knowledge operations the MCP tools delegate to. Everything goes through the
 // tonic core: agents author markdown, the server derives the link graph.
 import { Code, ConnectError } from '@connectrpc/connect'
-import { timestampFromMs, type Timestamp } from '@bufbuild/protobuf/wkt'
+import { timestampFromMs, timestampMs, type Timestamp } from '@bufbuild/protobuf/wkt'
 import { entityClient, richTextClient, searchClient, structureClient } from './calciferClient.js'
 import { PropertyKind, type PropertyDef, type StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { SearchMode as ProtoSearchMode, type MatchRange } from '@calcifer/proto/calcifer/v1/services_pb'
@@ -75,9 +75,66 @@ async function chipTargets(doc: TTNode): Promise<Map<string, ChipTarget>> {
   return new Map(found.filter((f) => f !== null))
 }
 
-async function toMarkdown(doc: TTNode): Promise<string> {
+// Where one top-level block lands in the rendered body: its index in `doc.content` and
+// its 1-based first and last body line. An empty block renders nothing, so it has no span.
+interface BlockSpan {
+  index: number
+  first: number
+  last: number
+}
+
+// The note body as markdown (blocks separated by a blank line), plus the span of each block
+// so a line range can be mapped back onto blocks.
+async function renderBody(doc: TTNode): Promise<{ body: string; spans: BlockSpan[] }> {
   const [targets, types] = await Promise.all([chipTargets(doc), structureTypes()])
-  return fromTipTap(doc, targets, types)
+  const parts: string[] = []
+  const spans: BlockSpan[] = []
+  let line = 1
+  ;(doc.content ?? []).forEach((block, index) => {
+    const md = fromTipTap({ type: 'doc', content: [block] }, targets, types).replace(/\n$/, '')
+    if (!md) return
+    const last = line + md.split('\n').length - 1
+    spans.push({ index, first: line, last })
+    parts.push(md)
+    line = last + 2
+  })
+  return { body: parts.join('\n\n'), spans }
+}
+
+// The doc blocks [from, to) that body lines start..end cover; an empty range (end = start - 1)
+// is an insertion point. A line range may start and end on blank lines but never inside a block.
+function blockRange(spans: BlockSpan[], blockCount: number, start: number, end: number): { from: number; to: number } {
+  const total = spans.at(-1)?.last ?? 0
+  if (start > total + 1) {
+    throw new Error(`start ${start} is outside the note: its body has ${total} line(s), so start must be 1 to ${total + 1}.`)
+  }
+  if (end < start - 1 || end > total) {
+    throw new Error(`end ${end} is outside the note: it must be ${start - 1} (insert before line ${start}) to ${total}.`)
+  }
+  const first = spans.find((s) => s.last >= start)
+  if (first && start > first.first) {
+    throw new Error(`line ${start} is inside the block at lines ${first.first}-${first.last}; edits take whole blocks, so start at ${first.first}.`)
+  }
+  if (end === start - 1) {
+    const at = first?.index ?? blockCount
+    return { from: at, to: at }
+  }
+  const covered = spans.filter((s) => s.first <= end)
+  const last = covered.at(-1)
+  if (!first || !last || last.index < first.index) {
+    throw new Error(`lines ${start}-${end} contain no block; to insert there, use end = ${start - 1}.`)
+  }
+  if (end < last.last) {
+    throw new Error(`line ${end} is inside the block at lines ${last.first}-${last.last}; edits take whole blocks, so end at ${last.last}.`)
+  }
+  return { from: first.index, to: last.index + 1 }
+}
+
+// A leading `---` block of `key: value` lines, as get_note writes it. Anything else
+// starting with `---` is note content and is left alone.
+function stripFrontmatter(markdown: string): string {
+  const m = markdown.match(/^---\r?\n((?:[A-Za-z_][\w-]*:.*\r?\n)+)---[ \t]*(?:\r?\n|$)/)
+  return m ? markdown.slice(m[0].length) : markdown
 }
 
 interface DocRef {
@@ -156,7 +213,7 @@ function backlinkLabel({ name, structureType, propertyIds }: BacklinkSource, all
 
 export async function createNote(name: string, markdown: string): Promise<string> {
   const id = (await resolveName('Note', name, true)).entity!.id
-  const doc = await parseMarkdown(markdown)
+  const doc = await parseMarkdown(stripFrontmatter(markdown))
   // Unconditional on purpose: create_note overwrites whatever the note held.
   await richTextClient.putRichText({ ...(await docRef('Note', id)), doc: JSON.stringify(doc) })
   const ent = (await entityClient.getEntity({ id })).entity!
@@ -164,13 +221,92 @@ export async function createNote(name: string, markdown: string): Promise<string
   return `Saved note "${ent.name}" (${id}). Derived links: ${ent.links.length} [${linked}]; dates: ${ent.referencedDates.length}.`
 }
 
+// The id of the existing note called `name`. Writing to a note that isn't there is an
+// error, not a create: create_note is how a note comes to exist.
+async function existingNoteId(name: string): Promise<string> {
+  try {
+    return (await resolveName('Note', name, false)).entity!.id
+  } catch (e) {
+    if (isNotFound(e)) throw new Error(`No note named "${name}". Use search_notes or create_note.`)
+    throw e
+  }
+}
+
 export async function appendToNote(name: string, markdown: string): Promise<string> {
-  const id = (await resolveName('Note', name, true)).entity!.id
+  const id = await existingNoteId(name)
   await appendDoc(await docRef('Note', id), `Note "${name}"`, markdown)
   const ent = (await entityClient.getEntity({ id })).entity!
   return `Appended to "${ent.name}" (${id}); now ${ent.links.length} link(s).`
 }
 
+const MAX_FOUND_BLOCKS = 20
+
+// Where `query` occurs in a note's body, as the whole-block line ranges edit_note takes (a match
+// inside a list item reports the whole list), with the version those lines belong to. The match
+// is exact and case-sensitive against the markdown get_note shows, so the agent quotes text
+// it has read instead of counting lines.
+export async function queryTextLocation(name: string, query: string): Promise<string> {
+  if (!query) throw new Error('query is empty: say which text to find.')
+  const id = await existingNoteId(name)
+  const { doc, updatedAt } = await getDoc(await docRef('Note', id))
+  const { body, spans } = await renderBody(doc)
+  const lineAt = (offset: number) => body.slice(0, offset).split('\n').length
+
+  // Each block that holds a match, with how many matches fall in it. A match that spans blocks
+  // reports each block it touches.
+  const hits = new Map<BlockSpan, number>()
+  for (let at = body.indexOf(query); at !== -1; at = body.indexOf(query, at + query.length)) {
+    const [first, last] = [lineAt(at), lineAt(at + query.length - 1)]
+    for (const s of spans.filter((s) => s.last >= first && s.first <= last)) hits.set(s, (hits.get(s) ?? 0) + 1)
+  }
+  if (hits.size === 0) return `No match for ${JSON.stringify(query)} in "${name}".`
+
+  const lines = body.split('\n')
+  const shown = [...hits].slice(0, MAX_FOUND_BLOCKS).map(([s, n]) => {
+    const matches = n === 1 ? '1 match' : `${n} matches`
+    return `lines ${s.first}-${s.last} (${matches}):\n${lines.slice(s.first - 1, s.last).join('\n')}`
+  })
+  const more = hits.size > shown.length ? `\n\n(${hits.size - shown.length} more block(s) not shown; use a longer query.)` : ''
+  return `version: ${timestampMs(updatedAt)}\n\n${shown.join('\n\n')}${more}`
+}
+
+// Replace lines `start`..`end` (1-based, inclusive) of a note's body with `markdown`. An empty
+// range (end = start - 1) inserts before line `start`; empty markdown deletes the range.
+// `version` is the one get_note put in the frontmatter: line numbers only mean something
+// against the document they were read from, so a changed note is an error, not a retry.
+export async function editNote(name: string, start: number, end: number, markdown: string, version: number): Promise<string> {
+  const id = await existingNoteId(name)
+  const stale = new Error(`Note "${name}" changed since you read it. Call get_note again and redo the edit.`)
+
+  const ref = await docRef('Note', id)
+  const { doc, updatedAt } = await getDoc(ref)
+  if (timestampMs(updatedAt) !== version) throw stale
+
+  const { spans } = await renderBody(doc)
+  // A note with no visible block keeps nothing worth preserving: drop its empty paragraphs.
+  const blocks = spans.length ? (doc.content ?? []) : []
+  const { from, to } = blockRange(spans, blocks.length, start, end)
+
+  const replacement = markdown.trim() ? ((await parseMarkdown(markdown)).content ?? []) : []
+  const content = [...blocks.slice(0, from), ...replacement, ...blocks.slice(to)]
+  // An empty doc isn't valid TipTap; a note whose blocks were all deleted keeps one empty paragraph.
+  const merged: TTNode = { type: 'doc', content: content.length ? content : [{ type: 'paragraph' }] }
+  try {
+    await richTextClient.putRichText({ ...ref, doc: JSON.stringify(merged), expectedUpdatedAt: updatedAt })
+  } catch (e) {
+    if (e instanceof ConnectError && e.code === Code.FailedPrecondition) throw stale
+    throw e
+  }
+
+  const ent = (await entityClient.getEntity({ id })).entity!
+  const action =
+    end === start - 1 ? `Inserted at line ${start}` : replacement.length === 0 ? `Deleted lines ${start}-${end}` : `Replaced lines ${start}-${end}`
+  return `${action} of "${ent.name}" (${id}); now ${ent.links.length} link(s).`
+}
+
+// The note as markdown under a frontmatter block (name, version, linked_from). Values are
+// JSON, which is valid YAML, so a name with a colon or a quote can't break the block.
+// `version` is what edit_note checks its line numbers against.
 export async function getNote(name: string): Promise<string> {
   let entityId: string
   let entityName: string
@@ -182,9 +318,15 @@ export async function getNote(name: string): Promise<string> {
     if (isNotFound(e)) return `No note named "${name}". Use search_notes or create_note.`
     throw e
   }
-  const md = (await toMarkdown((await getDoc(await docRef('Note', entityId))).doc)).trim()
+  const { doc, updatedAt } = await getDoc(await docRef('Note', entityId))
+  const { body } = await renderBody(doc)
   const back = (await backlinkSources(entityId)).map((s) => s.name)
-  return `# ${entityName}\n\n${md || '(empty)'}\n\n---\nLinked from: ${back.join(', ') || '(nothing)'}`
+  const frontmatter = [
+    `name: ${JSON.stringify(entityName)}`,
+    `version: ${timestampMs(updatedAt)}`,
+    `linked_from: ${JSON.stringify(back)}`,
+  ].join('\n')
+  return `---\n${frontmatter}\n---\n${body}`
 }
 
 export type SearchMode = 'lexical' | 'semantic' | 'hybrid'

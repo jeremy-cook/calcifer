@@ -1,6 +1,6 @@
 // M5 verification: exercise the knowledge ops against the running server.
 // (The MCP server itself is a thin stdio wrapper over these.) Run: pnpm test:tools
-import { entityClient } from './calciferClient.js'
+import { entityClient, richTextClient } from './calciferClient.js'
 import * as ops from './tools.js'
 
 function assert(cond: unknown, msg: string): void {
@@ -22,9 +22,14 @@ async function entityCount(): Promise<number> {
   return (await entityClient.listEntities({ structureType: '' })).entities.length
 }
 
-// get_note's body: between the "# Name" heading and the "---" footer.
+// get_note's body: everything after the frontmatter's closing "---".
 function noteBody(note: string): string {
-  return note.slice(note.indexOf('\n\n') + 2, note.lastIndexOf('\n\n---\nLinked from:'))
+  return note.slice(note.indexOf('\n---\n', 3) + 5)
+}
+
+// get_note's frontmatter version, the token edit_note checks line numbers against.
+function noteVersion(note: string): number {
+  return Number(note.match(/^version: (\d+)$/m)![1])
 }
 
 async function main(): Promise<void> {
@@ -46,6 +51,19 @@ async function main(): Promise<void> {
   await ops.appendToNote('Transformers', 'They use [[Positional Encoding]] too.')
   const note2 = await ops.getNote('Transformers')
   assert(note2.includes('[[Positional Encoding]]'), 'append added content')
+
+  // Writing to a note that doesn't exist is an error; only create_note makes one.
+  const countBeforeAppend = await entityCount()
+  const ghost = `No Such Note ${Date.now()}`
+  const ghostWrites = {
+    append_to_note: () => ops.appendToNote(ghost, 'x'),
+    link_notes: () => ops.linkNotes(ghost, 'Attention'),
+  }
+  for (const [op, write] of Object.entries(ghostWrites)) {
+    const err = await write().then(() => null, (e: Error) => e)
+    assert(err && /No note named/.test(err.message), `${op} on a missing note is an error: ${err?.message ?? 'did not reject'}`)
+  }
+  assert((await entityCount()) === countBeforeAppend, 'a rejected append creates no entity')
 
   // Backlinks now resolve server-side (EntityService.ListBacklinks).
   const back2 = await ops.getBacklinks('Positional Encoding')
@@ -97,7 +115,10 @@ async function main(): Promise<void> {
   assert(rtNote.includes('[[DailyNote/June 13, 2026]]'), 'get_note writes a DailyNote mention as [[DailyNote/Name]]')
   assert(rtNote.includes(`[[RT Alias ${stamp}]]`) && !rtNote.includes('the alias'), 'get_note writes an alias as the target name')
   assert(rtNote.includes(`#rt${stamp}`), 'get_note keeps the hashtag as #tag')
-  await ops.createNote(rtName, noteBody(rtNote))
+  assert(rtNote.startsWith(`---\nname: ${JSON.stringify(rtName)}\nversion: `) && /\nlinked_from: \[.*\]\n---\n/.test(rtNote), 'get_note starts with name/version/linked_from frontmatter')
+  // The whole result, frontmatter included, goes back in: create_note ignores the frontmatter.
+  await ops.createNote(rtName, rtNote)
+  assert(noteBody(await ops.getNote(rtName)) === noteBody(rtNote), 'create_note drops the frontmatter instead of saving it as text')
   const linksAfter = await linkTargets(rtId)
   assert(JSON.stringify(linksAfter) === JSON.stringify(linksBefore), `round trip keeps the links: ${JSON.stringify(linksBefore)} -> ${JSON.stringify(linksAfter)}`)
   assert((await entityCount()) === countBefore, 'round trip creates no entity')
@@ -107,6 +128,96 @@ async function main(): Promise<void> {
   const missing = await ops.createNote(`Missing Day ${stamp}`, 'On [[DailyNote/February 1, 1901]] nothing happened.')
   assert(/Derived links: 0/.test(missing), 'a missing DailyNote mention derives no link')
   assert((await entityCount()) === countBeforeMiss + 1, 'a missing DailyNote mention creates only the note itself')
+
+  // edit_note: replace / insert / delete a line range of the body, checked against get_note's version.
+  // The body below is line 1 "Alpha.", 3 "## Heading", 5-6 the list, 8 "Last ...": blocks sit on
+  // lines 1, 3, 5-6 and 8 with a blank line between them.
+  const editName = `Edit Subject ${stamp}`
+  const editLink = `Edit Link ${stamp}`
+  await ops.createNote(editName, `Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[${editLink}]].`)
+  const editId = await noteId(editName)
+  const read = async () => {
+    const n = await ops.getNote(editName)
+    return { n, body: noteBody(n), version: noteVersion(n) }
+  }
+  const rejects = async (p: Promise<unknown>, pattern: RegExp, msg: string) => {
+    const err = await p.then(() => null, (e: Error) => e)
+    assert(err && pattern.test(err.message), `${msg}: ${err?.message ?? 'did not reject'}`)
+  }
+
+  let cur = await read()
+  console.log('get_note(edit subject):', cur.body.replace(/\n/g, ' '))
+  assert(cur.body === `Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[${editLink}]].`, 'the body is plain markdown, no line markers')
+
+  // query_text_location: quote text, get whole-block line ranges and the version back.
+  const found1 = await ops.queryTextLocation(editName, 'two')
+  assert(found1.startsWith(`version: ${cur.version}\n\nlines 5-6 (1 match):\n- one\n- two`), `a match inside a list reports the whole list, got ${JSON.stringify(found1)}`)
+  const found2 = await ops.queryTextLocation(editName, 'Alpha.\n\n## Heading')
+  assert(/lines 1-1 \(1 match\):\nAlpha\.\n\nlines 3-3 \(1 match\):\n## Heading/.test(found2), 'a match across blocks reports each block')
+  const found3 = await ops.queryTextLocation(editName, 'o')
+  assert(/^version: \d+\n\nlines 5-6 \(2 matches\):\n- one\n- two$/.test(found3), `matches are counted per block, got ${JSON.stringify(found3)}`)
+  const found4 = await ops.queryTextLocation(editName, 'n')
+  assert(/lines 3-3 \(1 match\)[^]*lines 5-6 \(1 match\)[^]*lines 8-8 \(1 match\)/.test(found4), `every block with a match is listed in order, got ${JSON.stringify(found4)}`)
+  assert((await ops.queryTextLocation(editName, 'nowhere in the note')).startsWith('No match'), 'no match says so')
+  await rejects(ops.queryTextLocation(editName, ''), /query is empty/, 'an empty query is rejected')
+  await rejects(ops.queryTextLocation(`No Such Note ${stamp}`, 'x'), /No note named/, 'query_text_location on a missing note is an error')
+
+  // The ranges query_text_location returns go straight into edit_note.
+  const where = (await ops.queryTextLocation(editName, '## Heading')).match(/lines (\d+)-(\d+)/)!
+  await ops.editNote(editName, Number(where[1]), Number(where[2]), '## Renamed heading', cur.version)
+  const afterReplace = (await read()).body
+  assert(afterReplace.includes('## Renamed heading') && !afterReplace.includes('## Heading'), 'edit_note replaces a block')
+  assert(afterReplace.includes('- one\n- two') && afterReplace.includes(`[[${editLink}]]`), 'edit_note leaves the other blocks alone')
+
+  await rejects(ops.editNote(editName, 1, 1, 'Stale', cur.version), /changed since you read/, 'a stale version is rejected')
+  assert(!(await read()).body.includes('Stale'), 'a stale edit writes nothing')
+
+  cur = await read()
+  await rejects(ops.editNote(editName, 6, 6, 'x', cur.version), /line 6 is inside the block at lines 5-6.*start at 5/, 'a start inside a block is rejected')
+  await rejects(ops.editNote(editName, 5, 5, 'x', cur.version), /line 5 is inside the block at lines 5-6.*end at 6/, 'an end inside a block is rejected')
+  await rejects(ops.editNote(editName, 2, 2, 'x', cur.version), /contain no block/, 'a range of only blank lines is rejected')
+  assert((await read()).body === cur.body, 'a rejected range writes nothing')
+
+  await ops.editNote(editName, 1, 0, 'First.', cur.version)
+  cur = await read()
+  assert(cur.body.startsWith('First.\n\nAlpha.\n\n## Renamed heading'), 'end = start - 1 inserts before the line')
+
+  // Blank lines at either edge of a range are fine: lines 2-4 are blank, "Alpha.", blank.
+  await ops.editNote(editName, 2, 4, 'Alpha two.', cur.version)
+  cur = await read()
+  assert(cur.body.startsWith('First.\n\nAlpha two.\n\n## Renamed heading'), 'a range edged by blank lines replaces the block between them')
+
+  // Now: First. 1, Alpha two. 3, heading 5, list 7-8, Last 10.
+  await ops.editNote(editName, 10, 10, 'Last, rewritten.', cur.version)
+  assert((await linkTargets(editId)).length === 0, 'replacing the block that held a link drops the derived link')
+
+  cur = await read()
+  await ops.editNote(editName, 5, 8, '', cur.version)
+  cur = await read()
+  assert(cur.body === 'First.\n\nAlpha two.\n\nLast, rewritten.', `empty markdown deletes the range, got ${JSON.stringify(cur.body)}`)
+
+  await ops.editNote(editName, 6, 5, 'Appended.', cur.version)
+  cur = await read()
+  assert(cur.body === 'First.\n\nAlpha two.\n\nLast, rewritten.\n\nAppended.', 'start = last line + 1 appends')
+
+  await rejects(ops.editNote(editName, 99, 99, 'x', cur.version), /start 99 is outside/, 'start past the end is rejected')
+  await rejects(ops.editNote(editName, 1, 99, 'x', cur.version), /end 99 is outside/, 'end past the last line is rejected')
+  await rejects(ops.editNote(editName, 3, 1, 'x', cur.version), /end 1 is outside/, 'end before start - 1 is rejected')
+  const countBeforeEdit = await entityCount()
+  await rejects(ops.editNote(`No Such Note ${stamp}`, 1, 1, 'x', 0), /No note named/, 'edit_note does not create a missing note')
+  assert((await entityCount()) === countBeforeEdit, 'a rejected edit creates no entity')
+
+  await ops.editNote(editName, 1, 7, '', cur.version)
+  cur = await read()
+  assert(cur.body === '', `deleting every block leaves an empty body, got ${JSON.stringify(cur.body)}`)
+  await ops.editNote(editName, 1, 0, 'Fresh.', cur.version)
+  assert((await read()).body === 'Fresh.', 'an empty note takes an insert at line 1')
+  const freshDoc = JSON.parse((await richTextClient.getRichText(await ops.docRef('Note', editId))).richText!.doc) as { content: unknown[] }
+  assert(freshDoc.content.length === 1, 'inserting into an empty note leaves no stray empty paragraph')
+
+  // A leading --- block that isn't key: value lines is note content, not frontmatter.
+  await ops.createNote(`Rule ${stamp}`, '---\nplain text\n---')
+  assert(noteBody(await ops.getNote(`Rule ${stamp}`)).includes('plain text'), 'create_note keeps a leading --- block that is not frontmatter')
 
   // Semantic retrieval (M8): two thematically related notes with NO shared
   // keywords. A paraphrased query that overlaps neither should surface both via
