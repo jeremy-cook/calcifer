@@ -6,10 +6,11 @@
 //!
 //! [[Name]] and [[Name|label]] mention a Note; [[Structure/Name]] mentions
 //! another structure when Structure is exactly a registry type (e.g.
-//! [[Todo/Ship]]). Emphasis (`**bold**`, `*italic*`) and inline `code` become
-//! ProseMirror marks. `_` is deliberately not emphasis, so snake_case survives.
-//! `\X` is a literal X (for punctuation or a digit), and text that would read as syntax is written escaped,
-//! so markdown -> doc -> markdown gives back what went in.
+//! [[Todo/Ship]]). Emphasis (`**bold**`, `*italic*`), `~~strike~~`, inline
+//! `code` and `[text](href)` links become ProseMirror marks. `_` is deliberately
+//! not emphasis, so snake_case survives. `\X` is a literal X (for punctuation or
+//! a digit), and text that would read as syntax is written escaped, so markdown
+//! -> doc -> markdown gives back what went in.
 //!
 //! Lists nest two spaces a level; `- [ ] ` and `- [x] ` are task items. A line
 //! ending in `\` is a hard break, and a bare `>` separates a quote's paragraphs.
@@ -17,7 +18,8 @@
 //! A horizontal rule is `---` and an image `![alt](src "title")`, each on its
 //! own line. A node with no markdown form is written as one placeholder line,
 //! `<!-- calcifer:<type> -->`, so the agent can see it; reading markdown skips
-//! placeholders, and `inexpressible` tells edits which blocks to leave alone.
+//! placeholders. Other marks (underline, colour, ...) are written as their plain
+//! text. `inexpressible` tells edits which blocks hold either, to leave alone.
 //!
 //! Docs are `serde_json::Value`s: a stored doc can carry nodes and marks this
 //! converter doesn't know, and they must pass through an append untouched.
@@ -88,8 +90,6 @@ static HEADING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(#{1,6})\s+(.*)
 /// follows), or `N. `.
 static LIST_MARK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(?:[-*]\s+(?:\[([ xX])\](?:\s+|$))?|([0-9]+)\.\s+)").unwrap());
-/// Item text that would read as a task's checkbox.
-static CHECKBOX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\[[ xX]\](?:\s|$)").unwrap());
 static SPECIAL_BLOCK: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^(#{1,6}\s|```|>|[-*]\s+|[0-9]+\.\s+)").unwrap());
 static RULE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^---\s*$").unwrap());
@@ -132,19 +132,75 @@ fn unescape(text: &str) -> String {
     out
 }
 
-/// The byte offset of the first `pat` in `text` that no backslash escapes.
-fn find_unescaped(text: &str, pat: &str) -> Option<usize> {
+/// The byte offset of the first `delim` in `text` that no backslash escapes and
+/// no link holds, so `*[a **b**](u)*` closes at its last star.
+fn find_delimiter(text: &str, delim: &str) -> Option<usize> {
     let mut i = 0;
     while i < text.len() {
-        if text[i..].starts_with(pat) {
+        let rest = &text[i..];
+        if rest.starts_with(delim) {
             return Some(i);
         }
-        i += match escaped_char(&text[i..]) {
-            Some(c) => 1 + c.len_utf8(),
-            None => text[i..].chars().next().map_or(1, char::len_utf8),
+        i += match (escaped_char(rest), link_at(rest)) {
+            (Some(c), _) => 1 + c.len_utf8(),
+            (None, Some(link)) => link.len,
+            (None, None) => rest.chars().next().map_or(1, char::len_utf8),
         };
     }
     None
+}
+
+/// `[text](href)` at the start of some markdown.
+struct LinkSpan<'a> {
+    /// The link text's markdown.
+    text: &'a str,
+    href: String,
+    /// The whole link's length in bytes.
+    len: usize,
+}
+
+/// The link `text` opens with, if any. Its text ends at the first `](` that no
+/// backslash escapes and no code span or [[wikilink]] holds, and isn't empty.
+/// Its href reads `\X` as X, has no whitespace, `<` or `>`, and ends at the `)`
+/// that balances its parentheses.
+fn link_at(text: &str) -> Option<LinkSpan<'_>> {
+    let after = text.strip_prefix('[')?;
+    let mut end = 0;
+    while !after[end..].starts_with("](") {
+        let rest = &after[end..];
+        end += if let Some(c) = escaped_char(rest) {
+            1 + c.len_utf8()
+        } else if let Some(close) = rest.strip_prefix('`').and_then(|r| r.find('`')).filter(|&e| e > 0) {
+            close + 2
+        } else if let Some(close) = rest.strip_prefix("[[").and_then(|r| r.find("]]")) {
+            close + 4
+        } else {
+            rest.chars().next()?.len_utf8()
+        };
+    }
+    let dest = &after[end + 2..];
+    let (mut href, mut depth, mut at) = (String::new(), 0, 0);
+    loop {
+        let rest = &dest[at..];
+        if let Some(c) = escaped_char(rest) {
+            href.push(c);
+            at += 1 + c.len_utf8();
+            continue;
+        }
+        let c = rest.chars().next()?;
+        match c {
+            ')' if depth == 0 => break,
+            ')' => depth -= 1,
+            '(' => depth += 1,
+            '<' | '>' => return None,
+            c if c.is_whitespace() => return None,
+            _ => {}
+        }
+        href.push(c);
+        at += c.len_utf8();
+    }
+    let len = 1 + end + 2 + at + 1;
+    (end > 0 && !href.is_empty()).then(|| LinkSpan { text: &after[..end], href, len })
 }
 
 fn image_node(m: &regex::Captures) -> Value {
@@ -152,10 +208,79 @@ fn image_node(m: &regex::Captures) -> Value {
     json!({ "type": "image", "attrs": { "src": &m[2], "alt": attr(1), "title": attr(3) } })
 }
 
-fn mk_text(text: &str, marks: &[&str]) -> Value {
+/// A mark markdown can write. Variants sit in the order the editor's schema
+/// ranks them, which is the order it stores them on a text node.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Mark {
+    Link(String),
+    Bold,
+    Code,
+    Italic,
+    Strike,
+}
+
+/// The attributes the editor gives every link (`Link.configure` in
+/// TiptapEditor.tsx); a link with any other values has no markdown form.
+const LINK_TARGET: &str = "_blank";
+const LINK_REL: &str = "noopener noreferrer";
+
+impl Mark {
+    fn to_json(&self) -> Value {
+        match self {
+            Mark::Link(href) => json!({
+                "type": "link",
+                "attrs": { "href": href, "target": LINK_TARGET, "rel": LINK_REL, "class": null, "title": null },
+            }),
+            Mark::Bold => json!({ "type": "bold" }),
+            Mark::Code => json!({ "type": "code" }),
+            Mark::Italic => json!({ "type": "italic" }),
+            Mark::Strike => json!({ "type": "strike" }),
+        }
+    }
+
+    /// The stored mark as markdown writes it; `None` for one it can't write.
+    fn from_json(mark: &Value) -> Option<Mark> {
+        match mark["type"].as_str()? {
+            "link" => link_href(&mark["attrs"]).map(|href| Mark::Link(href.to_string())),
+            "bold" => Some(Mark::Bold),
+            "code" => Some(Mark::Code),
+            "italic" => Some(Mark::Italic),
+            "strike" => Some(Mark::Strike),
+            _ => None,
+        }
+    }
+}
+
+/// A link's href, when it can sit in `(...)` and its other attributes are the
+/// editor's defaults (a missing one reads as its default).
+fn link_href(attrs: &Value) -> Option<&str> {
+    let href = attrs["href"].as_str().filter(|h| !h.is_empty())?;
+    let mut depth = 0;
+    for c in href.chars() {
+        depth += match c {
+            '(' => 1,
+            ')' => -1,
+            '<' | '>' => return None,
+            c if c.is_whitespace() => return None,
+            _ => 0,
+        };
+        if depth < 0 {
+            return None;
+        }
+    }
+    let defaults = attrs.as_object().into_iter().flatten().all(|(key, value)| match key.as_str() {
+        "href" => true,
+        "target" => value == LINK_TARGET,
+        "rel" => value == LINK_REL,
+        _ => value.is_null(),
+    });
+    (depth == 0 && defaults).then_some(href)
+}
+
+fn mk_text(text: &str, marks: &[Mark]) -> Value {
     let mut node = json!({ "type": "text", "text": text });
     if !marks.is_empty() {
-        node["marks"] = marks.iter().map(|m| json!({ "type": m })).collect();
+        node["marks"] = marks.iter().map(Mark::to_json).collect();
     }
     node
 }
@@ -181,7 +306,8 @@ fn date_at(text: &str) -> Option<&str> {
 /// nodes; a `\n` is a hard break (see `join_lines`). mention and hashtag carry a
 /// temporary `_name` attr that `Parsed::resolve` turns into an id. `\X` is a
 /// literal X. Inline code is verbatim: no chips, escapes or emphasis inside it.
-fn parse_inline(text: &str, marks: &[&'static str]) -> Vec<Value> {
+/// A link's text is parsed like any other run, but holds no link of its own.
+fn parse_inline(text: &str, marks: &[Mark]) -> Vec<Value> {
     let mut nodes = Vec::new();
     let mut buf = String::new();
     let flush = |buf: &mut String, nodes: &mut Vec<Value>| {
@@ -190,7 +316,8 @@ fn parse_inline(text: &str, marks: &[&'static str]) -> Vec<Value> {
             buf.clear();
         }
     };
-    let in_code = marks.contains(&"code");
+    let in_code = marks.contains(&Mark::Code);
+    let in_link = marks.iter().any(|m| matches!(m, Mark::Link(_)));
 
     let mut i = 0;
     while i < text.len() {
@@ -228,6 +355,12 @@ fn parse_inline(text: &str, marks: &[&'static str]) -> Vec<Value> {
                 }
             }
         }
+        if let Some(link) = link_at(rest).filter(|_| !in_code && !in_link) {
+            flush(&mut buf, &mut nodes);
+            nodes.extend(parse_inline(link.text, &with_mark(marks, Mark::Link(link.href))));
+            i += link.len;
+            continue;
+        }
         if rest.starts_with('#') && at_boundary {
             if let Some(m) = TAG.captures(rest) {
                 flush(&mut buf, &mut nodes);
@@ -245,32 +378,36 @@ fn parse_inline(text: &str, marks: &[&'static str]) -> Vec<Value> {
             i += date.len();
             continue;
         }
-        // Inline code: verbatim until the next backtick.
+        // Inline code: verbatim until the next backtick. The editor's code mark
+        // excludes every other, so it stands alone even in a link or emphasis.
         if rest.starts_with('`') && !in_code {
             if let Some(end) = rest[1..].find('`').filter(|&e| e > 0) {
                 flush(&mut buf, &mut nodes);
-                let with_code: Vec<&str> = marks.iter().copied().chain(["code"]).collect();
-                nodes.push(mk_text(&rest[1..1 + end], &with_code));
+                nodes.push(mk_text(&rest[1..1 + end], &[Mark::Code]));
                 i += 1 + end + 1;
                 continue;
             }
         }
         // Emphasis, longest run first so a `*` of a `**` run isn't mistaken:
-        // ***both***, **bold**, *italic*.
-        let emphasis: [(&str, &[&'static str]); 3] =
-            [("***", &["bold", "italic"]), ("**", &["bold"]), ("*", &["italic"])];
+        // ***both***, **bold**, *italic*, ~~strike~~.
+        let emphasis: [(&str, &[Mark]); 4] = [
+            ("***", &[Mark::Bold, Mark::Italic]),
+            ("**", &[Mark::Bold]),
+            ("*", &[Mark::Italic]),
+            ("~~", &[Mark::Strike]),
+        ];
         let found = emphasis.iter().find_map(|&(delim, added)| {
             let after = rest.strip_prefix(delim)?;
             // A single star that's part of a `**` run isn't italic.
             if delim == "*" && after.starts_with('*') {
                 return None;
             }
-            let end = find_unescaped(after, delim).filter(|&e| e > 0)?;
+            let end = find_delimiter(after, delim).filter(|&e| e > 0)?;
             Some((delim, added, &after[..end]))
         });
         if let Some((delim, added, inner)) = found.filter(|_| !in_code) {
             flush(&mut buf, &mut nodes);
-            let inner_marks = added.iter().fold(marks.to_vec(), |ms, m| with_mark(&ms, m));
+            let inner_marks = added.iter().fold(marks.to_vec(), |ms, m| with_mark(&ms, m.clone()));
             nodes.extend(parse_inline(inner, &inner_marks));
             i += 2 * delim.len() + inner.len();
             continue;
@@ -283,12 +420,14 @@ fn parse_inline(text: &str, marks: &[&'static str]) -> Vec<Value> {
     nodes
 }
 
-fn with_mark(marks: &[&'static str], mark: &'static str) -> Vec<&'static str> {
-    if marks.contains(&mark) {
-        marks.to_vec()
-    } else {
-        marks.iter().copied().chain([mark]).collect()
+/// `marks` with `mark` added, kept in the editor's order.
+fn with_mark(marks: &[Mark], mark: Mark) -> Vec<Mark> {
+    let mut out = marks.to_vec();
+    if !out.contains(&mark) {
+        out.push(mark);
+        out.sort();
     }
+    out
 }
 
 /// A line ending in a `\` that isn't itself escaped: a hard break.
@@ -605,18 +744,20 @@ pub fn chip_ids(doc: &Value) -> Vec<String> {
     ids
 }
 
-/// Plain text written so it reads back as itself: `\`, `*` and `` ` `` are
-/// always escaped, as is the first `[` of `[[`, and so is a `#` or an ISO
-/// date at a word boundary, where it would become a chip. `prev` is the
-/// character written just before; `None` at the start of a run.
+/// Plain text written so it reads back as itself: `\`, `*`, `` ` `` and `[`
+/// are always escaped, as is a `]` before `(` (which would end a link's text)
+/// and a `~` before `~` or at the end (which could open or close `~~`). So is
+/// a `#` or an ISO date at a word boundary, where it would become a chip.
+/// `prev` is the character written just before; `None` at the start of a run.
 fn escape_text(text: &str, mut prev: Option<char>) -> String {
     let mut out = String::new();
     for (at, c) in text.char_indices() {
         let rest = &text[at..];
         let at_boundary = prev.is_none_or(char::is_whitespace);
         let escape = match c {
-            '\\' | '*' | '`' => true,
-            '[' => rest[1..].starts_with('['),
+            '\\' | '*' | '`' | '[' => true,
+            ']' => rest[1..].starts_with('('),
+            '~' => rest[1..].is_empty() || rest[1..].starts_with('~'),
             '#' => at_boundary,
             _ => at_boundary && date_at(rest).is_some(),
         };
@@ -629,21 +770,62 @@ fn escape_text(text: &str, mut prev: Option<char>) -> String {
     out
 }
 
-fn apply_marks(text: &str, marks: Option<&Vec<Value>>, prev: Option<char>) -> String {
-    let has = |t: &str| marks.is_some_and(|ms| ms.iter().any(|m| m["type"] == t));
-    if has("code") {
-        return format!("`{text}`"); // code is verbatim; no nested emphasis
+/// The marks of `node` that markdown writes. Code is verbatim, so it is written
+/// alone; `inexpressible` reports what that drops.
+fn writable_marks(node: &Value) -> Vec<Mark> {
+    let marks: Vec<Mark> = node["marks"].as_array().into_iter().flatten().filter_map(Mark::from_json).collect();
+    if marks.contains(&Mark::Code) {
+        vec![Mark::Code]
+    } else {
+        marks
     }
-    let (bold, italic) = (has("bold"), has("italic"));
+}
+
+/// `inner` inside the delimiters of each emphasis in `marks`.
+fn wrap_emphasis(mut inner: String, marks: &[Mark]) -> String {
+    for (mark, delim) in [(Mark::Strike, "~~"), (Mark::Bold, "**"), (Mark::Italic, "*")] {
+        if marks.contains(&mark) {
+            inner = format!("{delim}{inner}{delim}");
+        }
+    }
+    inner
+}
+
+/// Text with every mark in `marks` but a link.
+fn text_markdown(text: &str, marks: &[Mark], prev: Option<char>) -> String {
+    if marks.contains(&Mark::Code) {
+        return format!("`{text}`");
+    }
     // Emphasis is read as a run of its own, which starts at a word boundary.
-    let mut out = escape_text(text, if bold || italic { None } else { prev });
-    if bold {
-        out = format!("**{out}**");
+    wrap_emphasis(escape_text(text, if marks.is_empty() { prev } else { None }), marks)
+}
+
+/// The href of a text node's writable link.
+fn link_of(node: &Value) -> Option<String> {
+    if node["type"] != "text" {
+        return None;
     }
-    if italic {
-        out = format!("*{out}*");
+    writable_marks(node).into_iter().find_map(|m| match m {
+        Mark::Link(href) => Some(href),
+        _ => None,
+    })
+}
+
+/// Text nodes that share one link, as one `[...](href)`. Emphasis on all of
+/// them is written outside the brackets (`**[a](u)**`), the rest inside.
+fn link_markdown(run: &[Value], href: &str) -> String {
+    let marks: Vec<Vec<Mark>> = run
+        .iter()
+        .map(|n| writable_marks(n).into_iter().filter(|m| !matches!(m, Mark::Link(_))).collect())
+        .collect();
+    let shared: Vec<Mark> = marks[0].iter().filter(|m| marks.iter().all(|ms| ms.contains(m))).cloned().collect();
+    let mut text = String::new();
+    for (node, node_marks) in run.iter().zip(&marks) {
+        let own: Vec<Mark> = node_marks.iter().filter(|m| !shared.contains(m)).cloned().collect();
+        text += &text_markdown(node["text"].as_str().unwrap_or(""), &own, text.chars().next_back());
     }
-    out
+    // An href reads `\X` as X; nothing else in it is syntax.
+    wrap_emphasis(format!("[{text}]({})", href.replace('\\', "\\\\")), &shared)
 }
 
 /// [[Name]] for a Note, unless its name itself reads as [[Structure/Name]].
@@ -675,18 +857,27 @@ fn inline_markdown(content: &Value, targets: &HashMap<String, ChipTarget>) -> St
     let Some(nodes) = content.as_array() else {
         return String::new();
     };
-    let shown = nodes.len() - nodes.iter().rev().take_while(|n| n["type"] == "hardBreak").count();
+    let nodes = &nodes[..nodes.len() - nodes.iter().rev().take_while(|n| n["type"] == "hardBreak").count()];
     let mut out = String::new();
-    for n in &nodes[..shown] {
+    let mut i = 0;
+    while i < nodes.len() {
+        let n = &nodes[i];
+        if let Some(href) = link_of(n) {
+            let run = nodes[i..].iter().take_while(|m| link_of(m).as_ref() == Some(&href)).count();
+            out += &link_markdown(&nodes[i..i + run], &href);
+            i += run;
+            continue;
+        }
         let prev = out.chars().next_back();
         let md = match n["type"].as_str() {
-            Some("text") => apply_marks(n["text"].as_str().unwrap_or(""), n["marks"].as_array(), prev),
+            Some("text") => text_markdown(n["text"].as_str().unwrap_or(""), &writable_marks(n), prev),
             Some("mention" | "hashtag") => chip_markdown(n, targets, prev),
             Some("dateChip") => n["attrs"]["date"].as_str().unwrap_or("").to_string(),
             Some("hardBreak") => "\\\n".to_string(),
             _ => inline_markdown(&n["content"], targets),
         };
         out += &md;
+        i += 1;
     }
     out
 }
@@ -714,12 +905,9 @@ fn child_markdown(child: &Value, targets: &HashMap<String, ChipTarget>) -> Strin
 /// continuation lines and nested lists).
 fn item_markdown(item: &Value, marker: &str, targets: &HashMap<String, ChipTarget>) -> String {
     let mut lines: Vec<String> = Vec::new();
-    for (n, child) in item["content"].as_array().into_iter().flatten().enumerate() {
-        let mut md = child_markdown(child, targets);
-        if n == 0 && CHECKBOX.is_match(&md) {
-            md.insert(0, '\\');
-        }
-        lines.extend(md.split('\n').map(String::from));
+    // Item text can't read as a task's `[ ]`: escape_text escapes every `[`.
+    for child in item["content"].as_array().into_iter().flatten() {
+        lines.extend(child_markdown(child, targets).split('\n').map(String::from));
     }
     let mut out = format!("{marker}{}", lines.first().map_or("", String::as_str));
     for line in lines.iter().skip(1) {
@@ -806,10 +994,61 @@ fn is_list(n: &Value) -> bool {
     matches!(n["type"].as_str(), Some("bulletList" | "orderedList" | "taskList"))
 }
 
-/// The type of the first node in `block` (itself included) whose markdown
-/// can't carry it, so replacing the block from markdown would lose something:
-/// a node this converter doesn't know, or a known one in a shape markdown
-/// doesn't have (a list in a quote, two paragraphs in a list item, ...).
+/// `noun` after "a" or "an".
+fn with_article(noun: &str) -> String {
+    let article = if noun.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+    format!("{article} {noun}")
+}
+
+/// Whether markdown carries attribute `key` of a `node_type` node. Any attribute
+/// not listed here must hold its default, which for every such attribute the
+/// editor defines (`textAlign`, `orderedList.type`, `image.height`) is null.
+fn attr_fits(node_type: &str, key: &str, value: &Value) -> bool {
+    match (node_type, key) {
+        ("heading", "level") => value.as_u64().is_some_and(|l| (1..=6).contains(&l)),
+        ("orderedList", "start") => value.is_u64(),
+        ("taskItem", "checked") => value.is_boolean(),
+        ("codeBlock", "language") => {
+            value.is_null() || value.as_str().is_some_and(|l| !l.is_empty() && !l.contains(char::is_whitespace) && !l.contains('`'))
+        }
+        ("dateChip", "date") => value.as_str().is_some_and(|d| date_at(d) == Some(d)),
+        // A chip is written from its target, whatever its stored label says.
+        ("mention" | "hashtag", "id" | "label" | "structureType" | "char" | "mentionSuggestionChar") => true,
+        // Checked by image_is_expressible.
+        ("image", "src" | "alt" | "title" | "caption" | "width" | "alignment") => true,
+        _ => value.is_null(),
+    }
+}
+
+/// What markdown would drop of `node`'s own marks: a mark it doesn't write,
+/// a link it can't, or code it can't (code is verbatim and stands alone).
+fn inexpressible_marks(node: &Value) -> Option<String> {
+    let marks = node["marks"].as_array().filter(|ms| !ms.is_empty())?;
+    let node_type = node["type"].as_str().unwrap_or("node");
+    if node_type != "text" {
+        return Some(format!("formatting on {}", with_article(node_type)));
+    }
+    for mark in marks {
+        let mark_type = mark["type"].as_str().unwrap_or("unknown");
+        if Mark::from_json(mark).is_none() {
+            return Some(if mark_type == "link" { "a link".into() } else { format!("{mark_type} formatting") });
+        }
+    }
+    let code = marks.iter().any(|m| m["type"] == "code");
+    if code && marks.len() > 1 {
+        return Some("code combined with other formatting".into());
+    }
+    if code && node["text"].as_str().is_some_and(|t| t.contains('`')) {
+        return Some("inline code containing a backtick".into());
+    }
+    None
+}
+
+/// What replacing `block` from its markdown would lose, phrased to follow
+/// "lines 3-4 hold": the first node in it (itself included) that this converter
+/// doesn't know, or that sits in a shape markdown doesn't have (a list in a
+/// quote, two paragraphs in a list item, ...), or that carries an attribute or
+/// mark markdown can't write.
 pub fn inexpressible(block: &Value) -> Option<String> {
     let node_type = block["type"].as_str().unwrap_or("node");
     let children = block["content"].as_array().map(Vec::as_slice).unwrap_or_default();
@@ -827,9 +1066,13 @@ pub fn inexpressible(block: &Value) -> Option<String> {
         _ => KNOWN_NODES.contains(&node_type),
     };
     if !fits {
-        return Some(node_type.to_string());
+        return Some(with_article(node_type));
     }
-    children.iter().find_map(inexpressible)
+    let mut attrs = block["attrs"].as_object().into_iter().flatten();
+    if let Some((key, _)) = attrs.find(|(key, value)| !attr_fits(node_type, key, value)) {
+        return Some(format!("{}'s {key}", with_article(node_type)));
+    }
+    inexpressible_marks(block).or_else(|| children.iter().find_map(inexpressible))
 }
 
 /// The nodes this converter writes and reads back.
@@ -949,7 +1192,7 @@ mod tests {
             "Above.\n\n---\n\nBelow.",
             "![a diagram](https://example.com/d.png)\n\n![](/local.png \"The \\\"title\\\"\")\n\n![a \\] bracket](x.png)",
             // Plain text that would read as syntax.
-            "Plain \\*x\\*, \\#word, \\[[x]], \\2026-06-13, \\`tick\\` and C:\\\\dir.",
+            "Plain \\*x\\*, \\#word, \\[\\[x]], \\2026-06-13, \\`tick\\` and C:\\\\dir.",
             "\\- not a list\\\n\\1. nor this\\\n\\> nor a quote\n\n- \\[ ] not a task",
             "***both*** and **bold** then *it*",
             // Nested lists, two spaces a level.
@@ -963,6 +1206,13 @@ mod tests {
             "- item\\\n  continued\n  - nested",
             // Quotes with several paragraphs.
             "> one\n>\n> two [[Link]]\\\n> broken",
+            // Links and strike.
+            "[a link](https://example.com)",
+            "see [**bold** text](u) here",
+            "**[a](u)**",
+            "*[a **b**](https://x.org/w/F_(y)?q=*~\\\\)* and ~~[e](u)~~",
+            "~~gone~~",
+            "Plain \\[a], b] \\[x\\](x) \\~~ and a\\~",
         ];
         for md in cases {
             assert_eq!(to_md(&to_tt(md)), md, "round-trip of {md:?}");
@@ -977,6 +1227,51 @@ mod tests {
             { "type": "hardBreak" }, { "type": "text", "text": "---" },
         ] }] });
         assert_eq!(to_tt(&to_md(&lines)), lines, "{}", to_md(&lines));
+    }
+
+    fn link(href: &str) -> Value {
+        Mark::Link(href.into()).to_json()
+    }
+
+    fn text(text: &str, marks: Value) -> Value {
+        json!({ "type": "text", "text": text, "marks": marks })
+    }
+
+    fn paragraph_doc(content: Value) -> Value {
+        json!({ "type": "doc", "content": [{ "type": "paragraph", "content": content }] })
+    }
+
+    #[test]
+    fn links_and_strike_round_trip_from_the_doc() {
+        // One link over three text nodes, the marks in the editor's order.
+        let doc = paragraph_doc(json!([
+            { "type": "text", "text": "see " },
+            text("a ", json!([link("https://example.com")])),
+            text("bold", json!([link("https://example.com"), { "type": "bold" }, { "type": "strike" }])),
+            text(" word", json!([link("https://example.com"), { "type": "italic" }])),
+            { "type": "text", "text": "." },
+        ]));
+        assert_eq!(to_md(&doc), "see [a **~~bold~~*** word*](https://example.com).");
+        assert_eq!(to_tt(&to_md(&doc)), doc);
+
+        let plain = paragraph_doc(json!([{ "type": "text", "text": "see [x](y) and ~~z~~" }]));
+        assert_eq!(to_md(&plain), "see \\[x\\](y) and \\~~z\\~\\~");
+        assert_eq!(to_tt(&to_md(&plain)), plain);
+    }
+
+    #[test]
+    fn links_parse_to_the_editors_link_mark() {
+        let marks = |md: &str| collect(&to_tt(md), |n| n.get("marks").map(Value::to_string));
+        assert_eq!(marks("[a](u)"), [json!([link("u")]).to_string()]);
+        assert_eq!(marks("**[a](u)**"), [json!([link("u"), { "type": "bold" }]).to_string()]);
+        // The editor's code mark excludes every other.
+        assert_eq!(marks("**[`a`](u)**"), [json!([{ "type": "code" }]).to_string()]);
+        // Not links: an empty text or href, a space in the href, an unbalanced paren.
+        for md in ["[](u)", "[a]()", "[a](b c)", "[a](b(c)", "[a] (u)"] {
+            assert_eq!(marks(md), Vec::<String>::new(), "{md}");
+        }
+        // The first `](` ends a link's text, which holds no link of its own.
+        assert_eq!(to_md(&to_tt("[a [b](v)](u)")), "[a \\[b](v)\\](u)");
     }
 
     #[test]
@@ -1080,7 +1375,7 @@ mod tests {
     #[test]
     fn unknown_nodes_are_placeholders_and_unknown_marks_are_left_alone() {
         let doc = json!({ "type": "doc", "content": [
-            { "type": "paragraph", "content": [{ "type": "text", "text": "x", "marks": [{ "type": "link", "attrs": { "href": "u" } }] }] },
+            { "type": "paragraph", "content": [{ "type": "text", "text": "x", "marks": [{ "type": "underline" }] }] },
             { "type": "table", "content": [] },
             { "type": "image", "attrs": { "src": "data:image/png;base64,AAAA" } },
         ]});
@@ -1093,15 +1388,57 @@ mod tests {
     fn inexpressible_names_what_markdown_would_lose() {
         let image = |attrs: Value| json!({ "type": "image", "attrs": attrs });
         assert_eq!(inexpressible(&image(json!({ "src": "a.png", "alt": "a", "alignment": "left" }))), None);
-        assert_eq!(inexpressible(&image(json!({ "src": "a.png", "width": "50%" }))).as_deref(), Some("image"));
-        assert_eq!(inexpressible(&image(json!({ "src": "data:image/png;base64,AAAA" }))).as_deref(), Some("image"));
-        assert_eq!(inexpressible(&json!({ "type": "table" })).as_deref(), Some("table"));
+        assert_eq!(inexpressible(&image(json!({ "src": "a.png", "width": "50%" }))).as_deref(), Some("an image"));
+        assert_eq!(inexpressible(&image(json!({ "src": "data:image/png;base64,AAAA" }))).as_deref(), Some("an image"));
+        assert_eq!(inexpressible(&image(json!({ "src": "a.png", "height": 40 }))).as_deref(), Some("an image's height"));
+        assert_eq!(inexpressible(&json!({ "type": "table" })).as_deref(), Some("a table"));
         assert_eq!(inexpressible(&to_tt("Plain [[Link]] #tag 2026-06-13.")["content"][0]), None);
         assert_eq!(inexpressible(&to_tt("- a\n  - [x] b\n- c\\\n  d")["content"][0]), None);
         let quoted_list = json!({ "type": "blockquote", "content": [{ "type": "bulletList", "content": [] }] });
-        assert_eq!(inexpressible(&quoted_list).as_deref(), Some("blockquote"));
+        assert_eq!(inexpressible(&quoted_list).as_deref(), Some("a blockquote"));
         let para = json!({ "type": "paragraph", "content": [] });
         let two_paragraphs = json!({ "type": "bulletList", "content": [{ "type": "listItem", "content": [para, para] }] });
-        assert_eq!(inexpressible(&two_paragraphs).as_deref(), Some("listItem"));
+        assert_eq!(inexpressible(&two_paragraphs).as_deref(), Some("a listItem"));
+    }
+
+    #[test]
+    fn inexpressible_names_formatting_markdown_would_lose() {
+        let marked = |marks: Value| paragraph_doc(json!([text("x", marks)]))["content"][0].clone();
+        let mut odd_link = link("u");
+        odd_link["attrs"]["target"] = json!("_self");
+        let cases = [
+            (marked(json!([{ "type": "underline" }])), "underline formatting"),
+            (marked(json!([{ "type": "highlight", "attrs": { "color": "#ff0" } }])), "highlight formatting"),
+            (marked(json!([{ "type": "textStyle", "attrs": { "color": "red", "fontFamily": null } }])), "textStyle formatting"),
+            (marked(json!([{ "type": "subscript" }])), "subscript formatting"),
+            (marked(json!([{ "type": "bold" }, { "type": "code" }])), "code combined with other formatting"),
+            (marked(json!([odd_link])), "a link"),
+            (marked(json!([link("a b")])), "a link"),
+            (json!({ "type": "paragraph", "content": [text("a`b", json!([{ "type": "code" }]))] }), "inline code containing a backtick"),
+            (
+                json!({ "type": "paragraph", "content": [{
+                    "type": "mention", "attrs": { "id": "Note:A", "label": "A" }, "marks": [{ "type": "bold" }],
+                }] }),
+                "formatting on a mention",
+            ),
+            (json!({ "type": "heading", "attrs": { "level": 2, "textAlign": "center" } }), "a heading's textAlign"),
+            (json!({ "type": "orderedList", "attrs": { "start": 1, "type": "a" } }), "an orderedList's type"),
+        ];
+        for (block, want) in cases {
+            assert_eq!(inexpressible(&block).as_deref(), Some(want), "{block}");
+        }
+
+        let editor_link = json!({ "type": "link", "attrs": {
+            "href": "https://example.com", "target": "_blank", "rel": "noopener noreferrer", "class": null, "title": null,
+        } });
+        for block in [
+            marked(json!([editor_link])),
+            marked(json!([{ "type": "link", "attrs": { "href": "u" } }, { "type": "bold" }])),
+            marked(json!([{ "type": "strike" }])),
+            json!({ "type": "heading", "attrs": { "level": 2, "textAlign": null }, "content": [] }),
+            json!({ "type": "paragraph", "attrs": { "textAlign": null }, "content": [{ "type": "dateChip", "attrs": { "date": "2026-09-30" } }] }),
+        ] {
+            assert_eq!(inexpressible(&block), None, "{block}");
+        }
     }
 }

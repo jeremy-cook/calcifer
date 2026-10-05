@@ -173,7 +173,16 @@ writes nothing, so an agent never invents a note (or links a typo) without being
 | `#name` after whitespace or at the start of a line (letters, digits, `_`, `-`) | `hashtag`, `structureType: "Tag"`, `char: "#"` |
 | `yyyy-MM-dd` after whitespace or at the start of a line, with no digit after it, naming a real day | `dateChip` |
 | headings, `-`/`*` and `1.` lists, `>` quotes, fenced code | `heading` (`level`), `bulletList`/`orderedList`/`listItem`, `blockquote`, `codeBlock` (`language`) |
-| `**…**`, `*…*`, `` `…` `` | `bold`, `italic`, `code` marks |
+| `**…**`, `*…*`, `~~…~~`, `` `…` `` | `bold`, `italic`, `strike`, `code` marks (`code` alone: the editor's code mark excludes every other) |
+| `[text](href)`; the text may hold other marks, and emphasis may wrap the link (`**[a](u)**`) | `link` mark with the editor's defaults: `target: "_blank"`, `rel: "noopener noreferrer"`, `class` and `title` null |
+
+`edit_note` replaces whole blocks, so it refuses a range holding anything this table
+can't carry: a placeholder node, a mark other than those above (underline, highlight,
+`textStyle` colour or font, sub/superscript), `code` with another mark or containing a
+backtick, a mark on a chip, a link whose href has whitespace, `<`, `>` or unbalanced
+parentheses or whose other attributes differ from the defaults, or a node attribute
+outside its allow-list with a non-null value (`textAlign` other than null, say).
+`get_note` shows such marks as plain text.
 
 A mention's `structureType` is the structure it resolved in, and its `label` is the
 `label` after `|` if given, else the name without any `Structure/` prefix.
@@ -185,4 +194,5 @@ a hashtag as `#Name`. A Note whose name itself starts with a registry prefix (a 
 named `Todo/Ship`) is written `[[Note/Todo/Ship]]`, so it reads back as the same Note.
 A chip whose target no longer exists is written as its stored `label` in plain text, so
 writing the markdown back creates nothing. A date chip is written as its `date`. Marks
-round-trip as `` `…` ``, `**…**` and `*…*`.
+round-trip as `` `…` ``, `**…**`, `*…*`, `~~…~~` and `[…](href)`; adjacent text nodes
+sharing a link are written as one link.

@@ -267,7 +267,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "edit_note",
-            format!("Replace a range of lines in an existing note's body. Get the lines and version from query_text_location, or read the note with get_note: lines are counted in the body only, from 1 at the first line after the closing --- of the frontmatter, and version is the frontmatter's version. A paragraph, a heading, a whole list and a whole code block are each one block, and blocks are separated by a blank line; start and end must not fall inside a block. Lines start..end (inclusive) are replaced by the markdown; empty markdown deletes them; end = start - 1 inserts before line start (start = last line + 1 appends). A <!-- calcifer:<type> --> line stands for content markdown can't express (a table, say): a range that covers it is refused, so edit around it. Fails if the note changed since you read it: read again and redo the edit. In the markdown, {LINK_SYNTAX}"),
+            format!("Replace a range of lines in an existing note's body. Get the lines and version from query_text_location, or read the note with get_note: lines are counted in the body only, from 1 at the first line after the closing --- of the frontmatter, and version is the frontmatter's version. A paragraph, a heading, a whole list and a whole code block are each one block, and blocks are separated by a blank line; start and end must not fall inside a block. Lines start..end (inclusive) are replaced by the markdown; empty markdown deletes them; end = start - 1 inserts before line start (start = last line + 1 appends). A <!-- calcifer:<type> --> line stands for content markdown can't express (a table, say), and formatting markdown can't express (underline, colour, alignment, ...) is shown as plain text: a range that covers either is refused, so edit around it. Fails if the note changed since you read it: read again and redo the edit. In the markdown, {LINK_SYNTAX}"),
             json!({
                 "name": string,
                 "start": { "type": "integer", "exclusiveMinimum": 0 },
@@ -279,7 +279,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "create_note",
-            format!("Create a new note. Fails if a note with that name already exists; change an existing note with edit_note or append_to_note. In the markdown body, {LINK_SYNTAX} Search first to avoid duplicates."),
+            format!("Create a new note. Fails if a note with that name already exists; change an existing note with edit_note or append_to_note. In the markdown body, {LINK_SYNTAX} Search first to avoid duplicates. Copying get_note output into a new note drops its <!-- calcifer:<type> --> placeholder blocks and any formatting markdown can't express."),
             json!({ "name": string, "markdown": string }),
             &["name", "markdown"],
         ),
@@ -709,6 +709,45 @@ mod tests {
         f.k.edit_note("Tabular", 5, 5, "Outro, rewritten.", version(&note)).await.unwrap();
         let (after, _) = f.k.get_doc(&r).await.unwrap();
         assert_eq!(after["content"][1], table);
+    }
+
+    #[tokio::test]
+    async fn edit_note_refuses_formatting_markdown_cannot_express() {
+        let f = fixture().await;
+        let link = json!({ "type": "link", "attrs": {
+            "href": "https://example.com", "target": "_blank", "rel": "noopener noreferrer", "class": null, "title": null,
+        } });
+        let r = note_with_blocks(&f, "Styled", json!([
+            { "type": "paragraph", "attrs": { "textAlign": null }, "content": [
+                { "type": "text", "text": "An " },
+                { "type": "text", "text": "underlined", "marks": [{ "type": "underline" }] },
+                { "type": "text", "text": " word." },
+            ] },
+            { "type": "heading", "attrs": { "textAlign": "center", "level": 2 }, "content": [{ "type": "text", "text": "Centred" }] },
+            { "type": "paragraph", "attrs": { "textAlign": null }, "content": [
+                { "type": "text", "text": "See " },
+                { "type": "text", "text": "the site", "marks": [link] },
+                { "type": "text", "text": "." },
+            ] },
+        ])).await;
+        let note = f.k.get_note("Styled").await.unwrap();
+        assert_eq!(body(&note), "An underlined word.\n\n## Centred\n\nSee [the site](https://example.com).");
+        let (before, _) = f.k.get_doc(&r).await.unwrap();
+
+        let underline = err(f.k.edit_note("Styled", 1, 1, "Rewritten.", version(&note)).await);
+        assert!(underline.contains("lines 1-1 hold underline formatting that markdown can't express"), "{underline}");
+        let centred = err(f.k.edit_note("Styled", 3, 3, "## Rewritten", version(&note)).await);
+        assert!(centred.contains("lines 3-3 hold a heading's textAlign that markdown can't express"), "{centred}");
+        assert_eq!(f.k.get_doc(&r).await.unwrap().0, before, "a refused edit writes nothing");
+
+        f.k.edit_note("Styled", 5, 5, "Now see [the docs](https://docs.rs/x_(y)).", version(&note)).await.unwrap();
+        let (after, _) = f.k.get_doc(&r).await.unwrap();
+        let linked = &after["content"][2]["content"][1];
+        assert_eq!(linked["text"], "the docs");
+        assert_eq!(linked["marks"][0]["type"], "link");
+        assert_eq!(linked["marks"][0]["attrs"]["href"], "https://docs.rs/x_(y)");
+        assert_eq!(after["content"][0], before["content"][0], "the blocks before it are untouched");
+        assert_eq!(after["content"][1], before["content"][1]);
     }
 
     #[tokio::test]

@@ -142,13 +142,13 @@ fn is_empty_paragraph(block: &Value) -> bool {
 }
 
 /// Blocks `from..to` are about to be replaced from markdown; refuse if one holds
-/// a node markdown can't express, which the replacement would silently drop.
+/// a node or formatting markdown can't express, which the replacement would
+/// silently drop.
 fn refuse_inexpressible(spans: &[BlockSpan], blocks: &[Value], from: usize, to: usize) -> Result<(), ToolError> {
     for span in spans.iter().filter(|s| (from..to).contains(&s.index)) {
-        if let Some(node_type) = markdown::inexpressible(&blocks[span.index]) {
-            let article = if node_type.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+        if let Some(what) = markdown::inexpressible(&blocks[span.index]) {
             return fail(format!(
-                "lines {}-{} hold {article} {node_type} that markdown can't express; leave them out of the range.",
+                "lines {}-{} hold {what} that markdown can't express; leave them out of the range.",
                 span.first, span.last
             ));
         }
