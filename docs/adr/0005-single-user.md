@@ -26,10 +26,19 @@ Assume exactly one user. Explicitly out of scope:
 - Server-authoritative sync, OT, or CRDTs for concurrent editing
 - Presence and sharing
 
-The server binds `0.0.0.0:8080` with permissive CORS and no auth layer, and SQLite
+The server binds `127.0.0.1` by default (UI and API on `:8080`, MCP on `:8081`; set
+`CALCIFER_ADDR` to bind the UI and API elsewhere, `CALCIFER_MCP_ADDR` for MCP) with no auth layer (and no CORS: the UI is served
+from the same origin), and SQLite
 runs as a local file (`server/calcifer.db`). Live update across browser tabs is handled
 by the `Watch` server-streaming RPC — a fan-out broadcast, not a sync protocol, because
 there is only ever one writer's intent to reconcile.
+
+Loopback alone doesn't keep out a web page open in a browser on the same machine, so
+`server/src/local_only.rs` checks every request: both listeners answer 403 unless `Host`
+names this machine (`localhost`, a loopback IP, or the listener's own address), which
+defeats DNS rebinding; and MCP also answers 403 to a non-loopback `Origin` and 415 to a
+POST that isn't `application/json`, which blocks cross-site requests that skip the CORS
+preflight (a `no-cors` `text/plain` POST could otherwise run a tool).
 
 ## Consequences
 
@@ -38,8 +47,8 @@ there is only ever one writer's intent to reconcile.
   handful of connections, no network database, no hosted infrastructure.
 - Last-write-wins is an acceptable conflict policy; two tabs editing one document is a
   tolerable edge case rather than a correctness problem.
-- **The server is unauthenticated and binds all interfaces.** On a shared or untrusted
-  network anyone routable can read and write the entire knowledge base. This is
+- **The server is unauthenticated.** It binds loopback by default; if bound to another interface
+  on a shared or untrusted network, anyone routable can read and write the entire knowledge base. This is
   acceptable only under the local-machine assumption, and is the first thing that must
   change if the app is ever exposed.
 - Multi-user later is not an increment. It would require revisiting storage, identity,

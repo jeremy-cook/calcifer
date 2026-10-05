@@ -1,6 +1,6 @@
 //! The structure registry: the one place structure data is authored (ADR 7).
-//! `StructureService.ListStructures` serves it to the browser and the MCP server, and the
-//! helpers below derive what the write paths need from the same table.
+//! `StructureService.ListStructures` serves it to the browser, the MCP tools read
+//! it directly, and the helpers below derive what the write paths need from it.
 //! Tag name-uniqueness is enforced by the `one_tag_per_name` DB index, not here.
 
 use crate::proto;

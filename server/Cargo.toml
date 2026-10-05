@@ -19,7 +19,13 @@ dotenvy = "0.15"
 serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 tonic-web = "0.12"
-tower-http = { version = "0.6", features = ["cors"] }
+tower-http = { version = "0.6", features = ["fs"] }
+# The one HTTP surface: gRPC-Web (tonic routes), the built UI, and /mcp. Matches
+# the axum tonic 0.12 is built on.
+axum = "0.7"
+tower = "0.5"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
 # Semantic retrieval (M8): sqlite-vec for vec0 KNN, fastembed for in-process
 # local ONNX embeddings (downloads all-MiniLM-L6-v2 on first use, 384-dim).
 # libsqlite3-sys is pinned to sqlx-sqlite 0.9's version so we can register the

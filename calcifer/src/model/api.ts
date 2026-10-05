@@ -3,7 +3,8 @@ import { createGrpcWebTransport } from '@connectrpc/connect-web'
 import { QueryClient } from '@tanstack/react-query'
 import { EntityService, RichTextService, StructureService } from '@calcifer/proto/calcifer/v1/services_pb'
 
-// gRPC-Web over the Vite /api proxy → tonic-web on :8080.
+// gRPC-Web under /api: the backend serves it (and this app) in production, and
+// the Vite dev server proxies it there.
 const transport = createGrpcWebTransport({ baseUrl: '/api' })
 
 export const entityClient = createClient(EntityService, transport)

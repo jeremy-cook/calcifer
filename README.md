@@ -7,10 +7,20 @@ as a first-class writer, not a bolted-on sidebar.
 
 - `calcifer/` — React + Vite frontend (TipTap editor, TanStack Query + Router)
 - `server/` — Rust backend (tonic gRPC + SQLite via sqlx) — the source of truth
-- `mcp-server/` — standalone Node MCP server exposing knowledge tools to an AI agent
+- `server/src/mcp/` — the MCP server (knowledge tools for an AI agent), hosted by the same backend process
 - `proto/` — protobuf schema, generated to TS (`calcifer/gen/ts`) and to Rust (tonic-build)
+- `scripts/calcifer` — boots the service
 
-The frontend talks to the server over **gRPC-Web** (Vite proxies `/api` → `:8080`).
+The backend is the one service: a single process with two listeners, both on localhost by
+default.
+
+| address | path | what |
+|---|---|---|
+| `CALCIFER_ADDR` (`127.0.0.1:8080`) | `/` | the built UI (`calcifer/dist`, with `index.html` fallback for client-side routes) |
+| | `/api/*` | gRPC-Web, which the UI speaks |
+| `CALCIFER_MCP_ADDR` (`127.0.0.1:8081`) | `/mcp` | MCP over streamable HTTP, which agents speak; its tools call the services in-process |
+
+In development Vite serves the UI on `:5173` and proxies `/api` to the backend.
 Links and date references are derived **server-side** from rich-text content inside
 `RichTextService.PutRichText` — no client authors links directly, so every writer (browser or
 MCP agent) produces an identical, honest graph.
@@ -22,34 +32,43 @@ the server reads from rich-text documents:
 [`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md).
 What's being built next: [`ROADMAP.md`](ROADMAP.md).
 
-## Dev loop
-
-Two terminals:
+## Running it
 
 ```bash
-# Terminal 1 — backend (auto-creates server/calcifer.db on first run)
-cd server
-cargo run            # or: cargo watch -x run
-
-# Terminal 2 — frontend
-cd calcifer
-pnpm dev             # http://localhost:5173
+scripts/calcifer          # build what is stale (UI, server), then serve the UI on http://localhost:8080
+scripts/calcifer build    # build only
+scripts/calcifer dev      # debug backend + Vite hot reload (UI on http://localhost:5173)
 ```
 
-Optional — the MCP knowledge tools (backend must be up):
+The first run creates `server/calcifer.db` (a fresh checkout needs `sqlx-cli` once, because
+`sqlx::query!` checks SQL against a live database at compile time). Settings, all optional:
+`CALCIFER_ADDR` (default `127.0.0.1:8080`), `CALCIFER_MCP_ADDR` (default `127.0.0.1:8081`), `CALCIFER_UI_DIR` (default `../calcifer/dist`, relative
+to `server/`), `DATABASE_URL` (default `sqlite://./calcifer.db`). Without a UI build the
+service still runs, API and MCP only.
+
+Connect Claude Code to the MCP endpoint (the service must be running):
 
 ```bash
-cd mcp-server && pnpm test:tools   # smoke test
-cd mcp-server && pnpm start        # stdio MCP server (registered with Claude Code as `calcifer`)
+claude mcp add --transport http calcifer http://localhost:8081/mcp
+claude mcp get calcifer          # → Status: ✓ Connected
 ```
 
-After editing anything under `proto/`, lint it and regenerate the bindings — **both**
-TS consumers, they currently have separate generated stubs:
+There's no auth (ADR 5), so both ports answer only this machine
+(`server/src/local_only.rs`): a request whose `Host` isn't `localhost`, a loopback address
+or the listener's own address gets 403, which defeats DNS rebinding. `/mcp` also refuses a
+browser request from another site: an `Origin` that isn't loopback gets 403, and a POST
+that isn't `application/json` gets 415. Claude Code sends no `Origin`, and browser tools on
+`localhost` such as the MCP Inspector pass.
+
+Tools: `search_notes`, `get_note`, `query_text_location`, `edit_note`, `create_note`,
+`append_to_note`, `link_notes`, `get_backlinks`, `create_daily_note`, `append_to_daily_note`,
+`list_structures`. Their tests run with the rest of the server's: `cd server && cargo test`.
+
+After editing anything under `proto/`, lint it and regenerate the TS bindings:
 
 ```bash
 cd calcifer && pnpm proto:lint   # buf lint, default rules; must exit 0 (nothing in CI runs it)
 cd calcifer && pnpm proto:gen
-cd mcp-server && pnpm proto:gen
 ```
 
 `buf lint` enforces buf's RPC naming: a verb-and-noun RPC name (`GetEntity`), a
@@ -71,27 +90,17 @@ Rust regen is automatic on `cargo build` (tonic-build).
   `ts_from_millis`.
 - **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen both TS consumers
   (above). Note the `ref` field generates as `r#ref` in Rust.
-- **mcp-server (Node/TS):** ops in `src/tools.ts`, MCP wrapper in `src/server.ts`;
-  scripts run via `tsx`. Has its OWN proto stubs in `src/gen/` (gitignored) to avoid
-  `@bufbuild/protobuf` version skew. Verify with a `tsx` script (see `src/*-test.ts`).
+- **MCP (Rust):** tool ops in `server/src/mcp/tools.rs`, the JSON-RPC transport and tool
+  schemas in `server/src/mcp/mod.rs`, markdown <-> TipTap in `server/src/mcp/markdown.rs`.
 - **FE (React):** hooks in `calcifer/src/model/{api,store,richtext,backlinks}.ts`;
   connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules
   live in [`CLAUDE.md`](CLAUDE.md).
 - **Commits:** one per unit, clear message, ending with the `Co-Authored-By` trailer.
 
-### Known issue: grpcurl hangs
+### No native gRPC
 
-`grpcurl` connects and resolves the method descriptor, then never receives a response:
-
-```bash
-grpcurl -plaintext -import-path proto -proto calcifer/v1/services.proto \
-  -d '{}' localhost:8080 calcifer.v1.EntityService/ListEntities   # hangs
-```
-
-The browser gRPC-Web path works fine, so the likely cause is
-`tonic_web::GrpcWebLayer` being applied to *all* traffic in `server/src/main.rs:41`
-rather than conditionally. Reflection is also not enabled. Until fixed, verify the
-backend through the browser or `mcp-server`'s `tsx` test scripts.
+The backend speaks gRPC-Web over HTTP/1.1 under `/api` only, so `grpcurl` can't reach it.
+Verify the backend through the browser, an MCP client against `/mcp`, or `cargo test`.
 
 ## Editor
 

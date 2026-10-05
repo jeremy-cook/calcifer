@@ -5,6 +5,14 @@ import path from 'path'
 import { ServerResponse } from 'http'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
+// The backend's UI and API listener (scripts/calcifer passes CALCIFER_ADDR
+// through). A wildcard bind is reached on localhost, because the backend
+// refuses requests whose Host isn't this machine.
+const backendAddr = (process.env.CALCIFER_ADDR ?? '127.0.0.1:8080').replace(
+  /^(0\.0\.0\.0|\[::\])(?=:)/,
+  'localhost',
+)
+
 export default defineConfig({
   plugins: [
     tanstackRouter({
@@ -22,11 +30,10 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      // Forward gRPC-Web calls to the tonic server; strip the /api prefix.
+      // Forward gRPC-Web calls to the backend, which serves them under /api.
       '/api': {
-        target: 'http://localhost:8080',
+        target: `http://${backendAddr}`,
         changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ''),
         // A streamed response (Watch) must end when the server goes away.
         // Otherwise the proxy keeps the browser's side open after the upstream
         // socket dies, the browser's stream never errors, and it never

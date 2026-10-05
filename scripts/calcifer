@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# Boots Calcifer: one process serving the UI and the gRPC-Web API (/api) on one
+# port and the MCP endpoint (/mcp) on another. Both bind localhost by default.
+#
+#   scripts/calcifer [start]   build whatever is stale, then run the service
+#   scripts/calcifer build     build the UI and the server, don't run
+#   scripts/calcifer dev       debug server + Vite with hot reload (UI on :5173)
+#
+# Environment: CALCIFER_ADDR (default 127.0.0.1:8080), CALCIFER_MCP_ADDR (default
+# 127.0.0.1:8081), CALCIFER_UI_DIR,
+# DATABASE_URL (default sqlite://./calcifer.db, a file in server/). A node older
+# than 18 on PATH is replaced by the newest one nvm has installed.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ui="$root/calcifer"
+server="$root/server"
+
+# The major version of the node on PATH, 0 when there is none.
+node_major() {
+  node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0
+}
+
+# The bin directory of the newest Node nvm has installed, or nothing.
+newest_nvm_node() {
+  local dir version key best="" best_key=0
+  for dir in "$HOME"/.nvm/versions/node/v*/bin; do
+    [ -d "$dir" ] || continue
+    version="${dir%/bin}"
+    version="${version##*/v}"
+    key="$(echo "$version" | awk -F. '{ printf "%d", $1 * 1000000 + $2 * 1000 + $3 }')"
+    if [ "$key" -gt "$best_key" ]; then
+      best="$dir"
+      best_key="$key"
+    fi
+  done
+  echo "$best"
+}
+
+# Fresh shells may resolve Node 16, which breaks pnpm.
+if [ "$(node_major)" -lt 18 ]; then
+  newest_node="$(newest_nvm_node)"
+  [ -n "$newest_node" ] && export PATH="$newest_node:$PATH"
+fi
+
+# `sqlx::query!` checks SQL against the live database at compile time, and the
+# server resolves it relative to its own directory.
+export DATABASE_URL="${DATABASE_URL:-sqlite://./calcifer.db}"
+
+die() { echo "calcifer: $*" >&2; exit 1; }
+need() { command -v "$1" >/dev/null || die "$1 is not installed"; }
+
+# The file a `sqlite://<path>` DATABASE_URL names, resolved relative to server/;
+# nothing for any other URL.
+database_file() {
+  case "$DATABASE_URL" in
+    sqlite://*) ;;
+    *) return ;;
+  esac
+  local path="${DATABASE_URL#sqlite://}"
+  path="${path%%\?*}"
+  case "$path" in
+    /*) echo "$path" ;;
+    *) echo "$server/$path" ;;
+  esac
+}
+
+ensure_database() {
+  local file
+  file="$(database_file)"
+  if [ -z "$file" ] || [ -f "$file" ]; then
+    return
+  fi
+  # A fresh checkout has no database for sqlx to check queries against.
+  command -v sqlx >/dev/null || die "no database at $file to compile against; install sqlx-cli (cargo install sqlx-cli --no-default-features --features sqlite) and re-run"
+  (cd "$server" && sqlx database create && sqlx migrate run)
+}
+
+ensure_ui_deps() {
+  [ -d "$ui/node_modules" ] || (cd "$ui" && pnpm install --frozen-lockfile)
+}
+
+# The UI build is stale when it is missing or any input is newer than it.
+ui_is_stale() {
+  local built="$ui/dist/index.html"
+  [ -f "$built" ] || return 0
+  [ -n "$(find "$ui/src" "$ui/public" "$ui/gen" "$ui/index.html" "$ui/package.json" "$ui/vite.config.ts" \
+    -type f -newer "$built" -print -quit)" ]
+}
+
+build_ui() {
+  need pnpm
+  ensure_ui_deps
+  echo "calcifer: building the UI"
+  (cd "$ui" && pnpm build)
+}
+
+build_server() {
+  need cargo
+  ensure_database
+  (cd "$server" && cargo build --release)
+}
+
+start() {
+  ui_is_stale && build_ui
+  need cargo
+  ensure_database
+  cd "$server"
+  local ui_addr="${CALCIFER_ADDR:-127.0.0.1:8080}" mcp_addr="${CALCIFER_MCP_ADDR:-127.0.0.1:8081}"
+  echo "calcifer: UI http://${ui_addr}  MCP http://${mcp_addr}/mcp"
+  exec cargo run --release
+}
+
+dev() {
+  need cargo
+  need pnpm
+  ensure_database
+  ensure_ui_deps
+  # Each half gets its own process group (job control), so stopping the group
+  # also stops the server cargo runs and the Vite pnpm runs. Job control stops
+  # pointing a background job's stdin at /dev/null, so do it by hand: a
+  # background process group that reads the terminal (Vite's shortcuts) is
+  # stopped by SIGTTIN.
+  set -m
+  (cd "$server" && cargo run) </dev/null &
+  backend=$!
+  (cd "$ui" && pnpm dev) </dev/null &
+  vite=$!
+  set +m
+  # Stop both when either exits or on Ctrl-C.
+  trap 'kill -- -"$backend" -"$vite" 2>/dev/null' EXIT
+  trap 'exit 130' INT TERM
+  # Polled: macOS's bash 3.2 has no `wait -n`.
+  while kill -0 "$backend" 2>/dev/null && kill -0 "$vite" 2>/dev/null; do
+    sleep 1
+  done
+}
+
+case "${1:-start}" in
+  start) start ;;
+  build) build_ui; build_server ;;
+  dev) dev ;;
+  *) die "unknown command '$1' (start, build, dev)" ;;
+esac

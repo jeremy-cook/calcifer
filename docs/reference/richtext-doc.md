@@ -161,10 +161,10 @@ The rest of the schema is StarterKit plus the extensions listed in
 `TiptapEditor.tsx` (tables, task lists, details, images, code blocks and so on).
 [`../specs/mentions.md`](../specs/mentions.md) covers how chips are inserted.
 
-**MCP server** (`mcp-server/src/markdown/`). `parse.ts` turns agent markdown into a
-subset of the same schema. Chip ids come from `ResolveEntity` by name, which creates a
-missing target when its structure is `creatable`; a target that doesn't exist and can't
-be created (a DailyNote) leaves the chip's label as plain text.
+**MCP server** (`server/src/mcp/markdown.rs`). `parse` turns agent markdown into a
+subset of the same schema. Chip ids come from `ResolveEntity` by name. Only a missing
+`#tag` is created; a `[[wikilink]]` to anything that doesn't exist fails the tool call and
+writes nothing, so an agent never invents a note (or links a typo) without being told.
 
 | Markdown | Node |
 |---|---|
@@ -178,7 +178,7 @@ be created (a DailyNote) leaves the chip's label as plain text.
 A mention's `structureType` is the structure it resolved in, and its `label` is the
 `label` after `|` if given, else the name without any `Structure/` prefix.
 
-`serialize.ts` goes the other way for `get_note`. Each chip is written from its
+`block_markdown` in `markdown.rs` goes the other way for `get_note`. Each chip is written from its
 target's **current** name and structure, looked up by id, not from its stored `label`:
 a Note mention as `[[Name]]`, a mention of any other structure as `[[Structure/Name]]`,
 a hashtag as `#Name`. A Note whose name itself starts with a registry prefix (a Note

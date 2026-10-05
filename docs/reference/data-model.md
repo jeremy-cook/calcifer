@@ -376,8 +376,8 @@ value in the same transaction. After commit, `PutRichText` publishes `rich_text_
 the saved doc and then `upserted` with the reloaded entity, since its links,
 `referenced_dates` and `updated_at` changed.
 
-Transport is gRPC-Web from the browser (`tonic-web` bridges; Vite proxies `/api` →
-`:8080`).
+Transport is gRPC-Web from the browser (`tonic-web` bridges), served under `/api` by the
+same process that serves the UI; the Vite dev server proxies `/api` to it.
 
 **Watch contract.** `WatchEntities` is a one-way replication stream of the whole entity set
 ([ADR 9](../adr/0009-watch-fed-replica.md)); the frontend's replica comes only from it,
@@ -440,20 +440,30 @@ model requires a re-embed and a migration.
 
 ## MCP tools
 
-`mcp-server/src/server.ts` exposes nine tools over stdio:
+`server/src/mcp/` hosts the MCP server inside the backend, as streamable HTTP at `POST /mcp` on its own listener (`CALCIFER_MCP_ADDR`, default `127.0.0.1:8081`)
+(JSON replies only; no server-initiated stream). Its tools call the services in-process.
+Because it has no auth (ADR 5), `server/src/local_only.rs` refuses requests a web page
+could forge: a `Host` that isn't this machine (403, against DNS rebinding), an `Origin`
+that isn't loopback (403), and a POST body that isn't `application/json` (415, so a
+cross-site `no-cors` `text/plain` POST can't run a tool). Agents like Claude Code send no
+`Origin`; browser tools on `localhost`, such as the MCP Inspector, pass.
+It exposes eleven tools:
 
-`search_notes` · `get_note` · `create_note` · `append_to_note` · `link_notes` ·
-`get_backlinks` · `create_daily_note` · `append_to_daily_note` · `list_structures`
+`search_notes` · `get_note` · `query_text_location` · `edit_note` · `create_note` ·
+`append_to_note` · `link_notes` · `get_backlinks` · `create_daily_note` ·
+`append_to_daily_note` · `list_structures`
 
 `search_notes` makes one `Search` call in its `mode` (default hybrid) and writes each
 hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
 
-`list_structures` calls `StructureService.ListStructures` and formats each structure's type,
+`list_structures` formats the structure registry (`structures.rs`): each structure's type,
 description and properties (kinds, select options and defaults, relation targets).
 
-Writes go through the same RPCs the browser uses. Markdown is converted to TipTap JSON
-in `mcp-server/src/markdown/`, resolving `[[wikilink]]` and `#tag` through
-`ResolveEntity` by name. `create_daily_note` and `append_to_daily_note` get-or-create the
+Writes go through the same service methods the browser's RPCs reach. Markdown is converted
+to TipTap JSON in `server/src/mcp/markdown.rs`, resolving `[[wikilink]]` and `#tag` through
+`ResolveEntity` by name. A missing `#tag` is created; a `[[wikilink]]` to a missing target
+fails the call, which writes nothing. `create_note` fails for a name that already exists.
+`create_daily_note` and `append_to_daily_note` get-or-create the
 day's note with `ResolveEntity` by date; `create_daily_note` says whether it was created or
 already existed. An agent creates a note with wikilinks, the server derives the graph,
 and open browser tabs update live over `WatchEntities`.

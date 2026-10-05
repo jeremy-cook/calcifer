@@ -30,25 +30,18 @@ Thin client, zero new knowledge-ops logic — every operation it needs already e
 an RPC. **Decide the provider first** (Anthropic, OpenAI, local via Ollama, or a
 provider-agnostic layer); that choice is the only thing blocking this.
 
-### 2. Workspace consolidation · size: M · deps: none
+### 2. Workspace consolidation · done
 
-Housekeeping that unblocks clean shared code, best done next time build setup is open.
+Obsolete: the MCP server moved into the Rust backend (`server/src/mcp/`), so `calcifer/`
+is the only TS package and there are no duplicate proto stubs left to consolidate.
 
-Replace the per-package proto-stub duplication with a real pnpm workspace: root
-`pnpm-workspace.yaml` + `package.json`, deps hoisted so `calcifer` and `mcp-server`
-share ONE `@bufbuild/protobuf` (removing the version-skew workaround), and a single
-generated `gen/` consumed by both — so `pnpm proto:gen` stops being a two-command
-ritual.
+### 3. Native gRPC with reflection · size: S · optional
 
-Stop the FE dev server before reinstalling. Re-verify FE typecheck + a browser load,
-and `mcp-server` typecheck + `pnpm test:tools`, after.
-
-### 3. Fix the grpcurl hang · size: S
-
-Backend verification currently has no CLI path. `tonic_web::GrpcWebLayer` is applied to
-all traffic in `server/src/main.rs:41`, which appears to break plain HTTP/2 gRPC —
-grpcurl resolves the method descriptor then hangs. Apply the layer conditionally, and
-enable reflection while in there. Details in the README's known-issue section.
+The backend serves only gRPC-Web, under `/api` through axum (see the README's "No native
+gRPC"), so `grpcurl` can't reach it and backend checks go through the browser, an MCP
+client, or `cargo test`. If a CLI path earns its keep, serve native HTTP/2 gRPC as well,
+behind the same local-only checks, and enable tonic reflection so `grpcurl` can list and
+call the RPCs without the proto files.
 
 ---
 
@@ -69,12 +62,29 @@ auto-edits** — always user-confirmed.
 
 ### In-app agent with tool use · size: L · deps: AI chat panel
 
-Largely proven already by `mcp-server/`; this brings it in-app. Tool schemas generated
+Largely proven already by the MCP tools in `server/src/mcp/`; this brings it in-app. Tool schemas generated
 from the Connect service descriptors (proto reflection → LLM tool JSON), an
 `AIService.Agent(stream)` tool-use loop, and a chat "Agent" mode showing tool calls and
 results inline. An `agent_calls` audit table
 (`id, tool, args_json, result_json, user_approved, ts`); destructive tools (delete,
 bulk-edit) require per-call confirmation.
+
+### Markdown converter from the editor's schema · size: M
+
+`server/src/mcp/markdown.rs` hand-writes the markdown ↔ TipTap mapping and copies
+schema facts from `TiptapEditor.tsx` (the link's `target`/`rel` defaults, the mark order,
+the attribute allow-list), so a change to the editor's extensions can drift from what
+agents read and write. Replace it with a binding to a TypeScript converter built from
+the editor's own extension list (`@tiptap/markdown` or `prosemirror-markdown`), run as a
+subprocess or in an embedded JS engine. The cost is accepted: a build step, a process
+boundary on every tool call, and debugging in two languages.
+
+The TS side must keep what the Rust converter does beyond plain markdown: chips resolved
+by name through the Rust services, `[[Structure/Name]]`, date chips, `_` not being
+emphasis, `<!-- calcifer:<type> -->` placeholders, and the refusal of an edit over
+content markdown can't carry (`inexpressible`). Check first that the library runs
+without a DOM and doesn't silently drop marks it can't write. The converter's tests are
+the acceptance suite.
 
 ---
 
@@ -118,4 +128,4 @@ bulk-edit) require per-call confirmation.
 - **Embedding model** — currently local `all-MiniLM-L6-v2` (384-d), pinned in the
   migration. Changing it means a re-embed and a migration.
 - **Export format** — JSON proto dump vs Markdown-per-entity. The
-  `mcp-server/src/markdown/` serializer is most of the latter already.
+  `server/src/mcp/markdown.rs` serializer is most of the latter already.

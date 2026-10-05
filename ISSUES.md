@@ -126,9 +126,9 @@ published last.
 
 ### I-61 · MCP link syntax isn't escaped for names containing `|`, `]]` or a structure prefix · low · confirmed
 
-**Where:** `mcp-server/src/tools.ts` (`linkNotes`), `mcp-server/src/markdown/serialize.ts` (`mentionToMd`)
+**Where:** `server/src/mcp/tools.rs` (`link_notes`), `server/src/mcp/markdown.rs` (`mention_markdown`)
 
-**Problem:** `link_notes` writes `[[${to}]]` raw, and `get_note` writes a Note's name
+**Problem:** `link_notes` writes `[[{to}]]` raw, and `get_note` writes a Note's name
 unescaped. A name containing `|` or `]]` is misparsed, and a name like `Todo/X` passed
 to `link_notes` targets a Todo (the serializer already writes such a Note as
 `[[Note/Todo/X]]`). Found in T28.
