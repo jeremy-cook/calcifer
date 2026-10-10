@@ -397,7 +397,7 @@ impl Knowledge {
         let linked = ent.links.iter().map(|l| l.target.as_ref().map_or("", |t| t.structure_type.as_str())).collect::<Vec<_>>();
         let linked = if linked.is_empty() { "none".to_string() } else { linked.join(", ") };
         Ok(format!(
-            "Saved note \"{}\" ({id}). Derived links: {} [{linked}]; dates: {}.",
+            "Saved note \"{}\" ({id}). Wikilinks: {} [{linked}]; dates: {}.",
             ent.name,
             ent.links.len(),
             ent.referenced_dates.len()
@@ -419,7 +419,7 @@ impl Knowledge {
         let addition = self.parse_markdown(markdown).await?;
         self.append_doc(&doc_ref("Note", &id)?, &format!("Note \"{name}\""), &addition).await?;
         let ent = self.entity(&id).await?;
-        Ok(format!("Appended to \"{}\" ({id}); now {} link(s).", ent.name, ent.links.len()))
+        Ok(format!("Appended to \"{}\" ({id}); now {} wikilink(s).", ent.name, ent.links.len()))
     }
 
     /// Where `query` occurs in a note's body, as the whole-block line ranges
@@ -525,7 +525,7 @@ impl Knowledge {
         } else {
             format!("Replaced lines {start}-{end}")
         };
-        Ok(format!("{action} of \"{}\" ({id}); now {} link(s).", ent.name, ent.links.len()))
+        Ok(format!("{action} of \"{}\" ({id}); now {} wikilink(s).", ent.name, ent.links.len()))
     }
 
     /// The note as markdown under a frontmatter block (name, version,
@@ -616,7 +616,7 @@ impl Knowledge {
         let (id, name, _) = self.resolve_daily_note(date).await?;
         self.append_doc(&doc_ref("DailyNote", &id)?, &format!("Daily note \"{name}\""), &addition).await?;
         let ent = self.entity(&id).await?;
-        Ok(format!("Appended to daily note \"{name}\" ({id}); now {} link(s).", ent.links.len()))
+        Ok(format!("Appended to daily note \"{name}\" ({id}); now {} wikilink(s).", ent.links.len()))
     }
 
     /// The registry lives in `structures.rs`; this only formats it.

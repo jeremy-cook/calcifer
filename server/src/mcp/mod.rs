@@ -412,7 +412,7 @@ mod tests {
         f.k.create_note("Attention", "").await.unwrap();
         f.k.create_note("Positional Encoding", "").await.unwrap();
         let saved = f.k.create_note("Transformers", "An architecture built on [[Attention]]. #ml").await.unwrap();
-        assert!(saved.contains("Derived links: 2 [") && saved.contains("Note") && saved.contains("Tag"), "{saved}");
+        assert!(saved.contains("Wikilinks: 2 [") && saved.contains("Note") && saved.contains("Tag"), "{saved}");
 
         assert_eq!(f.k.get_backlinks("Attention").await.unwrap(), "- Transformers");
         assert_eq!(f.k.get_backlinks("Transformers").await.unwrap(), "Nothing links to \"Transformers\" yet.");
@@ -542,7 +542,7 @@ mod tests {
     async fn a_missing_tag_is_created() {
         let f = fixture().await;
         let saved = f.k.create_note("Tagged", "About #brandnew things.").await.unwrap();
-        assert!(saved.contains("Derived links: 1 [Tag]"), "{saved}");
+        assert!(saved.contains("Wikilinks: 1 [Tag]"), "{saved}");
     }
 
     #[tokio::test]
