@@ -5,11 +5,11 @@ use sqlx::SqlitePool;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tonic::{Request, Response, Status};
 
+use crate::dates::{format_long_date, is_iso_day};
 use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
-use crate::link_store::{is_relation_value, sync_relation_links, sync_relation_property};
-use crate::links::is_iso_day;
+use crate::links::relations::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, Backlink, CreateEntityRequest,
@@ -777,15 +777,6 @@ fn case_name(value: &property_value::Value) -> &'static str {
         property_value::Value::Select(_) => "select",
         property_value::Value::Relation(_) => "relation",
         property_value::Value::Relations(_) => "relations",
-    }
-}
-
-/// Format an ISO calendar day ("2026-06-13") as a long human date
-/// ("June 13, 2026"). Falls back to the raw input on a parse failure.
-fn format_long_date(date: &str) -> String {
-    match chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d") {
-        Ok(d) => d.format("%B %-d, %Y").to_string(),
-        Err(_) => date.to_string(),
     }
 }
 

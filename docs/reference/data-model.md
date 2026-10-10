@@ -184,13 +184,13 @@ All of this is recomputed server-side on write; none of it is client-authored. S
 [ADR 3](../adr/0003-server-authoritative-link-graph.md).
 
 - **`Entity.links`** — the full outgoing set, re-derived from document content on every
-  save by `server/src/links.rs::extract_doc_references` walking the TipTap JSON (see
+  save by `extract_doc_references` (`server/src/tiptap/references.rs`) walking the TipTap JSON (see
   [`richtext-doc.md`](richtext-doc.md) for the nodes it reads). Scoped
   per originating property via `source_property_id`, so properties reconcile
   independently.
 - Relation properties (`relation`/`relations`) also produce `links` rows, scoped by
   `source_property_id` the same way as richtext-derived links — see
-  `sync_relation_links` in `server/src/link_store.rs`. Server-derived only; no
+  `sync_relation_links` in `server/src/links/relations.rs`. Server-derived only; no
   client ever authors a link row directly. `CreateEntity`/`SetEntityProperty` return
   `InvalidArgument` if a ref's target isn't the property's declared
   `target_structure`, or if the ref's non-empty `structure_type` isn't the target's

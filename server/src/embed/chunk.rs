@@ -1,7 +1,7 @@
 //! Chunk a TipTap JSON doc into ~500-token text slices for embedding.
 //!
 //! We walk the doc's top-level blocks (paragraphs, headings, list items, …),
-//! flatten each block to plain text with `links::collect_text`, the same rule
+//! flatten each block to plain text with `tiptap::text::collect_text`, the same rule
 //! `extract_plain_text` uses for FTS (I-54), then greedily pack whole blocks into
 //! chunks until adding the next block would exceed the token budget. Blocks are never split mid-way (a single
 //! oversized block becomes its own chunk) so a chunk stays a coherent unit.
@@ -12,7 +12,7 @@
 
 use serde_json::Value;
 
-use crate::links::collect_text;
+use crate::tiptap::text::collect_text;
 
 /// Target chunk size in approximate tokens (whitespace words). MiniLM truncates
 /// past ~256 wordpieces; 500 words sits near that once subword expansion is

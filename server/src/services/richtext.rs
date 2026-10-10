@@ -4,8 +4,7 @@ use tonic::{Request, Response, Status};
 use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
-use crate::link_store::{live_targets, replace_scoped_links};
-use crate::links::{extract_doc_references, extract_plain_text};
+use crate::links::store::{live_targets, replace_scoped_links};
 use crate::proto::{
     rich_text_service_server::RichTextService as RichTextServiceTrait, watch_entities_response,
     GetRichTextRequest, GetRichTextResponse, PutRichTextRequest, PutRichTextResponse, RichText,
@@ -13,6 +12,8 @@ use crate::proto::{
 };
 use crate::services::entity::{load_entity, ts_from_millis};
 use crate::structures;
+use crate::tiptap::references::extract_doc_references;
+use crate::tiptap::text::extract_plain_text;
 use crate::watch::WatchHub;
 
 pub struct RichTextService {

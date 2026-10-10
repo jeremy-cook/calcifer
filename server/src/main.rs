@@ -6,10 +6,10 @@ use tonic::service::Routes;
 use tower::Layer;
 use tower_http::services::{ServeDir, ServeFile};
 
+mod dates;
 mod db;
 mod embed;
 mod error;
-mod link_store;
 mod links;
 mod local_only;
 mod mcp;
@@ -18,6 +18,7 @@ mod services;
 mod structures;
 #[cfg(test)]
 mod test_support;
+mod tiptap;
 mod watch;
 
 use crate::proto::entity_service_server::EntityServiceServer;

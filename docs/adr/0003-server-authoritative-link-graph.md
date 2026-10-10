@@ -23,7 +23,7 @@ it.
 **Content is the only source of truth for the graph.** No client authors links.
 
 `RichTextService.Put` walks the TipTap JSON server-side
-(`server/src/links.rs::extract_doc_references`) and re-derives the entity's **full**
+(`extract_doc_references` in `server/src/tiptap/references.rs`) and re-derives the entity's **full**
 outgoing set on every save, inside the write transaction. `Entity.links` is an index
 over the document, never authored directly.
 

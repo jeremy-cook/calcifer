@@ -6,7 +6,7 @@ held in a string. The server stores it verbatim, but it also parses it on every
 that writes them differently gets different links, dates and search results.
 
 This file describes what the **server** reads. The authoritative code is
-`server/src/links.rs` (`extract_doc_references`, `extract_plain_text`) and
+`server/src/tiptap/` (`references::extract_doc_references`, `text::extract_plain_text`) and
 `server/src/embed/chunk.rs` (`chunk_doc`). What the two clients write is described at
 the end. See [`data-model.md`](data-model.md) for the RPCs and graph derivation.
 
@@ -69,7 +69,7 @@ chips (Tags) and `@` chips render and autocomplete differently.
 
 ### Text
 
-One rule gives the text for both search and embeddings (`collect_text` in `links.rs`),
+One rule gives the text for both search and embeddings (`collect_text` in `tiptap/text.rs`),
 walking the tree depth-first in document order:
 
 - Inline nodes are joined with no separator. A `text` node gives its `text`; a

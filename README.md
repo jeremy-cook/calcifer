@@ -86,7 +86,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
   `server/src/main.rs`. Migrations in `server/migrations/` (timestamp-prefixed).
   `sqlx::query!` checks SQL at compile time against the live `server/calcifer.db`
   (apply new migrations before/at build; the binary also runs `migrate!` on boot).
-  `server/src/links.rs::extract_doc_references` walks TipTap JSON. Timestamps via
+  `server/src/tiptap/` reads TipTap JSON; `server/src/links/` writes the link graph. Timestamps via
   `ts_from_millis`.
 - **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen both TS consumers
   (above). Note the `ref` field generates as `r#ref` in Rust.
