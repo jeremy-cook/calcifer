@@ -442,7 +442,7 @@ model requires a re-embed and a migration.
 
 `server/src/mcp/` hosts the MCP server inside the backend, as streamable HTTP at `POST /mcp` on its own listener (`CALCIFER_MCP_ADDR`, default `127.0.0.1:8081`)
 (JSON replies only; no server-initiated stream). Its tools call the services in-process.
-Because it has no auth (ADR 5), `server/src/local_only.rs` refuses requests a web page
+Because it has no auth (ADR 5), `server/src/security/local.rs` refuses requests a web page
 could forge: a `Host` that isn't this machine (403, against DNS rebinding), an `Origin`
 that isn't loopback (403), and a POST body that isn't `application/json` (415, so a
 cross-site `no-cors` `text/plain` POST can't run a tool). Agents like Claude Code send no

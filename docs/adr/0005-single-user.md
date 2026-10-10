@@ -34,7 +34,7 @@ by the `Watch` server-streaming RPC — a fan-out broadcast, not a sync protocol
 there is only ever one writer's intent to reconcile.
 
 Loopback alone doesn't keep out a web page open in a browser on the same machine, so
-`server/src/local_only.rs` checks every request: both listeners answer 403 unless `Host`
+`server/src/security/local.rs` checks every request: both listeners answer 403 unless `Host`
 names this machine (`localhost`, a loopback IP, or the listener's own address), which
 defeats DNS rebinding; and MCP also answers 403 to a non-loopback `Origin` and 415 to a
 POST that isn't `application/json`, which blocks cross-site requests that skip the CORS

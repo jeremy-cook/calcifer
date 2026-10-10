@@ -812,7 +812,7 @@ mod tests {
         use axum::body::Body;
         use tower::ServiceExt;
 
-        let app = crate::local_only::mcp(router(f.k.clone()), "127.0.0.1:8081".parse().unwrap());
+        let app = crate::security::local::mcp(router(f.k.clone()), "127.0.0.1:8081".parse().unwrap());
         let mut req = axum::http::Request::post("/mcp");
         for (name, value) in headers {
             req = req.header(*name, *value);

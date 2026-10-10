@@ -54,7 +54,7 @@ claude mcp get calcifer          # → Status: ✓ Connected
 ```
 
 There's no auth (ADR 5), so both ports answer only this machine
-(`server/src/local_only.rs`): a request whose `Host` isn't `localhost`, a loopback address
+(`server/src/security/local.rs`): a request whose `Host` isn't `localhost`, a loopback address
 or the listener's own address gets 403, which defeats DNS rebinding. `/mcp` also refuses a
 browser request from another site: an `Origin` that isn't loopback gets 403, and a POST
 that isn't `application/json` gets 415. Claude Code sends no `Origin`, and browser tools on

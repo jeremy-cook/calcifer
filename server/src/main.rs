@@ -11,9 +11,9 @@ mod db;
 mod embed;
 mod error;
 mod links;
-mod local_only;
 mod mcp;
 mod proto;
+mod security;
 mod services;
 mod structures;
 #[cfg(test)]
@@ -80,9 +80,9 @@ async fn main() -> anyhow::Result<()> {
     let mcp_addr = bind_addr("CALCIFER_MCP_ADDR", DEFAULT_MCP_ADDR)?;
 
     // Both listeners only answer requests addressed to this machine (ADR 5).
-    let mcp = local_only::mcp(mcp::router(mcp::Knowledge::new(entity, richtext, search)), mcp_addr);
+    let mcp = security::local::mcp(mcp::router(mcp::Knowledge::new(entity, richtext, search)), mcp_addr);
     let ui_dir = std::env::var("CALCIFER_UI_DIR").unwrap_or_else(|_| DEFAULT_UI_DIR.to_string());
-    let app = local_only::app(app_router(api, ui_service(PathBuf::from(ui_dir))), app_addr);
+    let app = security::local::app(app_router(api, ui_service(PathBuf::from(ui_dir))), app_addr);
 
     let app_listener = tokio::net::TcpListener::bind(app_addr).await?;
     let mcp_listener = tokio::net::TcpListener::bind(mcp_addr).await?;
