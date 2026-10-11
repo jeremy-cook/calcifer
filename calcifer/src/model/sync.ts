@@ -70,7 +70,8 @@ async function applySnapshot(entities: Entity[]): Promise<void> {
   void queryClient.invalidateQueries({ queryKey: qk.everyRichtext() })
 }
 
-async function applyEvent({ event }: WatchEntitiesResponse): Promise<void> {
+// Exported for tests.
+export async function applyWatchEvent({ event }: WatchEntitiesResponse): Promise<void> {
   switch (event.case) {
     case 'snapshot':
       await applySnapshot(event.value.entities)
@@ -99,7 +100,7 @@ export function useEntitySync(): void {
         try {
           for await (const event of entityClient.watchEntities({}, { signal: controller.signal })) {
             if (controller.signal.aborted) return
-            await applyEvent(event)
+            await applyWatchEvent(event)
           }
           if (controller.signal.aborted) return
           console.warn('watch ended; reconnecting in 1s')
