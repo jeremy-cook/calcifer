@@ -102,6 +102,13 @@ the acceptance suite.
   version history, and a general text-format floating toolbar. Full status in the
   README.
 - **Image polish** — caption support and paste-from-clipboard (insert + resize ship).
+- **Connection status** — pages that read the Watch replica render nothing until the
+  first snapshot, and Watch retries silently, so with the server unreachable a deep
+  link to `/e/<id>` stays blank forever. Have the replica track the stream's state
+  (connecting, live, retrying) in `model/replica.ts`, set it from `model/sync.ts`, and
+  show "Can't reach the server" once the first connection attempt fails. Covers every
+  page, not just `/e/<id>`. Chosen over a `GetEntity` on load, which fails the same way
+  and renders a page without its relations.
 
 ---
 
