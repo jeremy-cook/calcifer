@@ -80,9 +80,17 @@ export function writeRichTextIfNewer(rt: RichText): void {
 }
 
 export function useRichText(ref: RichTextRef) {
+  const key = qk.richtext(ref.entityId, ref.propertyId)
   return useQuery({
-    queryKey: qk.richtext(ref.entityId, ref.propertyId),
-    queryFn: () => fetchRichText(ref),
+    queryKey: key,
+    // Keeps the cached version unless the fetched one is newer: a Watch event
+    // or Put response can land while the fetch is in flight (I-49). Equal keeps
+    // the cached object, so nothing re-renders.
+    queryFn: async () => {
+      const fetched = await fetchRichText(ref)
+      const cached = queryClient.getQueryData<RichTextState>(key)
+      return cached && !isNewerRichText(fetched.updatedAt, cached.updatedAt) ? cached : fetched
+    },
     enabled: !!ref.entityId,
   })
 }
