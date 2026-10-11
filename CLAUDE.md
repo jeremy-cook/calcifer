@@ -99,3 +99,10 @@ function Sections({ sections }: SectionsProps) {
   return <div>...</div>
 }
 ```
+
+## State
+
+- Data the server pushes lives in Zustand stores in `calcifer/src/model/` (the Watch-fed entity replica, `model/replica.ts`).
+- Data the browser requests, and mutations, use TanStack Query.
+- Components read both through hooks in `model/`, never the stores directly.
+- A selector returns stored references (`s.all`, `s.byId.get(id)`); one that builds a new array or object goes through `useShallow`.

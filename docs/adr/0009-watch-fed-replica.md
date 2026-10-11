@@ -86,3 +86,10 @@ overwriting it.
   show up in the browser.
 - This design assumes one user and a data set that fits in memory on every client. It
   would need revisiting if Calcifer became multi-user or the data got large.
+
+## Notes
+
+- **2026-10-11:** The replica now lives in a Zustand store, `calcifer/src/model/replica.ts`,
+  rather than the TanStack Query cache, which stays for data the browser requests (rich-text
+  docs, the structure registry) and for mutations. `model/sync.ts` still applies the stream.
+  The decision is unchanged.

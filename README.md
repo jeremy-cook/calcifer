@@ -5,7 +5,7 @@ as a first-class writer, not a bolted-on sidebar.
 
 ## Architecture
 
-- `calcifer/` — React + Vite frontend (TipTap editor, TanStack Query + Router)
+- `calcifer/` — React + Vite frontend (TipTap editor, TanStack Query + Router, Zustand)
 - `server/` — Rust backend (tonic gRPC + SQLite via sqlx) — the source of truth
 - `server/src/mcp/` — the MCP server (knowledge tools for an AI agent), hosted by the same backend process
 - `proto/` — protobuf schema, generated to TS (`calcifer/gen/ts`) and to Rust (tonic-build)
