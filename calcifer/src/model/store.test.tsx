@@ -5,7 +5,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { create } from '@bufbuild/protobuf'
 import { EntitySchema, PropertyValueSchema, type Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { entityClient, queryClient } from '~/model/api'
-import { replica, useReplica } from '~/model/replica'
+import { replica, resetTombstones, useReplica } from '~/model/replica'
 import { getEntity, propertyValueOf, useAllEntities, useEntity, useRenameEntity, useSetProperty } from '~/model/store'
 import { applyWatchEvent } from '~/model/sync'
 import { entity, watch } from '~/model/testing'
@@ -19,6 +19,7 @@ vi.mock('~/model/api', async (importOriginal) => ({
 
 beforeEach(() => {
   useReplica.setState(useReplica.getInitialState(), true)
+  resetTombstones()
   queryClient.clear()
 })
 

@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { create } from '@bufbuild/protobuf'
 import { EntitySchema } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { replica, useReplica } from '~/model/replica'
+import { replica, resetTombstones, useReplica } from '~/model/replica'
 import { entity } from '~/model/testing'
 
 beforeEach(() => {
   useReplica.setState(useReplica.getInitialState(), true)
+  resetTombstones()
 })
 
 const state = () => useReplica.getState()
@@ -73,5 +74,41 @@ describe('replica', () => {
     const before = state()
     replica.patch('missing', (e) => create(EntitySchema, { ...e, name: 'patched' }))
     expect(state()).toBe(before)
+  })
+
+  it('drops an upsert older than the cached entity', () => {
+    replica.applySnapshot([entity('a', 'new', 2_000)])
+    replica.upsert(entity('a', 'old', 1_000))
+    expect(state().byId.get('a')?.name).toBe('new')
+  })
+
+  it('accepts an upsert with an equal timestamp', () => {
+    replica.applySnapshot([entity('a', 'first', 2_000)])
+    replica.upsert(entity('a', 'second', 2_000))
+    expect(state().byId.get('a')?.name).toBe('second')
+  })
+
+  it('patches regardless of timestamps', () => {
+    replica.applySnapshot([entity('a', 'a', 2_000)])
+    replica.patch('a', () => entity('a', 'patched', 1_000))
+    expect(state().byId.get('a')?.name).toBe('patched')
+  })
+
+  it('drops an upsert for an id removed this session, even after a later snapshot', () => {
+    replica.applySnapshot([entity('a'), entity('b')])
+    replica.remove('a')
+    replica.upsert(entity('a', 'back', 2_000))
+    expect(state().byId.has('a')).toBe(false)
+    replica.applySnapshot([entity('b')])
+    replica.upsert(entity('a', 'back', 3_000))
+    expect(state().byId.has('a')).toBe(false)
+  })
+
+  it('does not filter a snapshot by timestamps or tombstones', () => {
+    replica.applySnapshot([entity('a', 'new', 2_000), entity('b')])
+    replica.remove('b')
+    replica.applySnapshot([entity('a', 'old', 1_000), entity('b')])
+    expect(state().byId.get('a')?.name).toBe('old')
+    expect(state().byId.has('b')).toBe(true)
   })
 })

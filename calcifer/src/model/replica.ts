@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { equals } from '@bufbuild/protobuf'
 import { EntitySchema, type Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { compareTimestamps } from '~/model/dates'
 
 // The Watch-fed entity replica (ADR 9). Only model/sync.ts and the mutations
 // in model/store.ts write it; components read it through store.ts's hooks.
@@ -15,6 +16,14 @@ interface ReplicaState {
 }
 
 export const useReplica = create<ReplicaState>()(() => ({ byId: new Map(), all: [], ready: false }))
+
+// Ids deleted this session. Ids are server-minted UUIDs and never reused, so this is never cleared.
+const tombstones = new Set<string>()
+
+// Test-only: forget this session's deletes.
+export function resetTombstones(): void {
+  tombstones.clear()
+}
 
 function commit(byId: Map<string, Entity>, ready: boolean): void {
   useReplica.setState({ byId, all: [...byId.values()], ready })
@@ -40,25 +49,31 @@ function put(entity: Entity): void {
 }
 
 export const replica = {
-  // Replaces the whole set. A snapshot is authoritative.
+  // Replaces the whole set. Not guarded: a snapshot is authoritative.
   applySnapshot(entities: readonly Entity[]): void {
     const { byId: prev, ready } = useReplica.getState()
     const byId = new Map(entities.map((e) => [e.id, reuse(prev.get(e.id), e)]))
     if (ready && sameEntries(prev, byId)) return
     commit(byId, true)
   },
-  // A server-sourced entity (Watch event or mutation response).
+  // A server-sourced entity (Watch event or mutation response). Dropped when it
+  // was deleted this session or is older than the cached copy (I-49). Equal
+  // timestamps are accepted: two writes can land in the same millisecond.
   upsert(entity: Entity): void {
+    if (tombstones.has(entity.id)) return
+    const cached = useReplica.getState().byId.get(entity.id)
+    if (cached && compareTimestamps(entity.updatedAt, cached.updatedAt) < 0) return
     put(entity)
   },
   remove(id: string): void {
+    tombstones.add(id)
     const { byId: prev, ready } = useReplica.getState()
     if (!prev.has(id)) return
     const byId = new Map(prev)
     byId.delete(id)
     commit(byId, ready)
   },
-  // Optimistic edit of the cached entity. Does nothing if it isn't cached.
+  // Optimistic edit of the cached entity. Not guarded. Does nothing if it isn't cached.
   patch(id: string, edit: (entity: Entity) => Entity): void {
     const cached = useReplica.getState().byId.get(id)
     if (cached) put(edit(cached))
