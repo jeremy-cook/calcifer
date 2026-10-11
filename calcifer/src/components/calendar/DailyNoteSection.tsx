@@ -20,6 +20,7 @@ import {
   deleteEntity,
   deleteEntityIfRichTextEmpty,
   getEntitiesSnapshot,
+  useReplicaReady,
   useResolveDailyNote,
   type Entity,
 } from '~/model/store'
@@ -35,6 +36,7 @@ interface DailyNoteSectionProps {
 export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
   const dailyNote = itemsOn(useCalendarIndex(), iso, 'dailyNote')[0]?.entity
   const resolveDailyNote = useResolveDailyNote()
+  const ready = useReplicaReady()
   const [autoFocusKey, setAutoFocusKey] = useState<string | null>(null)
   if (autoFocusKey !== null && autoFocusKey !== iso) setAutoFocusKey(null)
 
@@ -54,11 +56,19 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
     }
   }, [iso])
 
+  // Before the first snapshot there's no telling whether the day has a note, so
+  // offer nothing rather than flash "New".
+  const renderActions = () => {
+    if (dailyNote) return <DailyNoteActions dailyNote={dailyNote} />
+    if (!ready) return null
+    return <EmptyState onClick={handleCreate} />
+  }
+
   return (
     <section className="flex flex-col gap-3">
       <header className="flex items-center justify-between">
         <h2 className="text-base font-semibold">Daily note</h2>
-        {dailyNote ? <DailyNoteActions dailyNote={dailyNote} /> : <EmptyState onClick={handleCreate} />}
+        {renderActions()}
       </header>
       {dailyNote && <DailyNoteBody dailyNote={dailyNote} autoFocus={autoFocusKey === iso} />}
     </section>
