@@ -10,13 +10,8 @@ import { writeRichTextIfNewer } from '~/model/richtext'
 // server can't guarantee continuity. The list is never fetched with `ListEntities`.
 // Entities live in the store in `model/replica.ts`; rich-text docs stay in the
 // TanStack cache. Mutations write the server's response through
-// `replica.upsert` / `removeEntity`, the same path the events take; the Watch
+// `replica.upsert` / `replica.remove`, the same path the events take; the Watch
 // echo of that write changes nothing.
-
-// The one removal path: Watch `deleted_id` and the browser's own delete.
-export function removeEntity(id: string): void {
-  replica.remove(id)
-}
 
 // Exported for tests.
 export function applyWatchEvent({ event }: WatchEntitiesResponse): void {
@@ -33,7 +28,7 @@ export function applyWatchEvent({ event }: WatchEntitiesResponse): void {
       replica.upsert(event.value)
       return
     case 'deletedId':
-      removeEntity(event.value)
+      replica.remove(event.value)
       return
     case 'richTextChanged':
       writeRichTextIfNewer(event.value)

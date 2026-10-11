@@ -17,7 +17,6 @@ import { entityClient } from '~/model/api'
 import { timestampMsOrZero } from '~/model/dates'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
 import { replica, useReplica } from '~/model/replica'
-import { removeEntity } from '~/model/sync'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -34,10 +33,6 @@ function requireEntity({ entity }: { entity?: Entity }): Entity {
 // One array per version of the set, so it is safe as a memo dependency.
 export function useAllEntities(): Entity[] {
   return useReplica((s) => s.all)
-}
-
-export function useEntitiesById(): ReadonlyMap<string, Entity> {
-  return useReplica((s) => s.byId)
 }
 
 // The entities of one structure, in replica order. Re-renders only when one of
@@ -295,7 +290,7 @@ export async function getOrCreateEntityForMention(
 export function deleteEntity(id: string): void {
   void entityClient
     .deleteEntity({ id })
-    .then(() => removeEntity(id))
+    .then(() => replica.remove(id))
     .catch((err) => console.error('delete failed', err))
 }
 

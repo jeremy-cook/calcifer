@@ -1,12 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { create } from '@bufbuild/protobuf'
 import { EntitySchema } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { replica, resetTombstones, useReplica } from '~/model/replica'
+import { replica, useReplica } from '~/model/replica'
 import { entity } from '~/model/testing'
 
 beforeEach(() => {
-  useReplica.setState(useReplica.getInitialState(), true)
-  resetTombstones()
+  replica.reset()
 })
 
 const state = () => useReplica.getState()

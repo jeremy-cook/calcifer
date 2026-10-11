@@ -20,11 +20,6 @@ export const useReplica = create<ReplicaState>()(() => ({ byId: new Map(), all: 
 // Ids deleted this session. Ids are server-minted UUIDs and never reused, so this is never cleared.
 const tombstones = new Set<string>()
 
-// Test-only: forget this session's deletes.
-export function resetTombstones(): void {
-  tombstones.clear()
-}
-
 function commit(byId: Map<string, Entity>, ready: boolean): void {
   useReplica.setState({ byId, all: [...byId.values()], ready })
 }
@@ -77,5 +72,10 @@ export const replica = {
   patch(id: string, edit: (entity: Entity) => Entity): void {
     const cached = useReplica.getState().byId.get(id)
     if (cached) put(edit(cached))
+  },
+  // Test-only: back to an empty, not-ready replica with no deletes.
+  reset(): void {
+    tombstones.clear()
+    useReplica.setState(useReplica.getInitialState(), true)
   },
 }

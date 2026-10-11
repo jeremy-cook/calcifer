@@ -1,5 +1,6 @@
+import { useMemo } from 'react'
 import { useToday } from '~/model/dates'
-import { useEntitiesById, type Entity } from '~/model/store'
+import { useEntitiesOfType, type Entity } from '~/model/store'
 import { todoFields } from '~/model/todos'
 import { TodoRow } from './TodoRow'
 
@@ -9,7 +10,8 @@ export interface TodoListProps {
 
 export function TodoList({ entities }: TodoListProps) {
   const today = useToday()
-  const entitiesById = useEntitiesById()
+  const tags = useEntitiesOfType('Tag')
+  const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags])
 
   if (entities.length === 0) {
     return <p className="text-sm text-muted-foreground">No to-dos match these filters.</p>
@@ -17,7 +19,7 @@ export function TodoList({ entities }: TodoListProps) {
 
   const resolveTags = (entity: Entity) =>
     todoFields(entity)
-      .tagIds.map((id) => entitiesById.get(id))
+      .tagIds.map((id) => tagsById.get(id))
       .filter((e): e is Entity => e !== undefined)
 
   return (
