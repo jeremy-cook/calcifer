@@ -36,8 +36,8 @@ import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
     const { id } = Route.useParams()
-    const { data: entity, isPending } = useEntity(id)
-    if (isPending) return null
+    const { entity, status } = useEntity(id)
+    if (status === 'loading') return null
     if (!entity) return <EntityNotFound />
 
     return (

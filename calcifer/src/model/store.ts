@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ConnectError } from '@connectrpc/connect'
 import { create as createMessage } from '@bufbuild/protobuf'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation } from '@tanstack/react-query'
 import {
   EntityRefListSchema,
   EntityRefSchema,
@@ -12,10 +12,11 @@ import {
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
 import type { ResolveEntityRequest } from '@calcifer/proto/calcifer/v1/services_pb'
-import { entityClient, qk, queryClient } from '~/model/api'
+import { entityClient } from '~/model/api'
 import { timestampMsOrZero } from '~/model/dates'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
-import { entitiesQuery, removeEntity, writeEntity } from '~/model/sync'
+import { replica, useReplica } from '~/model/replica'
+import { removeEntity } from '~/model/sync'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 
@@ -28,22 +29,36 @@ function requireEntity({ entity }: { entity?: Entity }): Entity {
 
 // --- Queries ---
 
-// The Watch replica (`model/sync.ts`): empty until the first snapshot arrives.
+// The Watch replica (`model/replica.ts`): empty until the first snapshot arrives.
+// One array per version of the set, so it is safe as a memo dependency.
 export function useAllEntities(): Entity[] {
-  return useQuery(entitiesQuery).data ?? []
+  return useReplica((s) => s.all)
 }
 
-// Seeded from the replica. `GetEntity` runs only for an entity the replica doesn't
-// hold yet (a deep link before the first snapshot) or doesn't hold at all;
-// after that Watch and the mutations keep it current, so it never refetches.
-export function useEntity(id: string) {
-  return useQuery({
-    queryKey: qk.entity(id),
-    queryFn: async () => requireEntity(await entityClient.getEntity({ id })),
-    initialData: () => getEntitiesSnapshot().find((e) => e.id === id),
-    staleTime: Infinity,
-    enabled: !!id,
-  })
+export function useEntitiesById(): ReadonlyMap<string, Entity> {
+  return useReplica((s) => s.byId)
+}
+
+// False until the first Watch snapshot has arrived.
+export function useReplicaReady(): boolean {
+  return useReplica((s) => s.ready)
+}
+
+export type EntityStatus = 'loading' | 'found' | 'missing'
+
+export interface EntityLookup {
+  entity: Entity | undefined
+  status: EntityStatus
+}
+
+// One entity from the replica. `loading` until the first snapshot (unless an
+// earlier write already cached it); `missing` once the replica is ready and
+// doesn't hold the id, including right after it was deleted.
+export function useEntity(id: string): EntityLookup {
+  const entity = useReplica((s) => s.byId.get(id))
+  const ready = useReplicaReady()
+  const status: EntityStatus = entity ? 'found' : ready ? 'missing' : 'loading'
+  return { entity, status }
 }
 
 // --- Mutations / actions ---
@@ -59,19 +74,16 @@ export function useCreateEntity() {
   const { mutateAsync } = useMutation({
     mutationFn: async ({ structureType, name }: CreateEntityVars) =>
       requireEntity(await entityClient.createEntity({ structureType, name })),
-    onSuccess: writeEntity,
+    onSuccess: (entity) => replica.upsert(entity),
   })
-  return useCallback(
-    (structureType: string, name?: string) => mutateAsync({ structureType, name }),
-    [mutateAsync],
-  )
+  return useCallback((structureType: string, name?: string) => mutateAsync({ structureType, name }), [mutateAsync])
 }
 
 // Server-authoritative get-or-create through EntityService.ResolveEntity, so the
-// browser and the MCP agent share one identity path. Writes the result into the caches.
+// browser and the MCP agent share one identity path. Writes the result into the replica.
 async function resolveOrCreateEntity(structureType: string, key: ResolveEntityRequest['key']): Promise<Entity> {
   const entity = requireEntity(await entityClient.resolveEntity({ structureType, key, createIfMissing: true }))
-  writeEntity(entity)
+  replica.upsert(entity)
   return entity
 }
 
@@ -93,32 +105,21 @@ function renamed(entity: Entity, name: string): Entity {
 }
 
 // Rename through EntityService.RenameEntity, which writes only the name, so it can't
-// undo a concurrent property edit. Optimistic on `name` in both caches. On
-// error only the name is restored, on the current cached entity (the I-6
-// per-entity rollback), so a concurrent edit to anything else survives.
+// undo a concurrent property edit. Optimistic on `name`. On error only the name
+// is restored, on the entity as cached now (the I-6 per-entity rollback), so a
+// concurrent edit to anything else survives.
 export function useRenameEntity() {
-  const qc = useQueryClient()
   const { mutate } = useMutation({
     mutationFn: async ({ id, name }: RenameEntityVars) => requireEntity(await entityClient.renameEntity({ id, name })),
-    onMutate: async ({ id, name }) => {
-      // The list is never refetched (Watch feeds it), so only a deep link's GetEntity can be in flight.
-      await qc.cancelQueries({ queryKey: qk.entity(id) })
-      const prevEntityName = qc.getQueryData<Entity>(qk.entity(id))?.name
-      const prevListName = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === id)?.name
-      qc.setQueryData<Entity>(qk.entity(id), (e) => e && renamed(e, name))
-      qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === id ? renamed(e, name) : e)))
-      return { prevEntityName, prevListName }
+    onMutate: ({ id, name }) => {
+      const prevName = getEntity(id)?.name
+      replica.patch(id, (e) => renamed(e, name))
+      return { prevName }
     },
-    onSuccess: writeEntity,
+    onSuccess: (entity) => replica.upsert(entity),
     onError: (_err, { id }, ctx) => {
-      if (ctx?.prevEntityName !== undefined) {
-        const prev = ctx.prevEntityName
-        qc.setQueryData<Entity>(qk.entity(id), (e) => e && renamed(e, prev))
-      }
-      if (ctx?.prevListName !== undefined) {
-        const prev = ctx.prevListName
-        qc.setQueryData<Entity[]>(qk.entities(), (list) => list?.map((e) => (e.id === id ? renamed(e, prev) : e)))
-      }
+      const prev = ctx?.prevName
+      if (prev !== undefined) replica.patch(id, (e) => renamed(e, prev))
     },
   })
   return useCallback((id: string, name: string) => mutate({ id, name }), [mutate])
@@ -144,14 +145,13 @@ export function propertyValueOf(entity: Entity, propertyId: string): PropertyVal
 
 // Write one property (`null` clears it) through EntityService.SetEntityProperty, so
 // edits to different properties of the same entity don't overwrite each other.
-// Optimistic on both caches, applied to the entity as currently cached (not the
-// caller's possibly stale copy) so quick successive edits all show. On error
-// only this property is restored, on the current cached entity: restoring a
-// whole-entity snapshot would undo a concurrent edit to another property. On
-// success the server's entity replaces the cached one, carrying anything the
-// server derived from the write (e.g. a moved daily note's new name).
+// Optimistic, applied to the entity as currently cached (not the caller's
+// possibly stale copy) so quick successive edits all show. On error only this
+// property is restored, on the current cached entity: restoring a whole-entity
+// snapshot would undo a concurrent edit to another property. On success the
+// server's entity replaces the cached one, carrying anything the server derived
+// from the write (e.g. a moved daily note's new name).
 export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
-  const qc = useQueryClient()
   // Latest callback without re-creating the mutation on every render.
   const onErrorRef = useRef(onError)
   useEffect(() => {
@@ -166,31 +166,17 @@ export function useSetProperty({ onError }: UseSetPropertyOptions = {}) {
           value: value === null ? undefined : createMessage(PropertyValueSchema, { value }),
         }),
       ),
-    onMutate: async ({ entity, propertyId, value }) => {
-      // The list is never refetched (Watch feeds it), so only a deep link's GetEntity can be in flight.
-      await qc.cancelQueries({ queryKey: qk.entity(entity.id) })
-      const cachedEntity = qc.getQueryData<Entity>(qk.entity(entity.id))
-      const cachedListEntity = qc.getQueryData<Entity[]>(qk.entities())?.find((e) => e.id === entity.id)
-      const prevEntityValue = cachedEntity && propertyValueOf(cachedEntity, propertyId)
-      const prevListValue = cachedListEntity && propertyValueOf(cachedListEntity, propertyId)
-      qc.setQueryData<Entity>(qk.entity(entity.id), (e) => e && withProperty(e, propertyId, value))
-      qc.setQueryData<Entity[]>(qk.entities(), (list) =>
-        list?.map((e) => (e.id === entity.id ? withProperty(e, propertyId, value) : e)),
-      )
-      return { prevEntityValue, prevListValue }
+    onMutate: ({ entity, propertyId, value }) => {
+      const cached = getEntity(entity.id)
+      // `null`: the property was absent. `undefined`: nothing cached to restore.
+      const prevValue = cached && propertyValueOf(cached, propertyId)
+      replica.patch(entity.id, (e) => withProperty(e, propertyId, value))
+      return { prevValue }
     },
-    onSuccess: writeEntity,
+    onSuccess: (entity) => replica.upsert(entity),
     onError: (err, { entity, propertyId }, ctx) => {
-      if (ctx?.prevEntityValue !== undefined) {
-        const prev = ctx.prevEntityValue
-        qc.setQueryData<Entity>(qk.entity(entity.id), (e) => e && withProperty(e, propertyId, prev))
-      }
-      if (ctx?.prevListValue !== undefined) {
-        const prev = ctx.prevListValue
-        qc.setQueryData<Entity[]>(qk.entities(), (list) =>
-          list?.map((e) => (e.id === entity.id ? withProperty(e, propertyId, prev) : e)),
-        )
-      }
+      const prev = ctx?.prevValue
+      if (prev !== undefined) replica.patch(entity.id, (e) => withProperty(e, propertyId, prev))
       onErrorRef.current?.(err, entity)
     },
   })
@@ -276,7 +262,11 @@ function withProperty(entity: Entity, propertyId: string, value: PropertyValue['
 // --- Imperative (non-hook) helpers: delete, the editor mention flow, cleanup ---
 
 export function getEntitiesSnapshot(): Entity[] {
-  return queryClient.getQueryData(entitiesQuery.queryKey) ?? []
+  return useReplica.getState().all
+}
+
+export function getEntity(id: string): Entity | undefined {
+  return useReplica.getState().byId.get(id)
 }
 
 export async function getOrCreateEntityForMention(
@@ -288,7 +278,7 @@ export async function getOrCreateEntityForMention(
   return { id: entity.id, name: entity.name, structureType: entity.structureType }
 }
 
-// The one delete path: fire-and-forget, dropped from the caches once the server confirms.
+// The one delete path: fire-and-forget, dropped from the replica once the server confirms.
 export function deleteEntity(id: string): void {
   void entityClient
     .deleteEntity({ id })

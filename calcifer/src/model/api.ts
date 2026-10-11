@@ -11,8 +11,10 @@ export const entityClient = createClient(EntityService, transport)
 export const richTextClient = createClient(RichTextService, transport)
 export const structureClient = createClient(StructureService, transport)
 
-// Single app-wide cache. Exported so the Watch replica (`model/sync.ts`) and
-// imperative (non-hook) call sites can read/update it directly.
+// Single app-wide cache for requested data (structures, rich-text docs) and
+// mutations. Exported so the Watch loop (`model/sync.ts`) and imperative
+// (non-hook) call sites can read/update it directly. Entities live in
+// `model/replica.ts` instead.
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, retry: false },
@@ -21,10 +23,6 @@ export const queryClient = new QueryClient({
 
 export const qk = {
   structures: () => ['structures'] as const,
-  entities: () => ['entities', 'all'] as const,
-  entity: (id: string) => ['entity', id] as const,
-  // Prefix of every `entity(id)` key, for matching them all.
-  everyEntity: () => ['entity'] as const,
   richtext: (entityId: string, propertyId: string) => ['richtext', entityId, propertyId] as const,
   // Prefix of every `richtext(...)` key, for matching them all.
   everyRichtext: () => ['richtext'] as const,

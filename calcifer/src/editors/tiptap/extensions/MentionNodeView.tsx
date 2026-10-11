@@ -12,9 +12,9 @@ export function MentionNodeView({ node, extension }: NodeViewProps) {
 
   // Render the live entity name so renames propagate to every chip. The stored
   // `label` attr is the fallback while loading, and for targets since deleted.
-  const { data: entity, isError } = useEntity(id)
+  const { entity, status } = useEntity(id)
   const liveName = entity?.name
-  const missing = Boolean(id) && isError
+  const missing = Boolean(id) && status === 'missing'
   const className = (extension.options.HTMLAttributes?.class as string | undefined) ?? 'mention'
 
   const handleClick = () => {
