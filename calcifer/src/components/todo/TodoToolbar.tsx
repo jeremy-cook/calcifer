@@ -2,7 +2,7 @@ import { SortAscendingIcon, SortDescendingIcon } from '@phosphor-icons/react'
 import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group'
 import { Toggle } from '~/components/ui/toggle'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
-import { useAllEntities } from '~/model/store'
+import { useEntitiesOfType } from '~/model/store'
 import { useStructure } from '~/model/structures'
 import {
   TODO_DUE_FILTER_OPTIONS,
@@ -23,9 +23,8 @@ export interface TodoToolbarProps {
 const NONE = '__none__'
 
 export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
-  const entities = useAllEntities()
   const todo = useStructure('Todo')
-  const tags = entities.filter((e) => e.structureType === 'Tag')
+  const tags = useEntitiesOfType('Tag')
   const statusFilterOptions = todoStatusFilterOptions(todo)
   const priorityOptions = todoPriorityOptions(todo)
 

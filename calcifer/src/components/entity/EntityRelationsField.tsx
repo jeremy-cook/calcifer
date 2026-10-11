@@ -3,7 +3,7 @@ import type { EntityRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { EntityPicker } from '~/components/entity/EntityPicker'
-import { useAllEntities, type RelationTarget } from '~/model/store'
+import { useEntitiesByIds, type RelationTarget } from '~/model/store'
 
 export interface EntityRelationsFieldProps {
   // The entity being edited, left out of the picker's candidates.
@@ -16,10 +16,10 @@ export interface EntityRelationsFieldProps {
 }
 
 export function EntityRelationsField({ selfId, label, targetStructure, refs, onChange }: EntityRelationsFieldProps) {
-  const entities = useAllEntities()
+  const entities = useEntitiesByIds(refs.map((ref) => ref.id))
 
   const resolvedRefs = refs
-    .map((ref) => ({ ref, entity: entities.find((e) => e.id === ref.id) }))
+    .map((ref, i) => ({ ref, entity: entities[i] }))
     .filter((r): r is { ref: EntityRef; entity: NonNullable<typeof r.entity> } => r.entity !== undefined)
 
   const removeRef = (id: string) => {

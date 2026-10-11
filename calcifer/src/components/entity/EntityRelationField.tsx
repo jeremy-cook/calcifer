@@ -2,7 +2,7 @@ import { XIcon } from '@phosphor-icons/react'
 import type { EntityRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { Button } from '~/components/ui/button'
 import { EntityPicker } from '~/components/entity/EntityPicker'
-import { useAllEntities, type RelationTarget } from '~/model/store'
+import { useEntity, type RelationTarget } from '~/model/store'
 
 export interface EntityRelationFieldProps {
   // The entity being edited, left out of the picker's candidates.
@@ -16,9 +16,8 @@ export interface EntityRelationFieldProps {
 
 // A single-target relation: the target's name opens the picker to replace it.
 export function EntityRelationField({ selfId, label, targetStructure, target, onChange }: EntityRelationFieldProps) {
-  const entities = useAllEntities()
   // A target with no entity (deleted) shows as unset.
-  const targetEntity = target && entities.find((e) => e.id === target.id)
+  const { entity: targetEntity } = useEntity(target?.id ?? '')
   const excludeIds = target ? [selfId, target.id] : [selfId]
 
   return (

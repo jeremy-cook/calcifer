@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { EntityDateField } from '~/components/entity/EntityDateField'
 import { isAlreadyExists } from '~/model/api'
-import { dailyNoteByDate, dailyNoteDate, useAllEntities, usePropertyWriters, type Entity } from '~/model/store'
+import { dailyNoteByDate, dailyNoteDate, getEntitiesSnapshot, usePropertyWriters, type Entity } from '~/model/store'
 
 export interface DailyNoteDateFieldProps {
   entity: Entity
@@ -10,7 +10,6 @@ export interface DailyNoteDateFieldProps {
 // A day can hold only one daily note. Moving one is a plain `date` write; the
 // server renames it for the new day, and the saved entity carries the new name.
 export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
-  const entities = useAllEntities()
   // Keyed by entity id so an error doesn't follow the field to another note.
   const [serverError, setServerError] = useState<{ id: string; message: string } | null>(null)
   // validate uses the cached list, which can be stale; the server's unique
@@ -27,7 +26,7 @@ export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
   if (!iso) return null
 
   const validate = (next: string) => {
-    const occupant = dailyNoteByDate(entities, next)
+    const occupant = dailyNoteByDate(getEntitiesSnapshot(), next)
     return occupant && occupant.id !== entity.id ? 'A daily note already exists for that day.' : null
   }
 

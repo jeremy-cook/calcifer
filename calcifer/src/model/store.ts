@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ConnectError } from '@connectrpc/connect'
 import { create as createMessage } from '@bufbuild/protobuf'
 import { useMutation } from '@tanstack/react-query'
+import { useShallow } from 'zustand/react/shallow'
 import {
   EntityRefListSchema,
   EntityRefSchema,
@@ -37,6 +38,18 @@ export function useAllEntities(): Entity[] {
 
 export function useEntitiesById(): ReadonlyMap<string, Entity> {
   return useReplica((s) => s.byId)
+}
+
+// The entities of one structure, in replica order. Re-renders only when one of
+// them changes, not on every write to the replica.
+export function useEntitiesOfType(structureType: string): Entity[] {
+  return useReplica(useShallow((s) => s.all.filter((e) => e.structureType === structureType)))
+}
+
+// Each id's entity, undefined where the replica doesn't hold it. Re-renders only
+// when one of them changes.
+export function useEntitiesByIds(ids: readonly string[]): (Entity | undefined)[] {
+  return useReplica(useShallow((s) => ids.map((id) => s.byId.get(id))))
 }
 
 // False until the first Watch snapshot has arrived.

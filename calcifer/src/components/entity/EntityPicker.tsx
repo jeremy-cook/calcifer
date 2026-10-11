@@ -19,11 +19,6 @@ export interface EntityPickerProps {
 export function EntityPicker({ targetStructure, excludeIds, onPick, children }: EntityPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const entities = useAllEntities()
-
-  const candidates = entities.filter(
-    (e) => (!targetStructure || e.structureType === targetStructure) && !excludeIds.includes(e.id),
-  )
 
   const pick = (target: RelationTarget) => {
     onPick(target)
@@ -31,17 +26,12 @@ export function EntityPicker({ targetStructure, excludeIds, onPick, children }: 
     setOpen(false)
   }
 
-  const canCreate = hasUniqueNames(targetStructure) && query.trim().length > 0
-
   const handleCreate = async () => {
     const name = query.trim()
     if (!name) return
     const entity = await getOrCreateEntityForMention(targetStructure, name)
     pick({ id: entity.id, structureType: entity.structureType })
   }
-
-  const itemClassName =
-    'flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground'
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -55,31 +45,64 @@ export function EntityPicker({ targetStructure, excludeIds, onPick, children }: 
             placeholder="Search…"
             className="border-b border-border bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
-          <Command.List className="max-h-56 overflow-y-auto p-1">
-            {candidates
-              .filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase()))
-              .map((e) => (
-                <Command.Item
-                  key={e.id}
-                  value={e.id}
-                  onSelect={() => pick({ id: e.id, structureType: e.structureType })}
-                  className={itemClassName}
-                >
-                  {e.name}
-                </Command.Item>
-              ))}
-            {canCreate && (
-              <Command.Item value={`__create__${query}`} onSelect={() => void handleCreate()} className={itemClassName}>
-                <PlusIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                Create &quot;{query.trim()}&quot;
-              </Command.Item>
-            )}
-            {candidates.length === 0 && !canCreate && (
-              <Command.Empty className="px-2 py-1.5 text-sm text-muted-foreground">No results</Command.Empty>
-            )}
-          </Command.List>
+          <EntityPickerList
+            targetStructure={targetStructure}
+            excludeIds={excludeIds}
+            query={query}
+            onPick={pick}
+            onCreate={() => void handleCreate()}
+          />
         </Command>
       </PopoverContent>
     </Popover>
+  )
+}
+
+interface EntityPickerListProps {
+  targetStructure: string
+  excludeIds: readonly string[]
+  query: string
+  onPick: (target: RelationTarget) => void
+  onCreate: () => void
+}
+
+// The picker's results. Mounted only while the popover is open, so a closed
+// picker doesn't re-render on every write to the replica.
+function EntityPickerList({ targetStructure, excludeIds, query, onPick, onCreate }: EntityPickerListProps) {
+  const entities = useAllEntities()
+
+  const candidates = entities.filter(
+    (e) => (!targetStructure || e.structureType === targetStructure) && !excludeIds.includes(e.id),
+  )
+
+  const canCreate = hasUniqueNames(targetStructure) && query.trim().length > 0
+
+  const itemClassName =
+    'flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground'
+
+  return (
+    <Command.List className="max-h-56 overflow-y-auto p-1">
+      {candidates
+        .filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase()))
+        .map((e) => (
+          <Command.Item
+            key={e.id}
+            value={e.id}
+            onSelect={() => onPick({ id: e.id, structureType: e.structureType })}
+            className={itemClassName}
+          >
+            {e.name}
+          </Command.Item>
+        ))}
+      {canCreate && (
+        <Command.Item value={`__create__${query}`} onSelect={onCreate} className={itemClassName}>
+          <PlusIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          Create &quot;{query.trim()}&quot;
+        </Command.Item>
+      )}
+      {candidates.length === 0 && !canCreate && (
+        <Command.Empty className="px-2 py-1.5 text-sm text-muted-foreground">No results</Command.Empty>
+      )}
+    </Command.List>
   )
 }

@@ -6,7 +6,16 @@ import { create } from '@bufbuild/protobuf'
 import { EntitySchema, PropertyValueSchema, type Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { entityClient, queryClient } from '~/model/api'
 import { replica, resetTombstones, useReplica } from '~/model/replica'
-import { getEntity, propertyValueOf, useAllEntities, useEntity, useRenameEntity, useSetProperty } from '~/model/store'
+import {
+  getEntity,
+  propertyValueOf,
+  useAllEntities,
+  useEntitiesByIds,
+  useEntitiesOfType,
+  useEntity,
+  useRenameEntity,
+  useSetProperty,
+} from '~/model/store'
 import { applyWatchEvent } from '~/model/sync'
 import { entity, watch } from '~/model/testing'
 
@@ -93,6 +102,41 @@ describe('useAllEntities', () => {
     act(() => applyWatchEvent(watch.upserted(entity('a'))))
     act(() => applyWatchEvent(watch.snapshot(entity('a'), entity('b'))))
     expect(renders).toBe(1)
+  })
+})
+
+describe('useEntitiesOfType', () => {
+  it('re-renders only when an entity of that type changes', () => {
+    const tag = (id: string, name = id, updatedAtMs = 1_000) =>
+      create(EntitySchema, { ...entity(id, name, updatedAtMs), structureType: 'Tag' })
+    applyWatchEvent(watch.snapshot(tag('t1'), entity('a')))
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useEntitiesOfType('Tag')
+    })
+    act(() => applyWatchEvent(watch.upserted(entity('a', 'edited', 2_000))))
+    expect(renders).toBe(1)
+    act(() => applyWatchEvent(watch.upserted(tag('t2'))))
+    expect(renders).toBe(2)
+    expect(result.current.map((e) => e.id)).toEqual(['t1', 't2'])
+  })
+})
+
+describe('useEntitiesByIds', () => {
+  it('re-renders only when one of its ids changes', () => {
+    applyWatchEvent(watch.snapshot(entity('a'), entity('b')))
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useEntitiesByIds(['a', 'missing'])
+    })
+    expect(result.current.map((e) => e?.id)).toEqual(['a', undefined])
+    act(() => applyWatchEvent(watch.upserted(entity('b', 'edited', 2_000))))
+    expect(renders).toBe(1)
+    act(() => applyWatchEvent(watch.upserted(entity('a', 'edited', 2_000))))
+    expect(renders).toBe(2)
+    expect(result.current[0]?.name).toBe('edited')
   })
 })
 
