@@ -7,6 +7,15 @@ export function timestampMsOrZero(ts: Timestamp | undefined): number {
   return ts ? timestampMs(ts) : 0
 }
 
+// Orders two proto Timestamps. Unset reads as the epoch, which is what the
+// server reports for "nothing saved".
+export function compareTimestamps(a: Timestamp | undefined, b: Timestamp | undefined): number {
+  const as = a?.seconds ?? 0n
+  const bs = b?.seconds ?? 0n
+  if (as !== bs) return as < bs ? -1 : 1
+  return (a?.nanos ?? 0) - (b?.nanos ?? 0)
+}
+
 export function todayIso(): string {
   return isoFromDate(new Date())
 }

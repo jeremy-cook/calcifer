@@ -5,6 +5,7 @@ import { Code, ConnectError } from '@connectrpc/connect'
 import { useQuery } from '@tanstack/react-query'
 import { RichTextRefSchema, type RichText, type RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { qk, queryClient, richTextClient } from '~/model/api'
+import { compareTimestamps } from '~/model/dates'
 
 // The address of one rich-text doc: an entity and one of its structure's
 // declared rich-text property ids (see `richTextPropertyIds`). Entities store
@@ -43,14 +44,6 @@ export function isRichTextEmpty(doc: string | undefined): boolean {
   const only = content[0]
   if (only.type !== 'paragraph') return false
   return !only.content || only.content.length === 0
-}
-
-// Unset reads as the epoch, which is what the server reports for "nothing saved".
-function compareTimestamps(a: Timestamp | undefined, b: Timestamp | undefined): number {
-  const as = a?.seconds ?? 0n
-  const bs = b?.seconds ?? 0n
-  if (as !== bs) return as < bs ? -1 : 1
-  return (a?.nanos ?? 0) - (b?.nanos ?? 0)
 }
 
 export function isNewerRichText(a: Timestamp | undefined, b: Timestamp | undefined): boolean {
