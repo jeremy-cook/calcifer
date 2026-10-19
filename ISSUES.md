@@ -145,29 +145,9 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ---
 
-### I-65 · Remounting the calendar's daily note section prunes the note on screen · medium · reproduced
-
-**Where:** `calcifer/src/components/calendar/DailyNoteSection.tsx` (the prune effect's cleanup)
-
-**Problem:** The prune runs from the cleanup of an effect keyed on `iso`, which is meant
-to mean "leaving this day". A cleanup also runs on any unmount, including StrictMode's
-dev-only unmount and remount, so an empty daily note can be deleted while its day is
-still showing. Observed 2026-10-11 on a scratch DB in dev: opening `/calendar` in a fresh
-tab deleted today's empty daily note. Not confirmed how the note was in the replica
-by the time StrictMode's cleanup ran. It only deletes empty notes, but it deletes data,
-and a real remount in production (a route or key change that keeps the same day) would
-do the same.
-
-**Fix:** Prune on a change of day, not on unmount: e.g. track the previous `iso` and prune
-it when `iso` changes, plus on a real navigation away from the calendar.
-
-**Done when:** opening `/calendar` in dev keeps today's empty daily note, and moving to
-another day or leaving the calendar still prunes it.
-
----
-
 ## Resolved
 
+- **I-65 · Remounting the calendar's daily note section prunes the note on screen.** Fixed 2026-10-18. The prune moved to `useDailyNotePrune` (`model/dailyNotes.ts`): a section's unmount schedules it for the next macrotask, and a mount for the same day cancels it, so StrictMode's remount (or any remount that keeps the day) isn't leaving. It still re-reads the server's doc and waits for that doc's outstanding saves (I-35, I-39); that macrotask now replaces the one inside `deleteEntityIfRichTextEmpty`. Covered by `DailyNoteSection.test.tsx`, which renders the section under `<StrictMode>` (the remount test failed before the fix). Observed 2026-10-18 in dev against a scratch DB: opening `/calendar` in a fresh tab kept today's empty note (main's code deleted it in the same setup); an empty note was pruned on moving to another day and on navigating to To-dos; a note with text survived both; text typed and left at once (by a day change or a route change) was kept.
 - **I-40 · Entity write transactions that read first fail with `Internal` under a race.** Fixed 2026-09-29. Every server write transaction opens through `db::begin_write` (`BEGIN IMMEDIATE`): `rename_entity`, `set_entity_property`, `delete_entity`, `persist_new_entity`, `PutRichText` and the embed worker's chunk replace. A contending writer now waits on `busy_timeout` instead of failing at once. Covered by `racing_set_property_writes_both_succeed` (it failed with `Internal: database is locked` before the fix; passed 20 repeated runs after). Observed 2026-09-29: `test:tools` passed on the first run against a fresh scratch server, with no embed worker warnings; before the fix the same first run had failed.
 - **I-64 · pnpm ignores `@bufbuild/buf`'s build script.** Fixed 2026-09-29. `calcifer/pnpm-workspace.yaml` and `mcp-server/pnpm-workspace.yaml` list `@bufbuild/buf` and `esbuild` (and `msw` in `calcifer`) under `ignoredBuiltDependencies`: their scripts only link a binary the optional platform package already provides. A clean `pnpm install` in each package prints no warning, and `pnpm proto:gen` leaves the stubs unchanged. An existing `node_modules` keeps replaying the old warning (even with `--force`) until it's removed and reinstalled.
 - **I-63 · ADR 2 says the TS consumers pin different `@bufbuild/protobuf` versions.** Fixed 2026-09-29. The Consequences bullet now says both consumers pin the same exact versions and generate with a local plugin; only the separate stubs remain.
