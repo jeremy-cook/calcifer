@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT facet AS \"facet!\" FROM entity_facets WHERE entity_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "facet!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entity_facets",
+            "name": "facet"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "220c29ab19cba901d161bfbe83d8410b6ef140b862b19d82e2509f42474190c9"
+}

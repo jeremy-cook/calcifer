@@ -90,10 +90,17 @@ pub(crate) fn tag(name: &str) -> CreateEntityRequest {
     create_request("Tag", name)
 }
 
+/// `req` with `facets` attached on create, e.g. `with_facets(note("Ship"), &["todo"])`.
+pub(crate) fn with_facets(mut req: CreateEntityRequest, facets: &[&str]) -> CreateEntityRequest {
+    req.facets = facets.iter().map(|f| f.to_string()).collect();
+    req
+}
+
 fn create_request(structure_type: &str, name: &str) -> CreateEntityRequest {
     CreateEntityRequest {
         structure_type: structure_type.to_string(),
         name: Some(name.to_string()),
         properties: Default::default(),
+        facets: vec![],
     }
 }

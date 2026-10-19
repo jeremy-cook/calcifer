@@ -11,15 +11,19 @@ use crate::structures::{self, relation_properties};
 /// Each existing target is checked by `check_relation_targets` first, so a bad
 /// ref fails the whole write.
 ///
-/// Iterates the structure's *declared* relation properties as well as any present
-/// on the entity, so a relation property that was removed or emptied still has its
-/// old link rows cleared (otherwise the target keeps a stale backlink).
+/// Iterates the structure's and the attached facets' *declared* relation
+/// properties as well as any present on the entity, so a relation property that
+/// was removed or emptied still has its old link rows cleared (otherwise the
+/// target keeps a stale backlink).
 pub(crate) async fn sync_relation_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     entity: &Entity,
     now: i64,
 ) -> Result<(), AppError> {
     let mut property_ids: Vec<&str> = relation_properties(&entity.structure_type);
+    for facet in entity.facets.iter().filter_map(|f| structures::facet(f)) {
+        property_ids.extend(structures::facet_relation_properties(facet));
+    }
     // Ad-hoc relation properties in id order, so the map's order doesn't leak.
     let mut ad_hoc: Vec<&str> = entity
         .properties
@@ -83,8 +87,9 @@ pub(crate) async fn sync_relation_property(
 /// (I-2) and return them as link targets carrying that real type (one read per
 /// ref), so the stored value and its links never disagree. Rejects a ref whose
 /// claimed type (when non-empty) isn't the target's, or whose target isn't the
-/// property's declared `target_structure`. Ad-hoc properties have no declared
-/// target to check. Refs to ids with no `entities` row are dropped, not
+/// property's declared `target_structure` (a structure property, or a facet
+/// property by its namespace). Ad-hoc properties have no declared target to
+/// check. Refs to ids with no `entities` row are dropped, not
 /// rejected: a deleted target stays in other entities' stored values, and
 /// rejecting it would block every later write of those relation values.
 async fn check_relation_targets(
@@ -93,8 +98,12 @@ async fn check_relation_targets(
     property_id: &str,
     refs: &[&EntityRef],
 ) -> Result<Vec<LinkTarget>, AppError> {
-    let expected =
-        structures::property(structure_type, property_id).and_then(|def| def.target_structure);
+    let expected = structures::property(structure_type, property_id)
+        .or_else(|| {
+            let facet = structures::facet_of_property(property_id)?;
+            facet.properties.iter().find(|p| p.id == property_id)
+        })
+        .and_then(|def| def.target_structure);
     let mut targets = Vec::with_capacity(refs.len());
     for r in refs {
         let actual = sqlx::query_scalar!("SELECT structure_type FROM entities WHERE id = ?", r.id)

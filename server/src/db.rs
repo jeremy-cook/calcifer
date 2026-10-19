@@ -58,3 +58,50 @@ pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {
     sqlx::migrate!().run(&pool).await?;
     Ok(pool)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::test_support::memory_pool;
+
+    #[tokio::test]
+    async fn entity_facets_cascades_from_entities() {
+        let pool = memory_pool().await;
+        let (table, on_delete): (String, String) = sqlx::query_as(
+            "SELECT \"table\", on_delete FROM pragma_foreign_key_list('entity_facets')",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("entity_facets has a foreign key");
+        assert_eq!(
+            (table.as_str(), on_delete.as_str()),
+            ("entities", "CASCADE")
+        );
+
+        sqlx::query(
+            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+             VALUES ('e1', 'Note', 'Ship', 0, 0)",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert entity");
+        sqlx::query("INSERT INTO entity_facets (entity_id, facet) VALUES ('e1', 'todo')")
+            .execute(&pool)
+            .await
+            .expect("insert facet");
+        let duplicate =
+            sqlx::query("INSERT INTO entity_facets (entity_id, facet) VALUES ('e1', 'todo')")
+                .execute(&pool)
+                .await;
+        assert!(duplicate.is_err(), "(entity_id, facet) is the primary key");
+
+        sqlx::query("DELETE FROM entities WHERE id = 'e1'")
+            .execute(&pool)
+            .await
+            .expect("delete entity");
+        let left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entity_facets")
+            .fetch_one(&pool)
+            .await
+            .expect("count");
+        assert_eq!(left, 0);
+    }
+}

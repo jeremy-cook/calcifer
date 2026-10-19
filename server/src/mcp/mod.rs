@@ -442,6 +442,7 @@ mod tests {
                 structure_type: structure_type.into(),
                 name: Some(name.into()),
                 properties: Default::default(),
+                facets: vec![],
             };
             self.entity.create_entity(Request::new(req)).await.unwrap();
         }

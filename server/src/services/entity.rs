@@ -12,15 +12,15 @@ use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
-    resolve_entity_request, watch_entities_response, Backlink, CreateEntityRequest,
-    CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse, Entity, EntityRef,
-    EntitySnapshot, GetEntityRequest, GetEntityResponse, LinkRef, ListBacklinksRequest,
-    ListBacklinksResponse, ListEntitiesRequest, ListEntitiesResponse, PropertyValue,
-    RenameEntityRequest, RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse,
-    SetEntityPropertyRequest, SetEntityPropertyResponse, WatchEntitiesRequest,
-    WatchEntitiesResponse,
+    resolve_entity_request, watch_entities_response, AttachFacetRequest, AttachFacetResponse,
+    Backlink, CreateEntityRequest, CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse,
+    DetachFacetRequest, DetachFacetResponse, Entity, EntityRef, EntitySnapshot, GetEntityRequest,
+    GetEntityResponse, LinkRef, ListBacklinksRequest, ListBacklinksResponse, ListEntitiesRequest,
+    ListEntitiesResponse, PropertyValue, RenameEntityRequest, RenameEntityResponse,
+    ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
+    SetEntityPropertyResponse, WatchEntitiesRequest, WatchEntitiesResponse,
 };
-use crate::structures::{self, fold_name, KeyDef, KeySource, PropertyKind};
+use crate::structures::{self, fold_name, FacetDef, KeyDef, KeySource, PropertyKind};
 use crate::watch::WatchHub;
 
 pub struct EntityService {
@@ -39,7 +39,8 @@ impl EntityService {
     /// Create and Resolve. A new entity has no content, so no content-derived
     /// links or referenced dates: those are `RichTextService.PutRichText`'s (ADR 3).
     /// Every key the structure declares is written too, so a taken one is
-    /// `AlreadyExists` (see `map_unique_violation`).
+    /// `AlreadyExists` (see `map_unique_violation`), and so is an
+    /// `entity_facets` row per attached facet.
     async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, Status> {
         let now = chrono::Utc::now().timestamp_millis();
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
@@ -55,6 +56,16 @@ impl EntityService {
         .execute(&mut *tx)
         .await
         .map_err(AppError::from)?;
+        for facet in &entity.facets {
+            sqlx::query!(
+                "INSERT INTO entity_facets (entity_id, facet) VALUES (?, ?)",
+                entity.id,
+                facet,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        }
         self.replace_properties(&mut tx, entity).await?;
         for def in declared_keys(&entity.structure_type) {
             let value = key_value(def.source, &entity.name, &entity.properties);
@@ -192,7 +203,7 @@ impl EntityService {
             )));
         }
 
-        let entity = new_entity(structure_type, Some(name), HashMap::new());
+        let entity = new_entity(structure_type, Some(name), HashMap::new(), &[]);
         let saved = self.persist_new_entity(&entity).await?;
         Ok(self.created(saved))
     }
@@ -233,7 +244,7 @@ impl EntityService {
             return Err(Status::not_found(format!("DailyNote for {date}")));
         }
 
-        let entity = new_entity("DailyNote", None, date_properties(date));
+        let entity = new_entity("DailyNote", None, date_properties(date), &[]);
         let saved = self.persist_new_entity(&entity).await?;
         Ok(self.created(saved))
     }
@@ -437,6 +448,14 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
     .fetch_all(pool)
     .await?;
 
+    let mut facets = sqlx::query_scalar!(
+        r#"SELECT facet AS "facet!" FROM entity_facets WHERE entity_id = ? ORDER BY facet"#,
+        id
+    )
+    .fetch_all(pool)
+    .await?;
+    sort_facets(&mut facets);
+
     Ok(Entity {
         id: row.id,
         structure_type: row.structure_type,
@@ -446,7 +465,20 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
         referenced_dates,
         created_at: Some(ts_from_millis(row.created_at)),
         updated_at: Some(ts_from_millis(row.updated_at)),
+        facets,
     })
+}
+
+/// Put facet ids in registry order (`structures::FACETS`). An id missing from
+/// the registry is kept, after the known ones, in id order.
+fn sort_facets(facets: &mut [String]) {
+    facets.sort_by_cached_key(|f| {
+        let rank = structures::FACETS
+            .iter()
+            .position(|d| d.id == f)
+            .unwrap_or(usize::MAX);
+        (rank, f.clone())
+    });
 }
 
 /// An `entities` row, typed so both filter branches of `load_entities` share it.
@@ -459,7 +491,7 @@ struct EntityRow {
 }
 
 /// Hydrate every entity, or every entity of `structure_type`, most recently
-/// updated first (ties by id), in four queries however many there are. Returns
+/// updated first (ties by id), in five queries however many there are. Returns
 /// what `load_entity` returns for each, field for field: both order links by
 /// `link_id` and referenced dates by `iso_date` explicitly (I-48).
 pub(crate) async fn load_entities(
@@ -469,7 +501,7 @@ pub(crate) async fn load_entities(
     load_entities_where(pool, structure_type, None).await
 }
 
-/// Hydrate the entities whose ids are in `ids`, as `load_entities` does, in four
+/// Hydrate the entities whose ids are in `ids`, as `load_entities` does, in five
 /// queries. Ids with no entity are left out; the result is most recently updated
 /// first, not in `ids` order.
 pub(crate) async fn load_entities_by_id(
@@ -543,6 +575,7 @@ async fn load_entities_where(
             referenced_dates: vec![],
             created_at: Some(ts_from_millis(row.created_at)),
             updated_at: Some(ts_from_millis(row.updated_at)),
+            facets: vec![],
         })
         .collect();
     let index: HashMap<String, usize> = entities
@@ -620,6 +653,28 @@ async fn load_entities_where(
             continue;
         };
         entities[i].referenced_dates.push(r.iso_date);
+    }
+
+    let facet_rows = sqlx::query!(
+        r#"SELECT entity_id AS "entity_id!", facet AS "facet!"
+           FROM entity_facets
+           WHERE entity_id IN (SELECT id FROM entities
+                               WHERE (?1 IS NULL OR structure_type = ?1)
+                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))
+           ORDER BY entity_id, facet"#,
+        structure_type,
+        ids_json
+    )
+    .fetch_all(pool)
+    .await?;
+    for r in facet_rows {
+        let Some(&i) = index.get(&r.entity_id) else {
+            continue;
+        };
+        entities[i].facets.push(r.facet);
+    }
+    for entity in &mut entities {
+        sort_facets(&mut entity.facets);
     }
 
     Ok(entities)
@@ -819,8 +874,14 @@ async fn set_key(
 /// Check every property of an entity against its structure. See
 /// `validate_property`.
 fn validate_properties(entity: &Entity) -> Result<(), AppError> {
+    let facets: Vec<&str> = entity.facets.iter().map(String::as_str).collect();
     for (property_id, value) in &entity.properties {
-        validate_property(&entity.structure_type, property_id, value.value.as_ref())?;
+        validate_property(
+            &entity.structure_type,
+            &facets,
+            property_id,
+            value.value.as_ref(),
+        )?;
     }
     Ok(())
 }
@@ -836,8 +897,15 @@ fn validate_properties(entity: &Entity) -> Result<(), AppError> {
 /// schema and pass unchecked. Any `date` value, declared or not and whatever
 /// the structure, must be an ISO day (I-52). Shared by Create and Resolve (via
 /// `validate_properties`) and SetProperty.
+///
+/// `facets` are the entity's attached facets (ADR 11): a facet property is
+/// declared only while its facet is attached, and a value on an id in a
+/// registered facet's namespace (`todo.status`) whose facet isn't attached is
+/// `FailedPrecondition` (D6). Callers don't validate a clear, so clearing one
+/// stays allowed.
 fn validate_property(
     structure_type: &str,
+    facets: &[&str],
     property_id: &str,
     value: Option<&property_value::Value>,
 ) -> Result<(), AppError> {
@@ -848,10 +916,18 @@ fn validate_property(
             )));
         }
     }
+    if let Some(facet) = structures::facet_of_property(property_id) {
+        if value.is_some() && !facets.contains(&facet.id) {
+            return Err(AppError::FailedPrecondition(format!(
+                "attach the {} facet before setting {property_id}",
+                facet.id
+            )));
+        }
+    }
     if structures::structure(structure_type).is_none() {
         return Ok(());
     }
-    let Some(def) = structures::property(structure_type, property_id) else {
+    let Some(def) = structures::property_for(structure_type, facets, property_id) else {
         return match value {
             Some(property_value::Value::Select(key)) => Err(AppError::Invalid(format!(
                 "{structure_type}.{property_id} is not a select property (got select {key:?})"
@@ -968,8 +1044,9 @@ fn apply_daily_note_name(entity: &mut Entity) {
 }
 
 /// Build a new, unsaved entity with every server-owned default (ADR 8): a minted
-/// id and each select's default option, with the caller's `properties` laid over
-/// them (the caller wins on the same id). Rich-text properties get no value: their
+/// id, the `facets` (ADR 11, in registry order), and each select's default
+/// option, the structure's and the facets', with the caller's `properties` laid
+/// over them (the caller wins on the same id). Rich-text properties get no value: their
 /// documents are addressed by declared property (I-22), and `validate_property`
 /// rejects a caller value for one on persist. A DailyNote with a date is named for it
 /// (`apply_daily_note_name`); otherwise the name is `name`, or with none the
@@ -979,9 +1056,16 @@ fn new_entity(
     structure_type: &str,
     name: Option<&str>,
     properties: HashMap<String, PropertyValue>,
+    facets: &[&FacetDef],
 ) -> Entity {
     let id = uuid::Uuid::new_v4().to_string();
-    let mut defaults: HashMap<String, PropertyValue> = structures::select_defaults(structure_type)
+    let mut select_defaults = structures::select_defaults(structure_type);
+    for facet in facets {
+        select_defaults.extend(structures::facet_select_defaults(facet));
+    }
+    let mut facets: Vec<String> = facets.iter().map(|f| f.id.to_string()).collect();
+    sort_facets(&mut facets);
+    let mut defaults: HashMap<String, PropertyValue> = select_defaults
         .iter()
         .map(|(pid, default)| {
             let value = PropertyValue {
@@ -1000,6 +1084,7 @@ fn new_entity(
         referenced_dates: vec![],
         created_at: None,
         updated_at: None,
+        facets,
     };
     apply_daily_note_name(&mut entity);
     entity
@@ -1027,6 +1112,59 @@ fn known_structure(structure_type: &str) -> Result<&'static structures::Structur
     structures::structure(structure_type).ok_or_else(|| {
         Status::invalid_argument(format!("unknown structure_type {structure_type:?}"))
     })
+}
+
+/// The registry entry for facet `id`, or `InvalidArgument` for one the registry
+/// doesn't declare.
+fn known_facet(id: &str) -> Result<&'static FacetDef, Status> {
+    structures::facet(id).ok_or_else(|| Status::invalid_argument(format!("unknown facet {id:?}")))
+}
+
+/// `known_facet`, and `FailedPrecondition` unless `structure_type` accepts it
+/// (`StructureDef.facets`). Create and AttachFacet check a facet with this.
+fn accepted_facet(structure_type: &str, id: &str) -> Result<&'static FacetDef, Status> {
+    let facet = known_facet(id)?;
+    let accepts =
+        structures::structure(structure_type).is_some_and(|s| s.facets.contains(&facet.id));
+    if !accepts {
+        return Err(Status::failed_precondition(format!(
+            "a {structure_type} doesn't accept the {} facet",
+            facet.id
+        )));
+    }
+    Ok(facet)
+}
+
+/// The facets attached to `entity_id`, read inside a write transaction.
+async fn attached_facets(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity_id: &str,
+) -> Result<Vec<String>, AppError> {
+    let facets = sqlx::query_scalar!(
+        r#"SELECT facet AS "facet!" FROM entity_facets WHERE entity_id = ?"#,
+        entity_id
+    )
+    .fetch_all(&mut **tx)
+    .await?;
+    Ok(facets)
+}
+
+/// An entity's `structure_type` and attached facets, read inside a write
+/// transaction, or `NotFound`.
+async fn structure_and_facets(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity_id: &str,
+) -> Result<(String, Vec<String>), Status> {
+    let structure_type = sqlx::query_scalar!(
+        "SELECT structure_type FROM entities WHERE id = ?",
+        entity_id
+    )
+    .fetch_optional(&mut **tx)
+    .await
+    .map_err(AppError::from)?
+    .ok_or_else(|| Status::not_found(format!("entity {entity_id}")))?;
+    let facets = attached_facets(tx, entity_id).await?;
+    Ok((structure_type, facets))
 }
 
 #[tonic::async_trait]
@@ -1071,6 +1209,7 @@ impl EntityServiceTrait for EntityService {
             structure_type,
             name,
             properties,
+            facets,
         } = req.into_inner();
         let def = known_structure(&structure_type)?;
         if !def.creatable {
@@ -1078,8 +1217,15 @@ impl EntityServiceTrait for EntityService {
                 "{structure_type} can't be created with CreateEntity; use ResolveEntity to get or create one"
             )));
         }
+        let mut facet_defs: Vec<&FacetDef> = Vec::with_capacity(facets.len());
+        for id in &facets {
+            let facet = accepted_facet(&structure_type, id)?;
+            if !facet_defs.iter().any(|f| f.id == facet.id) {
+                facet_defs.push(facet);
+            }
+        }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
-        let mut entity = new_entity(&structure_type, name.as_deref(), properties);
+        let mut entity = new_entity(&structure_type, name.as_deref(), properties, &facet_defs);
         if name.is_none() && def.unique_names() {
             entity.name = self
                 .free_name(&structure_type, &entity.name)
@@ -1176,18 +1322,12 @@ impl EntityServiceTrait for EntityService {
 
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
 
-        let structure_type = sqlx::query_scalar!(
-            "SELECT structure_type FROM entities WHERE id = ?",
-            entity_id
-        )
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(AppError::from)?
-        .ok_or_else(|| Status::not_found(format!("entity {}", entity_id)))?;
+        let (structure_type, facets) = structure_and_facets(&mut tx, &entity_id).await?;
+        let facets: Vec<&str> = facets.iter().map(String::as_str).collect();
 
-        // Clearing is allowed on any property.
+        // Clearing is allowed on any property, a facet's included (D6).
         if let Some(v) = &value {
-            validate_property(&structure_type, &property_id, v.value.as_ref())
+            validate_property(&structure_type, &facets, &property_id, v.value.as_ref())
                 .map_err(Status::from)?;
         }
 
@@ -1234,10 +1374,12 @@ impl EntityServiceTrait for EntityService {
         // links live under their own source_property_id and aren't touched.
         let value = value.as_ref().and_then(|v| v.value.as_ref());
         let was_relation = is_relation_value(previous.as_ref().and_then(|v| v.value.as_ref()));
-        if structures::relation_properties(&structure_type).contains(&property_id.as_str())
-            || is_relation_value(value)
-            || was_relation
-        {
+        let declared_relation =
+            structures::relation_properties(&structure_type).contains(&property_id.as_str())
+                || facets.iter().filter_map(|f| structures::facet(f)).any(|f| {
+                    structures::facet_relation_properties(f).contains(&property_id.as_str())
+                });
+        if declared_relation || is_relation_value(value) || was_relation {
             sync_relation_property(
                 &mut tx,
                 &entity_id,
@@ -1368,6 +1510,139 @@ impl EntityServiceTrait for EntityService {
                 .publish(watch_entities_response::Event::Upserted(saved));
         }
         Ok(Response::new(DeleteEntityResponse {}))
+    }
+
+    // Attach a facet (ADR 11): its row and its select defaults, in one
+    // transaction. Already attached is a no-op with no write and no event.
+    async fn attach_facet(
+        &self,
+        req: Request<AttachFacetRequest>,
+    ) -> Result<Response<AttachFacetResponse>, Status> {
+        let AttachFacetRequest { entity_id, facet } = req.into_inner();
+        let now = chrono::Utc::now().timestamp_millis();
+
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
+        let (structure_type, attached) = structure_and_facets(&mut tx, &entity_id).await?;
+        let def = accepted_facet(&structure_type, &facet)?;
+        if attached.iter().any(|f| f == def.id) {
+            drop(tx);
+            let entity = self.load_entity(&entity_id).await.map_err(Status::from)?;
+            return Ok(Response::new(AttachFacetResponse {
+                entity: Some(entity),
+            }));
+        }
+
+        sqlx::query!(
+            "INSERT INTO entity_facets (entity_id, facet) VALUES (?, ?)",
+            entity_id,
+            def.id,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        // The defaults don't overwrite a value already stored under the facet's
+        // namespace (none should be: detach deletes them).
+        for (property_id, default) in structures::facet_select_defaults(def) {
+            let value = PropertyValue {
+                value: Some(property_value::Value::Select(default.to_string())),
+            };
+            let blob = prost::Message::encode_to_vec(&value);
+            sqlx::query!(
+                "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
+                 ON CONFLICT (entity_id, property_id) DO NOTHING",
+                entity_id,
+                property_id,
+                blob,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        }
+        sqlx::query!(
+            "UPDATE entities SET updated_at = ? WHERE id = ?",
+            now,
+            entity_id,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        tx.commit().await.map_err(AppError::from)?;
+
+        let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
+        self.hub
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        Ok(Response::new(AttachFacetResponse {
+            entity: Some(saved),
+        }))
+    }
+
+    // Detach a facet (ADR 11): its row, every `<facet>.*` property row and the
+    // links derived from its relation properties, in one transaction. Not
+    // attached is a no-op with no write and no event.
+    async fn detach_facet(
+        &self,
+        req: Request<DetachFacetRequest>,
+    ) -> Result<Response<DetachFacetResponse>, Status> {
+        let DetachFacetRequest { entity_id, facet } = req.into_inner();
+        let now = chrono::Utc::now().timestamp_millis();
+
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
+        let (_, attached) = structure_and_facets(&mut tx, &entity_id).await?;
+        let def = known_facet(&facet)?;
+        if !attached.iter().any(|f| f == def.id) {
+            drop(tx);
+            let entity = self.load_entity(&entity_id).await.map_err(Status::from)?;
+            return Ok(Response::new(DetachFacetResponse {
+                entity: Some(entity),
+            }));
+        }
+
+        sqlx::query!(
+            "DELETE FROM entity_facets WHERE entity_id = ? AND facet = ?",
+            entity_id,
+            def.id,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        // The facet's namespace, `<facet>.`, matched exactly: LIKE would fold
+        // ASCII case and read `_` as a wildcard.
+        let namespace = format!("{}.", def.id);
+        sqlx::query!(
+            "DELETE FROM properties
+             WHERE entity_id = ?1 AND substr(property_id, 1, length(?2)) = ?2",
+            entity_id,
+            namespace,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        for property_id in structures::facet_relation_properties(def) {
+            sqlx::query!(
+                "DELETE FROM links WHERE entity_id = ? AND source_property_id = ?",
+                entity_id,
+                property_id,
+            )
+            .execute(&mut *tx)
+            .await
+            .map_err(AppError::from)?;
+        }
+        sqlx::query!(
+            "UPDATE entities SET updated_at = ? WHERE id = ?",
+            now,
+            entity_id,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        tx.commit().await.map_err(AppError::from)?;
+
+        let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
+        self.hub
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        Ok(Response::new(DetachFacetResponse {
+            entity: Some(saved),
+        }))
     }
 
     async fn resolve_entity(
@@ -1554,7 +1829,7 @@ mod tests {
     use crate::proto::rich_text_service_server::RichTextService as _;
     use crate::proto::{EntityRefList, PutRichTextRequest};
     use crate::test_support::{
-        entity_service, memory_pool, note, richtext_service, tag, todo, ScratchDb,
+        entity_service, memory_pool, note, richtext_service, tag, todo, with_facets, ScratchDb,
     };
     use futures::StreamExt;
 
@@ -1574,6 +1849,7 @@ mod tests {
             structure_type: structure_type.to_string(),
             name: None,
             properties: HashMap::new(),
+            facets: vec![],
         }
     }
 
@@ -2679,6 +2955,7 @@ mod tests {
                     value: Some(property_value::Value::Select("high".to_string())),
                 },
             )]),
+            &[],
         );
 
         assert_eq!(entity.name, "Water plants");
@@ -2706,7 +2983,12 @@ mod tests {
 
     #[test]
     fn new_entity_names_a_daily_note_for_its_date() {
-        let entity = new_entity("DailyNote", Some("Ignored"), date_properties("2026-06-13"));
+        let entity = new_entity(
+            "DailyNote",
+            Some("Ignored"),
+            date_properties("2026-06-13"),
+            &[],
+        );
         assert_eq!(entity.name, "June 13, 2026");
     }
 
@@ -2723,6 +3005,7 @@ mod tests {
                 structure_type: "DailyNote".to_string(),
                 name: None,
                 properties: date_properties("2026-06-13"),
+                facets: vec![],
             },
         )
         .await
@@ -3188,6 +3471,7 @@ mod tests {
         )
         .await;
         let _bare = create(&svc, todo("Bare")).await;
+        let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
         let ideas = create(&svc, note("Ideas")).await;
         let day = daily_note(&svc, "2026-06-15").await;
         // Several links and dates per entity, dates written out of order, so the
@@ -3236,7 +3520,9 @@ mod tests {
             assert_eq!(batched, expected, "filter {filter:?}");
         }
         let all = load_entities(&pool, None).await.expect("load entities");
-        assert_eq!(all.len(), 7);
+        assert_eq!(all.len(), 8);
+        let batched_ship = all.iter().find(|e| e.id == ship.id).expect("ship listed");
+        assert_eq!(batched_ship.facets, vec!["todo".to_string()]);
 
         // By id: only the named entities that exist, each as `load_entity` has it.
         let ids = [
@@ -3589,5 +3875,356 @@ mod tests {
         let next = next_event(&mut stream).await;
         assert_eq!(upserted_id(&next), after.id);
         assert_eq!(next.revision, 6);
+    }
+
+    async fn attach(svc: &EntityService, entity_id: &str, facet: &str) -> Result<Entity, Status> {
+        svc.attach_facet(Request::new(AttachFacetRequest {
+            entity_id: entity_id.to_string(),
+            facet: facet.to_string(),
+        }))
+        .await
+        .map(|r| r.into_inner().entity.expect("entity"))
+    }
+
+    async fn detach(svc: &EntityService, entity_id: &str, facet: &str) -> Result<Entity, Status> {
+        svc.detach_facet(Request::new(DetachFacetRequest {
+            entity_id: entity_id.to_string(),
+            facet: facet.to_string(),
+        }))
+        .await
+        .map(|r| r.into_inner().entity.expect("entity"))
+    }
+
+    async fn facet_row_count(pool: &SqlitePool) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM entity_facets")
+            .fetch_one(pool)
+            .await
+            .expect("count entity_facets")
+    }
+
+    /// The one `upserted` entity on `rx`, and nothing after it.
+    fn only_upsert(rx: &mut broadcast::Receiver<WatchEntitiesResponse>) -> Entity {
+        let event = rx.try_recv().expect("an event");
+        let Some(watch_entities_response::Event::Upserted(entity)) = event.event else {
+            panic!("expected an upsert, got {event:?}");
+        };
+        assert!(rx.try_recv().is_err(), "no further events");
+        entity
+    }
+
+    #[tokio::test]
+    async fn create_with_a_facet_attaches_it_with_defaults() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let created = create(&svc, with_facets(note("Ship"), &["todo"])).await;
+
+        assert_eq!(created.facets, vec!["todo".to_string()]);
+        assert_eq!(
+            select_value(&created, "todo.status").as_deref(),
+            Some("open")
+        );
+        assert_eq!(
+            select_value(&created, "todo.priority").as_deref(),
+            Some("none")
+        );
+        assert!(!created.properties.contains_key("todo.due"));
+        assert_eq!(facet_row_count(&pool).await, 1);
+        assert_eq!(svc.load_entity(&created.id).await.expect("load"), created);
+    }
+
+    #[tokio::test]
+    async fn create_with_a_facet_lets_the_caller_set_its_values() {
+        let svc = entity_service(memory_pool().await);
+
+        let req = with_select(
+            with_facets(note("Ship"), &["todo"]),
+            "todo.priority",
+            "high",
+        );
+        let created = create(&svc, req).await;
+
+        assert_eq!(
+            select_value(&created, "todo.status").as_deref(),
+            Some("open")
+        );
+        assert_eq!(
+            select_value(&created, "todo.priority").as_deref(),
+            Some("high")
+        );
+    }
+
+    #[tokio::test]
+    async fn create_with_a_value_for_an_unrequested_facet_is_failed_precondition() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = try_create(&svc, with_select(note("Ship"), "todo.status", "done"))
+            .await
+            .expect_err("todo isn't requested");
+
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(
+            err.message().contains("attach the todo facet"),
+            "{}",
+            err.message()
+        );
+        assert_eq!(entity_count(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn create_with_an_unknown_facet_is_invalid_argument() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = try_create(&svc, with_facets(note("Ship"), &["chore"]))
+            .await
+            .expect_err("unknown facet");
+
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("chore"), "{}", err.message());
+        assert_eq!(entity_count(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn create_with_a_facet_the_structure_does_not_accept_is_failed_precondition() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+
+        let err = try_create(&svc, with_facets(tag("urgent"), &["todo"]))
+            .await
+            .expect_err("a Tag doesn't accept todo");
+
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert_eq!(entity_count(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn attach_writes_select_defaults_and_publishes() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let ship = create(&svc, note("Ship")).await;
+        let mut rx = svc.hub.subscribe();
+        // So the bump shows: timestamps are in milliseconds.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+        let attached = attach(&svc, &ship.id, "todo").await.expect("attach");
+
+        assert_eq!(attached.facets, vec!["todo".to_string()]);
+        assert_eq!(
+            select_value(&attached, "todo.status").as_deref(),
+            Some("open")
+        );
+        assert_eq!(
+            select_value(&attached, "todo.priority").as_deref(),
+            Some("none")
+        );
+        assert!(millis(attached.updated_at) > millis(ship.updated_at));
+        assert_eq!(only_upsert(&mut rx), attached);
+    }
+
+    #[tokio::test]
+    async fn attach_twice_is_a_no_op() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, note("Ship")).await;
+        let first = attach(&svc, &ship.id, "todo").await.expect("attach");
+        let mut rx = svc.hub.subscribe();
+
+        let second = attach(&svc, &ship.id, "todo").await.expect("attach again");
+
+        assert_eq!(second, first);
+        assert_eq!(second.updated_at, first.updated_at);
+        assert!(rx.try_recv().is_err(), "no event");
+    }
+
+    #[tokio::test]
+    async fn attach_checks_the_entity_and_the_facet() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, note("Ship")).await;
+        let label = create(&svc, tag("urgent")).await;
+
+        let missing = attach(&svc, "missing", "todo").await.expect_err("missing");
+        assert_eq!(missing.code(), tonic::Code::NotFound);
+        let unknown = attach(&svc, &ship.id, "chore").await.expect_err("unknown");
+        assert_eq!(unknown.code(), tonic::Code::InvalidArgument);
+        let refused = attach(&svc, &label.id, "todo").await.expect_err("refused");
+        assert_eq!(refused.code(), tonic::Code::FailedPrecondition);
+    }
+
+    #[tokio::test]
+    async fn detach_deletes_the_facet_values_and_publishes() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
+        let ship = set_property(&svc, &ship.id, "todo.due", date("2026-11-01"))
+            .await
+            .expect("set due");
+        let mut rx = svc.hub.subscribe();
+        // So the bump shows: timestamps are in milliseconds.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+
+        let detached = detach(&svc, &ship.id, "todo").await.expect("detach");
+
+        assert!(detached.facets.is_empty());
+        assert!(
+            detached
+                .properties
+                .keys()
+                .all(|id| !id.starts_with("todo.")),
+            "{:?}",
+            detached.properties.keys()
+        );
+        assert!(stored_property_ids(&pool, &ship.id).await.is_empty());
+        assert_eq!(facet_row_count(&pool).await, 0);
+        assert!(millis(detached.updated_at) > millis(ship.updated_at));
+        assert_eq!(only_upsert(&mut rx), detached);
+    }
+
+    #[tokio::test]
+    async fn detach_leaves_structure_properties_and_tags() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let urgent = create(&svc, tag("urgent")).await;
+        let req = with_relations(
+            with_facets(note("Ship"), &["todo"]),
+            "tags",
+            &[(&urgent.id, "Tag")],
+        );
+        let ship = create(&svc, req).await;
+        // An ad-hoc id that only looks like the namespace, in another case.
+        let ship = set_property(
+            &svc,
+            &ship.id,
+            "TODO.note",
+            Some(property_value::Value::Text("kept".to_string())),
+        )
+        .await
+        .expect("set ad-hoc");
+
+        let detached = detach(&svc, &ship.id, "todo").await.expect("detach");
+
+        assert_eq!(
+            relation_ids(&detached, "tags"),
+            Some(vec![urgent.id.clone()])
+        );
+        assert_eq!(link_targets(&detached, "tags"), link_targets(&ship, "tags"));
+        assert_eq!(
+            stored_property_ids(&pool, &ship.id).await,
+            vec!["TODO.note".to_string(), "tags".to_string()]
+        );
+    }
+
+    #[tokio::test]
+    async fn detach_when_not_attached_is_a_no_op() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, note("Ship")).await;
+        let mut rx = svc.hub.subscribe();
+
+        let same = detach(&svc, &ship.id, "todo").await.expect("detach");
+
+        assert_eq!(same, ship);
+        assert!(rx.try_recv().is_err(), "no event");
+    }
+
+    #[tokio::test]
+    async fn detach_checks_the_entity_and_the_facet() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, note("Ship")).await;
+
+        let missing = detach(&svc, "missing", "todo").await.expect_err("missing");
+        assert_eq!(missing.code(), tonic::Code::NotFound);
+        let unknown = detach(&svc, &ship.id, "chore").await.expect_err("unknown");
+        assert_eq!(unknown.code(), tonic::Code::InvalidArgument);
+    }
+
+    #[tokio::test]
+    async fn reattach_after_detach_writes_fresh_defaults() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
+        set_property(&svc, &ship.id, "todo.status", select("done"))
+            .await
+            .expect("set status");
+        detach(&svc, &ship.id, "todo").await.expect("detach");
+
+        let again = attach(&svc, &ship.id, "todo").await.expect("attach");
+
+        assert_eq!(select_value(&again, "todo.status").as_deref(), Some("open"));
+    }
+
+    #[tokio::test]
+    async fn set_facet_property_without_the_facet_is_failed_precondition() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let ship = create(&svc, note("Ship")).await;
+
+        let err = set_property(&svc, &ship.id, "todo.status", select("done"))
+            .await
+            .expect_err("todo isn't attached");
+
+        assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+        assert!(
+            err.message()
+                .contains("attach the todo facet before setting todo.status"),
+            "{}",
+            err.message()
+        );
+        assert!(stored_property_ids(&pool, &ship.id).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn set_facet_property_checks_its_select_options() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
+
+        let err = set_property(&svc, &ship.id, "todo.status", select("someday"))
+            .await
+            .expect_err("not an option");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        assert!(err.message().contains("open, done"), "{}", err.message());
+
+        let wrong_kind = set_property(&svc, &ship.id, "todo.due", select("open"))
+            .await
+            .expect_err("due is a date");
+        assert_eq!(wrong_kind.code(), tonic::Code::InvalidArgument);
+
+        let saved = set_property(&svc, &ship.id, "todo.status", select("done"))
+            .await
+            .expect("set status");
+        assert_eq!(select_value(&saved, "todo.status").as_deref(), Some("done"));
+    }
+
+    #[tokio::test]
+    async fn clearing_a_facet_property_without_the_facet_is_allowed() {
+        let svc = entity_service(memory_pool().await);
+        let ship = create(&svc, note("Ship")).await;
+
+        let saved = set_property(&svc, &ship.id, "todo.status", None)
+            .await
+            .expect("clear");
+
+        assert!(saved.properties.is_empty());
+        assert!(saved.facets.is_empty());
+    }
+
+    #[tokio::test]
+    async fn delete_removes_facet_rows() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
+        let _kept = create(&svc, with_facets(note("Kept"), &["todo"])).await;
+        assert_eq!(facet_row_count(&pool).await, 2);
+
+        delete(&svc, &ship.id).await;
+
+        assert_eq!(facet_row_count(&pool).await, 1);
+    }
+
+    #[test]
+    fn facets_load_in_registry_order_with_unknown_ones_last() {
+        let mut facets = vec!["zeta".to_string(), "todo".to_string(), "alpha".to_string()];
+
+        sort_facets(&mut facets);
+
+        assert_eq!(facets, vec!["todo", "alpha", "zeta"]);
     }
 }

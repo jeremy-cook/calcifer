@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity_id AS \"entity_id!\", facet AS \"facet!\"\n           FROM entity_facets\n           WHERE entity_id IN (SELECT id FROM entities\n                               WHERE (?1 IS NULL OR structure_type = ?1)\n                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))\n           ORDER BY entity_id, facet",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entity_facets",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "name": "facet!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entity_facets",
+            "name": "facet"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7b60732a747a7ce711217f536130b1f81c935f2f3a61458d1c80ec9061f75c8a"
+}

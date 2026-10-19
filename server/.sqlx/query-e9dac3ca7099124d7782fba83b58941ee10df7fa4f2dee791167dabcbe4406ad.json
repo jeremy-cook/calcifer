@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM entity_facets WHERE entity_id = ? AND facet = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "e9dac3ca7099124d7782fba83b58941ee10df7fa4f2dee791167dabcbe4406ad"
+}
