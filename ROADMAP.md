@@ -6,11 +6,29 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-08-08, against branch `data-model-graph-fixes` @ `4bfd919`.
+**Last reviewed:** 2026-10-18, against `main` @ `f4dbca2`.
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
 Everything below is what that foundation is *for*.
+
+---
+
+## Current work
+
+Fixes and small features to work before the next big feature, ranked by value for effort.
+Effort is a rough guess: S under an hour, M a few hours to a day, L several days. Defects
+live in [`ISSUES.md`](ISSUES.md); this is the order to work them in. Race-condition
+entries stay deferred (single-user app, see ADR 5).
+
+| # | Item | Effort | Notes |
+|---|---|---|---|
+| 1 | Connection status (see Smaller items) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
+| 2 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
+| 3 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
+| 4 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
+| 5 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 6 | I-34: relation edits resend the whole list | M | Deferred until the agent starts tagging. Touches the proto and all three clients. |
 
 ---
 
@@ -30,12 +48,7 @@ Thin client, zero new knowledge-ops logic — every operation it needs already e
 an RPC. **Decide the provider first** (Anthropic, OpenAI, local via Ollama, or a
 provider-agnostic layer); that choice is the only thing blocking this.
 
-### 2. Workspace consolidation · done
-
-Obsolete: the MCP server moved into the Rust backend (`server/src/mcp/`), so `calcifer/`
-is the only TS package and there are no duplicate proto stubs left to consolidate.
-
-### 3. Native gRPC with reflection · size: S · optional
+### 2. Native gRPC with reflection · size: S · optional
 
 The backend serves only gRPC-Web, under `/api` through axum (see the README's "No native
 gRPC"), so `grpcurl` can't reach it and backend checks go through the browser, an MCP
@@ -125,6 +138,13 @@ the acceptance suite.
 - **Runtime structure editor** — the user owns the source; adding a Structure is a code
   edit, not a UI flow.
 - **Multi-user / sync / auth** — single-user by design.
+- **Table of contents** — written on the `tiptap.toc` branch, kept as the tag
+  `archive/tiptap.toc` (`TableOfContents.tsx`), never merged to `main`. It and
+  `archive/tiptap.excalidraw` come from April, before the history `main` has now, and share
+  no commits with it, so bringing them back means porting the files.
+- **Excalidraw embed** — a draft kept as the tag `archive/tiptap.excalidraw` (a TipTap
+  extension plus modal, view and image components), never merged. Same porting caveat as
+  the TOC.
 
 ---
 
