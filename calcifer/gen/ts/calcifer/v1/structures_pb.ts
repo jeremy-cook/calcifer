@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/structures.proto.
  */
 export const file_calcifer_v1_structures: GenFile = /*@__PURE__*/
-  fileDesc("ChxjYWxjaWZlci92MS9zdHJ1Y3R1cmVzLnByb3RvEgtjYWxjaWZlci52MSIqCgxTZWxlY3RPcHRpb24SCwoDa2V5GAEgASgJEg0KBWxhYmVsGAIgASgJIq8BCgtQcm9wZXJ0eURlZhIKCgJpZBgBIAEoCRInCgRraW5kGAIgASgOMhkuY2FsY2lmZXIudjEuUHJvcGVydHlLaW5kEg0KBWxhYmVsGAMgASgJEioKB29wdGlvbnMYBCADKAsyGS5jYWxjaWZlci52MS5TZWxlY3RPcHRpb24SFgoOZGVmYXVsdF9vcHRpb24YBSABKAkSGAoQdGFyZ2V0X3N0cnVjdHVyZRgGIAEoCSLSAQoMU3RydWN0dXJlRGVmEgwKBHR5cGUYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwbHVyYWwYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLAoKcHJvcGVydGllcxgFIAMoCzIYLmNhbGNpZmVyLnYxLlByb3BlcnR5RGVmEhEKCWNyZWF0YWJsZRgGIAEoCBITCgttZW50aW9uYWJsZRgHIAEoCBIUCgx1bmlxdWVfbmFtZXMYCCABKAgSFQoNbmFtZV9lZGl0YWJsZRgJIAEoCCrmAQoMUHJvcGVydHlLaW5kEh0KGVBST1BFUlRZX0tJTkRfVU5TUEVDSUZJRUQQABIaChZQUk9QRVJUWV9LSU5EX1JJQ0hURVhUEAESFgoSUFJPUEVSVFlfS0lORF9URVhUEAISGAoUUFJPUEVSVFlfS0lORF9OVU1CRVIQAxIWChJQUk9QRVJUWV9LSU5EX0RBVEUQBBIYChRQUk9QRVJUWV9LSU5EX1NFTEVDVBAFEhoKFlBST1BFUlRZX0tJTkRfUkVMQVRJT04QBhIbChdQUk9QRVJUWV9LSU5EX1JFTEFUSU9OUxAHYgZwcm90bzM");
+  fileDesc("ChxjYWxjaWZlci92MS9zdHJ1Y3R1cmVzLnByb3RvEgtjYWxjaWZlci52MSIqCgxTZWxlY3RPcHRpb24SCwoDa2V5GAEgASgJEg0KBWxhYmVsGAIgASgJIq8BCgtQcm9wZXJ0eURlZhIKCgJpZBgBIAEoCRInCgRraW5kGAIgASgOMhkuY2FsY2lmZXIudjEuUHJvcGVydHlLaW5kEg0KBWxhYmVsGAMgASgJEioKB29wdGlvbnMYBCADKAsyGS5jYWxjaWZlci52MS5TZWxlY3RPcHRpb24SFgoOZGVmYXVsdF9vcHRpb24YBSABKAkSGAoQdGFyZ2V0X3N0cnVjdHVyZRgGIAEoCSLiAQoMU3RydWN0dXJlRGVmEgwKBHR5cGUYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwbHVyYWwYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLAoKcHJvcGVydGllcxgFIAMoCzIYLmNhbGNpZmVyLnYxLlByb3BlcnR5RGVmEhEKCWNyZWF0YWJsZRgGIAEoCBITCgttZW50aW9uYWJsZRgHIAEoCBIUCgx1bmlxdWVfbmFtZXMYCCABKAgSFQoNbmFtZV9lZGl0YWJsZRgJIAEoCBIOCgZmYWNldHMYCiADKAkidwoIRmFjZXREZWYSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwbHVyYWwYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLAoKcHJvcGVydGllcxgFIAMoCzIYLmNhbGNpZmVyLnYxLlByb3BlcnR5RGVmKuYBCgxQcm9wZXJ0eUtpbmQSHQoZUFJPUEVSVFlfS0lORF9VTlNQRUNJRklFRBAAEhoKFlBST1BFUlRZX0tJTkRfUklDSFRFWFQQARIWChJQUk9QRVJUWV9LSU5EX1RFWFQQAhIYChRQUk9QRVJUWV9LSU5EX05VTUJFUhADEhYKElBST1BFUlRZX0tJTkRfREFURRAEEhgKFFBST1BFUlRZX0tJTkRfU0VMRUNUEAUSGgoWUFJPUEVSVFlfS0lORF9SRUxBVElPThAGEhsKF1BST1BFUlRZX0tJTkRfUkVMQVRJT05TEAdiBnByb3RvMw");
 
 /**
  * @generated from message calcifer.v1.SelectOption
@@ -151,6 +151,13 @@ export type StructureDef = Message<"calcifer.v1.StructureDef"> & {
    * @generated from field: bool name_editable = 9;
    */
   nameEditable: boolean;
+
+  /**
+   * facet ids this structure accepts, e.g. 'todo'
+   *
+   * @generated from field: repeated string facets = 10;
+   */
+  facets: string[];
 };
 
 /**
@@ -159,6 +166,57 @@ export type StructureDef = Message<"calcifer.v1.StructureDef"> & {
  */
 export const StructureDefSchema: GenMessage<StructureDef> = /*@__PURE__*/
   messageDesc(file_calcifer_v1_structures, 2);
+
+/**
+ * A facet: a fixed group of properties that can be attached to and detached
+ * from an entity whose structure accepts it (StructureDef.facets). It declares
+ * properties only, never keys, naming rules or rich text.
+ *
+ * @generated from message calcifer.v1.FacetDef
+ */
+export type FacetDef = Message<"calcifer.v1.FacetDef"> & {
+  /**
+   * 'todo'
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * singular display name: 'To-do'
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * 'To-dos'
+   *
+   * @generated from field: string plural = 3;
+   */
+  plural: string;
+
+  /**
+   * one line, for the agent
+   *
+   * @generated from field: string description = 4;
+   */
+  description: string;
+
+  /**
+   * full namespaced ids: 'todo.status'; in display order
+   *
+   * @generated from field: repeated calcifer.v1.PropertyDef properties = 5;
+   */
+  properties: PropertyDef[];
+};
+
+/**
+ * Describes the message calcifer.v1.FacetDef.
+ * Use `create(FacetDefSchema)` to create a new message.
+ */
+export const FacetDefSchema: GenMessage<FacetDef> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_structures, 3);
 
 /**
  * @generated from enum calcifer.v1.PropertyKind

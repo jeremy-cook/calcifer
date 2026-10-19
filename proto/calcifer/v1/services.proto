@@ -160,7 +160,10 @@ message Backlink {
 message ListBacklinksResponse { repeated Backlink backlinks = 1; }
 
 message ListStructuresRequest  {}
-message ListStructuresResponse { repeated StructureDef structures = 1; }
+message ListStructuresResponse {
+  repeated StructureDef structures = 1;
+  repeated FacetDef facets = 2;           // in registry order
+}
 
 message ResolveEntityRequest {
   string structure_type = 1;          // required for `name`; must be "" or "DailyNote" for `date`
