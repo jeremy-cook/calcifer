@@ -107,7 +107,9 @@ reading, not reproduced.
 
 The browser half is fixed (2026-10-11). `replica.upsert` drops an entity strictly older
 than the cached copy (by `updated_at`) or deleted this session, so a late mutation
-response can't overwrite a newer Watch event or bring back a deleted entity. The
+response can't overwrite a newer Watch event or bring back a deleted entity.
+`replica.applySnapshot` drops ids deleted this session too, so a resync snapshot
+generated before the delete committed can't bring the entity back either. The
 rich-text query's fetch keeps the cached doc unless the fetched one is newer, so the
 snapshot refetch can't cache an older doc over an in-flight `Put`. Two writes in the same
 millisecond share an `updated_at`, so the browser can still show the older of them until

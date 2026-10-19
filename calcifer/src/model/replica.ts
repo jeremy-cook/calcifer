@@ -44,10 +44,13 @@ function put(entity: Entity): void {
 }
 
 export const replica = {
-  // Replaces the whole set. Not guarded: a snapshot is authoritative.
+  // Replaces the whole set. A snapshot is authoritative except for deletes made
+  // this session: a resync generated before the server committed one would
+  // bring the entity back, so tombstoned ids are dropped. Timestamps aren't checked.
   applySnapshot(entities: readonly Entity[]): void {
     const { byId: prev, ready } = useReplica.getState()
-    const byId = new Map(entities.map((e) => [e.id, reuse(prev.get(e.id), e)]))
+    const live = entities.filter((e) => !tombstones.has(e.id))
+    const byId = new Map(live.map((e) => [e.id, reuse(prev.get(e.id), e)]))
     if (ready && sameEntries(prev, byId)) return
     commit(byId, true)
   },

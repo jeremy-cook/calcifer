@@ -103,11 +103,25 @@ describe('replica', () => {
     expect(state().byId.has('a')).toBe(false)
   })
 
-  it('does not filter a snapshot by timestamps or tombstones', () => {
-    replica.applySnapshot([entity('a', 'new', 2_000), entity('b')])
-    replica.remove('b')
-    replica.applySnapshot([entity('a', 'old', 1_000), entity('b')])
+  it('does not filter a snapshot by timestamps', () => {
+    replica.applySnapshot([entity('a', 'new', 2_000)])
+    replica.applySnapshot([entity('a', 'old', 1_000)])
     expect(state().byId.get('a')?.name).toBe('old')
-    expect(state().byId.has('b')).toBe(true)
+  })
+
+  it('drops an id removed this session from a later snapshot and keeps the rest', () => {
+    replica.applySnapshot([entity('a'), entity('b'), entity('c')])
+    replica.remove('b')
+    replica.applySnapshot([entity('a'), entity('b'), entity('c')])
+    expect(state().byId.has('b')).toBe(false)
+    expect(state().all.map((e) => e.id)).toEqual(['a', 'c'])
+  })
+
+  it('changes nothing when a resync differs only by an id removed this session', () => {
+    replica.applySnapshot([entity('a'), entity('b')])
+    replica.remove('b')
+    const before = state()
+    replica.applySnapshot([entity('a'), entity('b')])
+    expect(state()).toBe(before)
   })
 })

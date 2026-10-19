@@ -45,7 +45,6 @@ describe('applyWatchEvent', () => {
     sync.applyWatchEvent(watch.snapshot(entity('a'), entity('b')))
     sync.applyWatchEvent(watch.upserted(entity('c')))
     sync.applyWatchEvent(watch.upserted(entity('a', 'renamed', 2_000)))
-    sync.applyWatchEvent(watch.deletedId('b'))
     sync.applyWatchEvent(watch.snapshot(entity('a'), entity('b')))
     expect(store.getEntitiesSnapshot()).toEqual([entity('a'), entity('b')])
   })
