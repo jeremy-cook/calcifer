@@ -145,6 +145,20 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ---
 
+### I-66 · `cargo fmt --check` fails on main · low · confirmed
+
+**Where:** `server/src/main.rs`, `server/src/mcp/markdown.rs`, `server/src/mcp/mod.rs`,
+`server/src/mcp/tools.rs`, `server/src/security/local.rs`
+
+**Problem:** These files aren't rustfmt-clean at `d33e00f`, so `cargo fmt --check` fails
+for every change, whatever it touches. Found in the to-do facet plan's T02.
+
+**Fix:** Run `cargo fmt` in `server/` and commit it as its own change.
+
+**Done when:** `cd server && cargo fmt --check` passes on main.
+
+---
+
 ## Resolved
 
 - **I-65 · Remounting the calendar's daily note section prunes the note on screen.** Fixed 2026-10-18. The prune moved to `useDailyNotePrune` (`model/dailyNotes.ts`): a section's unmount schedules it for the next macrotask, and a mount for the same day cancels it, so StrictMode's remount (or any remount that keeps the day) isn't leaving. It still re-reads the server's doc and waits for that doc's outstanding saves (I-35, I-39); that macrotask now replaces the one inside `deleteEntityIfRichTextEmpty`. Covered by `DailyNoteSection.test.tsx`, which renders the section under `<StrictMode>` (the remount test failed before the fix). Observed 2026-10-18 in dev against a scratch DB: opening `/calendar` in a fresh tab kept today's empty note (main's code deleted it in the same setup); an empty note was pruned on moving to another day and on navigating to To-dos; a note with text survived both; text typed and left at once (by a day change or a route change) was kept.
