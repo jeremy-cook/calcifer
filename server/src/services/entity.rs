@@ -125,18 +125,6 @@ impl EntityService {
         Ok(candidate)
     }
 
-    /// The DailyNote for an ISO day, by its `date` key.
-    async fn find_daily_note(&self, date: &str) -> Result<Option<String>, AppError> {
-        let row = sqlx::query_scalar!(
-            "SELECT entity_id FROM entity_keys
-             WHERE structure_type = 'DailyNote' AND key = 'date' AND value = ?",
-            date
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(row)
-    }
-
     /// The `structure_type` entity whose `key` has the canonical `value`.
     async fn find_by_key(
         &self,
@@ -230,7 +218,11 @@ impl EntityService {
             )));
         }
 
-        if let Some(id) = self.find_daily_note(date).await.map_err(Status::from)? {
+        if let Some(id) = self
+            .find_by_key("DailyNote", "date", date)
+            .await
+            .map_err(Status::from)?
+        {
             let entity = self.load_entity(&id).await.map_err(Status::from)?;
             return Ok(ResolveEntityResponse {
                 entity: Some(entity),
