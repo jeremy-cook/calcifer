@@ -233,9 +233,14 @@ All of this is recomputed server-side on write; none of it is client-authored. S
   `links` rows whose `target_id` is the entity, one `Backlink` per row. A source
   linking to itself is excluded, on the server and in the frontend's backlinks panel
   (`calcifer/src/model/backlinks.ts`) alike.
-- **Deletion** — mention chips in other documents survive as clickable tombstones; the
-  server sweeps `links WHERE target_id = ?` to keep the relational index clean, and
-  strips the id from other entities' relation values (see above).
+- **Deletion** — `DeleteEntity` removes everything the entity owns in one transaction.
+  `properties`, `links`, `referenced_dates`, `entity_keys`, `richtext` and `chunks` all
+  reference `entities(id) ON DELETE CASCADE`. `entity_vec` is a `vec0` virtual table
+  keyed by `chunks.id` and can't cascade, so the server deletes the entity's
+  embeddings first, while its chunks still name them. Mention chips in other
+  documents survive as clickable tombstones; the server sweeps `links WHERE target_id
+  = ?` to keep the relational index clean, and strips the id from other entities'
+  relation values (see above).
 
 ---
 
@@ -449,7 +454,9 @@ or below it, which the snapshot already includes.
 - **Semantic** — vector KNN over chunk embeddings, best chunk per entity. Documents
   are chunked on heading and paragraph boundaries (~500 tokens) into `chunks`;
   embeddings land in a `sqlite-vec` `vec0` table (`entity_vec`) at a dimension pinned
-  by the migration.
+  by the migration, one per chunk, sharing the chunk's `id`. The embed worker replaces
+  an entity's chunks off the write path; if the entity is deleted while its docs are
+  embedding, the chunk insert fails its foreign key and the worker drops that run.
 - **Hybrid** (the default, and what `UNSPECIFIED` means) — the lexical and semantic
   rankings fused by reciprocal-rank fusion.
 

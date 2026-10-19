@@ -73,6 +73,11 @@ mod tests {
     /// The migration that moves natural keys into `entity_keys` (ADR 10).
     const ENTITY_KEYS: i64 = 20261018000000;
 
+    /// The migration that drops `chunks_entity`, and the one after it that makes
+    /// `richtext` and `chunks` cascade from `entities`.
+    const DROP_CHUNKS_ENTITY: i64 = 20261019000000;
+    const CASCADE_RICHTEXT_CHUNKS: i64 = 20261019010000;
+
     /// The `(structure_type, property_id)` pairs the migration lists by hand.
     const MIGRATION_RICHTEXT_PAIRS: [(&str, &str); 3] = [
         ("Note", "content"),
@@ -253,5 +258,96 @@ mod tests {
                 .await
                 .expect("entities columns");
         assert!(!columns.iter().any(|c| c == "date_key"), "{columns:?}");
+    }
+
+    #[tokio::test]
+    async fn cascade_migration_keeps_rows_and_ids_and_drops_orphans() {
+        let pool = unmigrated_memory_pool().await;
+        let migrator = sqlx::migrate!();
+        assert!(migrator.version_exists(CASCADE_RICHTEXT_CHUNKS));
+        migrator
+            .run_to(DROP_CHUNKS_ENTITY, &pool)
+            .await
+            .expect("migrate to before the cascade");
+
+        sqlx::query(
+            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+             VALUES ('n', 'Note', 'n', 0, 0)",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert entity");
+        // 'gone' has rows but no entity: the orphans the migration drops.
+        for (entity_id, doc) in [("n", "{\"kept\":1}"), ("gone", "{}")] {
+            sqlx::query(
+                "INSERT INTO richtext (entity_id, property_id, doc, updated_at)
+                 VALUES (?, 'content', ?, 7)",
+            )
+            .bind(entity_id)
+            .bind(doc)
+            .execute(&pool)
+            .await
+            .expect("insert richtext");
+        }
+        for (id, entity_id, chunk_index) in [(40, "n", 0), (41, "gone", 0), (42, "n", 1)] {
+            sqlx::query(
+                "INSERT INTO chunks (id, entity_id, chunk_index, text) VALUES (?, ?, ?, 'text')",
+            )
+            .bind(id)
+            .bind(entity_id)
+            .bind(chunk_index)
+            .execute(&pool)
+            .await
+            .expect("insert chunk");
+            sqlx::query("INSERT INTO entity_vec (id, embedding) VALUES (?, ?)")
+                .bind(id)
+                .bind(crate::embed::vector_blob(
+                    &[0.0; crate::embed::provider::EMBED_DIM],
+                ))
+                .execute(&pool)
+                .await
+                .expect("insert vector");
+        }
+
+        migrator.run(&pool).await.expect("run the rest");
+
+        let docs: Vec<(String, String, String, i64)> =
+            sqlx::query_as("SELECT entity_id, property_id, doc, updated_at FROM richtext")
+                .fetch_all(&pool)
+                .await
+                .expect("richtext rows");
+        assert_eq!(
+            docs,
+            [(
+                "n".to_string(),
+                "content".to_string(),
+                "{\"kept\":1}".to_string(),
+                7
+            )]
+        );
+        let chunks: Vec<(i64, String, i64)> =
+            sqlx::query_as("SELECT id, entity_id, chunk_index FROM chunks ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .expect("chunk rows");
+        assert_eq!(chunks, [(40, "n".to_string(), 0), (42, "n".to_string(), 1)]);
+        let vectors: Vec<i64> = sqlx::query_scalar("SELECT id FROM entity_vec ORDER BY id")
+            .fetch_all(&pool)
+            .await
+            .expect("vector rows");
+        assert_eq!(vectors, [40, 42]);
+
+        // The rebuilt tables cascade.
+        sqlx::query("DELETE FROM entities WHERE id = 'n'")
+            .execute(&pool)
+            .await
+            .expect("delete entity");
+        let left: i64 = sqlx::query_scalar(
+            "SELECT (SELECT COUNT(*) FROM richtext) + (SELECT COUNT(*) FROM chunks)",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("count rows");
+        assert_eq!(left, 0);
     }
 }

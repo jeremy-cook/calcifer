@@ -1255,14 +1255,25 @@ impl EntityServiceTrait for EntityService {
 
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
 
-        // ON DELETE CASCADE handles this entity's properties / links / referenced_dates.
-        sqlx::query!("DELETE FROM entities WHERE id = ?", id)
-            .execute(&mut *tx)
+        // entity_vec (vec0) can't cascade and keys on chunk ids, so delete the
+        // embeddings while the chunks that name them still exist; KNN never
+        // returns a tombstone.
+        let chunk_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM chunks WHERE entity_id = ?")
+            .bind(&id)
+            .fetch_all(&mut *tx)
             .await
             .map_err(AppError::from)?;
+        for cid in &chunk_ids {
+            sqlx::query("DELETE FROM entity_vec WHERE id = ?")
+                .bind(cid)
+                .execute(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+        }
 
-        // richtext has no FK reference — purge explicitly.
-        sqlx::query!("DELETE FROM richtext WHERE entity_id = ?", id)
+        // ON DELETE CASCADE handles this entity's properties, links,
+        // referenced_dates, keys, richtext and chunks.
+        sqlx::query!("DELETE FROM entities WHERE id = ?", id)
             .execute(&mut *tx)
             .await
             .map_err(AppError::from)?;
@@ -1279,28 +1290,8 @@ impl EntityServiceTrait for EntityService {
             .await
             .map_err(AppError::from)?;
 
-        // entity_fts has no FK reference — purge explicitly (mirrors richtext above).
+        // entity_fts has no FK reference — purge explicitly.
         fts_delete(&mut tx, &id).await.map_err(Status::from)?;
-
-        // Semantic rows (chunks + their vec0 embeddings) have no FK either — purge
-        // explicitly so KNN never returns a tombstone. entity_vec keys on chunk ids.
-        let chunk_ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM chunks WHERE entity_id = ?")
-            .bind(&id)
-            .fetch_all(&mut *tx)
-            .await
-            .map_err(AppError::from)?;
-        for cid in &chunk_ids {
-            sqlx::query("DELETE FROM entity_vec WHERE id = ?")
-                .bind(cid)
-                .execute(&mut *tx)
-                .await
-                .map_err(AppError::from)?;
-        }
-        sqlx::query("DELETE FROM chunks WHERE entity_id = ?")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
         self.hub
@@ -1764,6 +1755,54 @@ mod tests {
         delete(&svc, &day.id).await;
 
         assert_eq!(key_row_count(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn delete_removes_richtext_chunks_and_embeddings() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let gone = create(&svc, note("Gone")).await;
+        let kept = create(&svc, note("Kept")).await;
+        for entity in [&gone, &kept] {
+            put_content(
+                &pool,
+                &entity.id,
+                &[r#"{"type":"text","text":"body"}"#.to_string()],
+            )
+            .await;
+            // Embeddings are disabled in tests, so store a chunk and its
+            // vector as the embed worker would.
+            let chunk_id: i64 = sqlx::query_scalar(
+                "INSERT INTO chunks (entity_id, chunk_index, text) VALUES (?, 0, '') RETURNING id",
+            )
+            .bind(&entity.id)
+            .fetch_one(&pool)
+            .await
+            .expect("insert chunk");
+            sqlx::query("INSERT INTO entity_vec (id, embedding) VALUES (?, ?)")
+                .bind(chunk_id)
+                .bind(crate::embed::vector_blob(
+                    &[0.0; crate::embed::provider::EMBED_DIM],
+                ))
+                .execute(&pool)
+                .await
+                .expect("insert vector");
+        }
+
+        delete(&svc, &gone.id).await;
+
+        for (table, sql) in [
+            ("richtext", "SELECT entity_id FROM richtext"),
+            ("chunks", "SELECT entity_id FROM chunks"),
+            (
+                "entity_vec",
+                "SELECT c.entity_id FROM entity_vec v LEFT JOIN chunks c ON c.id = v.id",
+            ),
+        ] {
+            let owners: Vec<Option<String>> =
+                sqlx::query_scalar(sql).fetch_all(&pool).await.expect(table);
+            assert_eq!(owners, [Some(kept.id.clone())], "{table}");
+        }
     }
 
     async fn key_row_count(pool: &SqlitePool) -> i64 {

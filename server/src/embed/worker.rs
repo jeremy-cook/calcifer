@@ -169,14 +169,25 @@ async fn reembed_entity(
                 embedding.len()
             )));
         }
-        let chunk_id: i64 = sqlx::query_scalar(
+        let inserted = sqlx::query_scalar(
             "INSERT INTO chunks (entity_id, chunk_index, text) VALUES (?, ?, ?) RETURNING id",
         )
         .bind(entity_id)
         .bind(idx as i64)
         .bind(text)
         .fetch_one(&mut *tx)
-        .await?;
+        .await;
+        let chunk_id: i64 = match inserted {
+            Ok(id) => id,
+            // `chunks` references `entities`: the entity was deleted while its
+            // docs were embedding. Nothing to keep, so roll back the rows this
+            // tx already wrote and skip it.
+            Err(sqlx::Error::Database(db)) if db.is_foreign_key_violation() => {
+                tx.rollback().await?;
+                return Ok(());
+            }
+            Err(e) => return Err(e.into()),
+        };
 
         let blob: Vec<u8> = embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
         sqlx::query("INSERT INTO entity_vec (id, embedding) VALUES (?, ?)")
@@ -194,4 +205,68 @@ async fn reembed_entity(
 /// expects. Shared with `SearchService.Search`.
 pub fn vector_blob(embedding: &[f32]) -> Vec<u8> {
     embedding.iter().flat_map(|f| f.to_le_bytes()).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::memory_pool;
+
+    /// Deletes `entity_id` while embedding, as a DeleteEntity that commits
+    /// between the worker's read and its write would.
+    struct DeletingEmbedder {
+        pool: SqlitePool,
+        entity_id: String,
+    }
+
+    impl Embedder for DeletingEmbedder {
+        fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, AppError> {
+            tokio::runtime::Handle::current()
+                .block_on(
+                    sqlx::query("DELETE FROM entities WHERE id = ?")
+                        .bind(&self.entity_id)
+                        .execute(&self.pool),
+                )
+                .expect("delete entity");
+            Ok(texts.iter().map(|_| vec![0.0; EMBED_DIM]).collect())
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn an_entity_deleted_while_embedding_is_skipped() {
+        let pool = memory_pool().await;
+        sqlx::query(
+            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+             VALUES ('n', 'Note', 'n', 0, 0)",
+        )
+        .execute(&pool)
+        .await
+        .expect("insert entity");
+        let doc = r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"one"}]},{"type":"paragraph","content":[{"type":"text","text":"two"}]}]}"#;
+        sqlx::query(
+            "INSERT INTO richtext (entity_id, property_id, doc, updated_at)
+             VALUES ('n', 'content', ?, 0)",
+        )
+        .bind(doc)
+        .execute(&pool)
+        .await
+        .expect("insert richtext");
+        let embedder: Arc<dyn Embedder> = Arc::new(DeletingEmbedder {
+            pool: pool.clone(),
+            entity_id: "n".to_string(),
+        });
+
+        reembed_entity(&pool, &embedder, "n")
+            .await
+            .expect("a deleted entity isn't an error");
+
+        for (table, sql) in [
+            ("entities", "SELECT COUNT(*) FROM entities"),
+            ("chunks", "SELECT COUNT(*) FROM chunks"),
+            ("entity_vec", "SELECT COUNT(*) FROM entity_vec"),
+        ] {
+            let rows: i64 = sqlx::query_scalar(sql).fetch_one(&pool).await.expect(table);
+            assert_eq!(rows, 0, "{table}");
+        }
+    }
 }
