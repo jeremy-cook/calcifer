@@ -450,7 +450,11 @@ or below it, which the snapshot already includes.
 - **Lexical** — FTS5 (`entity_fts`, `tokenize='unicode61'`) over entity names plus
   plain text extracted from documents, each query term prefix-matched, ranked by
   `bm25()`. Kept in sync inside the same transactions as `RichTextService.PutRichText` and
-  entity create/update/delete.
+  entity create/update/delete. FTS5 can't look up its `entity_id UNINDEXED` column, so
+  each entity's row is addressed by rowid: `entity_fts_rowids` maps an entity id to
+  its `fts_rowid` (assigned on first write, stable across `VACUUM`, cascading from
+  `entities`). A rename updates `name` and a save updates `body` in place. FTS5 rows
+  don't cascade, so `DeleteEntity` deletes the entity's row before the entity.
 - **Semantic** — vector KNN over chunk embeddings, best chunk per entity. Documents
   are chunked on heading and paragraph boundaries (~500 tokens) into `chunks`;
   embeddings land in a `sqlite-vec` `vec0` table (`entity_vec`) at a dimension pinned

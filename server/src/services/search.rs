@@ -310,7 +310,7 @@ mod tests {
     use crate::proto::entity_service_server::EntityService as _;
     use crate::proto::rich_text_service_server::RichTextService as _;
     use crate::proto::Entity;
-    use crate::proto::PutRichTextRequest;
+    use crate::proto::{PutRichTextRequest, RenameEntityRequest};
     use crate::services::entity::load_entity;
     use crate::test_support::{entity_service, memory_pool, note, richtext_service};
     use crate::watch::WatchHub;
@@ -572,5 +572,59 @@ mod tests {
             let hits = search(&svc, query, SearchMode::Lexical).await;
             assert_eq!(names(&hits), vec!["Journal"], "{query}");
         }
+    }
+
+    /// Save `content` on `entity_id` as one paragraph of `text`.
+    async fn put_text(pool: &SqlitePool, entity_id: &str, text: &str) {
+        let doc = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[{{"type":"text","text":"{text}"}}]}}]}}"#
+        );
+        richtext_service(pool.clone(), WatchHub::new())
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: entity_id.to_string(),
+                property_id: "content".to_string(),
+                doc,
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put");
+    }
+
+    #[tokio::test]
+    async fn a_rename_keeps_the_body_searchable() {
+        let pool = memory_pool().await;
+        let note = create(&pool, "Before").await;
+        put_text(&pool, &note.id, "Zeppelin").await;
+        entity_service(pool.clone())
+            .rename_entity(Request::new(RenameEntityRequest {
+                id: note.id.clone(),
+                name: "After".to_string(),
+            }))
+            .await
+            .expect("rename");
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        for query in ["zeppelin", "after"] {
+            let hits = search(&svc, query, SearchMode::Lexical).await;
+            assert_eq!(names(&hits), vec!["After"], "{query}");
+        }
+        assert!(search(&svc, "before", SearchMode::Lexical).await.is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_body_save_keeps_the_name_searchable() {
+        let pool = memory_pool().await;
+        let note = create(&pool, "Zeppelin").await;
+        put_text(&pool, &note.id, "Airship").await;
+        put_text(&pool, &note.id, "Dirigible").await;
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        for query in ["zeppelin", "dirigible"] {
+            let hits = search(&svc, query, SearchMode::Lexical).await;
+            assert_eq!(names(&hits), vec!["Zeppelin"], "{query}");
+        }
+        assert!(search(&svc, "airship", SearchMode::Lexical)
+            .await
+            .is_empty());
     }
 }

@@ -10,7 +10,7 @@ use crate::proto::{
     GetRichTextRequest, GetRichTextResponse, PutRichTextRequest, PutRichTextResponse, RichText,
     RichTextRef,
 };
-use crate::services::entity::{load_entity, ts_from_millis};
+use crate::services::entity::{fts_upsert_body, load_entity, ts_from_millis};
 use crate::structures;
 use crate::tiptap::references::extract_doc_references;
 use crate::tiptap::text::extract_plain_text;
@@ -236,8 +236,8 @@ impl RichTextServiceTrait for RichTextService {
         }
 
         // 5. Sync the FTS `body` as the entity-scoped concatenation of all its docs'
-        //    plain text (mirrors the referenced_dates union above). Preserve `name`,
-        //    which is owned by EntityService; delete-then-insert keeps one row per entity.
+        //    plain text (mirrors the referenced_dates union above). `name` is owned
+        //    by EntityService and left as it is.
         let mut fts_body = String::new();
         for d in &all_docs {
             if let Ok(text) = extract_plain_text(d) {
@@ -251,27 +251,9 @@ impl RichTextServiceTrait for RichTextService {
             }
         }
 
-        // Runtime (non-macro) queries: sqlx's compile-time introspection chokes on
-        // FTS5 virtual tables, so all `entity_fts` access is unchecked.
-        let name: String = sqlx::query_scalar("SELECT name FROM entity_fts WHERE entity_id = ?")
-            .bind(&entity_id)
-            .fetch_optional(&mut *tx)
+        fts_upsert_body(&mut tx, &entity_id, &fts_body)
             .await
-            .map_err(AppError::from)?
-            .unwrap_or_default();
-
-        sqlx::query("DELETE FROM entity_fts WHERE entity_id = ?")
-            .bind(&entity_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::from)?;
-        sqlx::query("INSERT INTO entity_fts (entity_id, name, body) VALUES (?, ?, ?)")
-            .bind(&entity_id)
-            .bind(&name)
-            .bind(&fts_body)
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::from)?;
+            .map_err(Status::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
 

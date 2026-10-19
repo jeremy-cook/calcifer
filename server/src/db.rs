@@ -78,6 +78,9 @@ mod tests {
     const DROP_CHUNKS_ENTITY: i64 = 20261019000000;
     const CASCADE_RICHTEXT_CHUNKS: i64 = 20261019010000;
 
+    /// The migration that addresses `entity_fts` rows by a mapped rowid.
+    const ENTITY_FTS_ROWIDS: i64 = 20261019020000;
+
     /// The `(structure_type, property_id)` pairs the migration lists by hand.
     const MIGRATION_RICHTEXT_PAIRS: [(&str, &str); 3] = [
         ("Note", "content"),
@@ -349,5 +352,79 @@ mod tests {
         .await
         .expect("count rows");
         assert_eq!(left, 0);
+    }
+
+    #[tokio::test]
+    async fn fts_rowids_migration_carries_names_and_bodies_across() {
+        let pool = unmigrated_memory_pool().await;
+        let migrator = sqlx::migrate!();
+        assert!(migrator.version_exists(ENTITY_FTS_ROWIDS));
+        migrator
+            .run_to(CASCADE_RICHTEXT_CHUNKS, &pool)
+            .await
+            .expect("migrate to before the rowids");
+
+        for (id, created_at) in [("b", 1), ("a", 2), ("unindexed", 3)] {
+            sqlx::query(
+                "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+                 VALUES (?, 'Note', ?, ?, 0)",
+            )
+            .bind(id)
+            .bind(format!("{id} name"))
+            .bind(created_at)
+            .execute(&pool)
+            .await
+            .expect("insert entity");
+        }
+        // Old-style rows, delete-then-insert by entity_id: 'a' was renamed
+        // since it was indexed, 'unindexed' has no row, and 'gone' has no entity.
+        for (entity_id, name, body) in [
+            ("a", "a renamed", "alpha body"),
+            ("gone", "gone", "stale"),
+            ("b", "b name", "beta body"),
+        ] {
+            sqlx::query("INSERT INTO entity_fts (entity_id, name, body) VALUES (?, ?, ?)")
+                .bind(entity_id)
+                .bind(name)
+                .bind(body)
+                .execute(&pool)
+                .await
+                .expect("insert fts row");
+        }
+
+        migrator.run(&pool).await.expect("run the rest");
+
+        let rows: Vec<(i64, String, String, String)> = sqlx::query_as(
+            "SELECT f.rowid, f.entity_id, f.name, f.body
+             FROM entity_fts f JOIN entity_fts_rowids m
+               ON m.fts_rowid = f.rowid AND m.entity_id = f.entity_id
+             ORDER BY f.rowid",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("fts rows");
+        let rows: Vec<(i64, &str, &str, &str)> = rows
+            .iter()
+            .map(|(r, e, n, b)| (*r, e.as_str(), n.as_str(), b.as_str()))
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (1, "b", "b name", "beta body"),
+                (2, "a", "a renamed", "alpha body"),
+                (3, "unindexed", "unindexed name", ""),
+            ]
+        );
+        let total: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM entity_fts")
+            .fetch_one(&pool)
+            .await
+            .expect("count fts");
+        assert_eq!(total, 3);
+        let hits: Vec<String> =
+            sqlx::query_scalar("SELECT entity_id FROM entity_fts WHERE entity_fts MATCH 'alpha'")
+                .fetch_all(&pool)
+                .await
+                .expect("match");
+        assert_eq!(hits, ["a"]);
     }
 }
