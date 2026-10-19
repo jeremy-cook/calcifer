@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowsOutSimpleIcon, TrashIcon } from '@phosphor-icons/react'
 import {
@@ -15,19 +15,9 @@ import {
 import { Button } from '~/components/ui/button'
 import { PlusIcon } from '@phosphor-icons/react'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
-import {
-  dailyNoteByDate,
-  deleteEntity,
-  deleteEntityIfRichTextEmpty,
-  getEntitiesSnapshot,
-  useReplicaReady,
-  useResolveDailyNote,
-  type Entity,
-} from '~/model/store'
+import { deleteEntity, useReplicaReady, useResolveDailyNote, type Entity } from '~/model/store'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
-import { richTextRef } from '~/model/richtext'
-import { richTextPropertyIds } from '~/model/structures'
-import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { dailyNoteContentRef, useDailyNotePrune } from '~/model/dailyNotes'
 
 interface DailyNoteSectionProps {
   iso: string
@@ -45,16 +35,7 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
     setAutoFocusKey(iso)
   }
 
-  useEffect(() => {
-    return () => {
-      // Prune an empty daily note when leaving its day, re-checking the server's doc.
-      const existing = dailyNoteByDate(getEntitiesSnapshot(), iso)
-      if (!existing) return
-      const ref = contentRichTextRef(existing)
-      if (ref) deleteEntityIfRichTextEmpty(existing.id, ref)
-      else deleteEntity(existing.id)
-    }
-  }, [iso])
+  useDailyNotePrune(iso)
 
   // Before the first snapshot there's no telling whether the day has a note, so
   // offer nothing rather than flash "New".
@@ -96,7 +77,7 @@ interface DailyNoteBodyProps {
 }
 
 function DailyNoteBody({ dailyNote, autoFocus }: DailyNoteBodyProps) {
-  const contentRef = contentRichTextRef(dailyNote)
+  const contentRef = dailyNoteContentRef(dailyNote)
   if (!contentRef) return null
   return (
     <EntityRichTextField
@@ -158,11 +139,4 @@ function DailyNoteActions({ dailyNote }: DailyNoteActionsProps) {
       </AlertDialog>
     </div>
   )
-}
-
-// The daily note's content doc: its structure's declared rich-text property
-// (DailyNote declares one, `content`), addressed by the entity's id.
-function contentRichTextRef(entity: Entity): RichTextRef | undefined {
-  const [propertyId] = richTextPropertyIds(entity.structureType)
-  return propertyId ? richTextRef(entity.id, propertyId) : undefined
 }
