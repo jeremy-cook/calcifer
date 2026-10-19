@@ -1,11 +1,25 @@
+# macOS Finder metadata.
 **/.DS_Store
+
+# JavaScript dependencies, installed by pnpm.
 **/node_modules/
+
+# Rust build output.
 server/target/
-book/book/
+
+# Local SQLite database and its WAL-mode side files.
 server/calcifer.db
 server/calcifer.db-shm
 server/calcifer.db-wal
+
+# Local server environment (DATABASE_URL for sqlx).
 server/.env
+
 # Local fastembed model cache (~90 MB ONNX model, downloaded on first run).
 server/.fastembed_cache/
+
+# Per-machine Claude Code launch configuration.
 .claude/launch.json
+
+# Working implementation plans, kept out of the repo.
+plans/
