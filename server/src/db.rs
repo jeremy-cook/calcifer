@@ -70,6 +70,9 @@ mod tests {
     const DROP_RICHTEXT_VALUES: i64 = 20260926000000;
     const BEFORE_DROP_RICHTEXT_VALUES: i64 = 20260614000000;
 
+    /// The migration that moves natural keys into `entity_keys` (ADR 10).
+    const ENTITY_KEYS: i64 = 20261018000000;
+
     /// The `(structure_type, property_id)` pairs the migration lists by hand.
     const MIGRATION_RICHTEXT_PAIRS: [(&str, &str); 3] = [
         ("Note", "content"),
@@ -191,5 +194,64 @@ mod tests {
             .await
             .expect("count richtext");
         assert_eq!(docs, 1);
+    }
+
+    #[tokio::test]
+    async fn entity_keys_migration_backfills_dates_and_tag_names() {
+        let pool = unmigrated_memory_pool().await;
+        let migrator = sqlx::migrate!();
+        assert!(migrator.version_exists(ENTITY_KEYS));
+        migrator
+            .run_to(DROP_RICHTEXT_VALUES, &pool)
+            .await
+            .expect("migrate to before entity_keys");
+
+        // A dated and an undated DailyNote, a Tag, and a Note, which has no key.
+        let entities = [
+            ("d", "DailyNote", "June 13, 2026", Some("2026-06-13")),
+            ("u", "DailyNote", "Undated", None),
+            ("g", "Tag", " Reading ", None),
+            ("n", "Note", "Reading", None),
+        ];
+        for (id, structure_type, name, date_key) in entities {
+            sqlx::query(
+                "INSERT INTO entities (id, structure_type, name, date_key, created_at, updated_at)
+                 VALUES (?, ?, ?, ?, 0, 0)",
+            )
+            .bind(id)
+            .bind(structure_type)
+            .bind(name)
+            .bind(date_key)
+            .execute(&pool)
+            .await
+            .expect("insert entity");
+        }
+
+        migrator.run(&pool).await.expect("run the rest");
+
+        let keys: Vec<(String, String, String, String)> = sqlx::query_as(
+            "SELECT structure_type, key, value, entity_id FROM entity_keys
+             ORDER BY structure_type, key",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("key rows");
+        let keys: Vec<(&str, &str, &str, &str)> = keys
+            .iter()
+            .map(|(s, k, v, e)| (s.as_str(), k.as_str(), v.as_str(), e.as_str()))
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                ("DailyNote", "date", "2026-06-13", "d"),
+                ("Tag", "name", "reading", "g"),
+            ]
+        );
+        let columns: Vec<String> =
+            sqlx::query_scalar("SELECT name FROM pragma_table_info('entities')")
+                .fetch_all(&pool)
+                .await
+                .expect("entities columns");
+        assert!(!columns.iter().any(|c| c == "date_key"), "{columns:?}");
     }
 }

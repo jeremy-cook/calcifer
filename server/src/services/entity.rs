@@ -20,7 +20,7 @@ use crate::proto::{
     SetEntityPropertyRequest, SetEntityPropertyResponse, WatchEntitiesRequest,
     WatchEntitiesResponse,
 };
-use crate::structures::{self, PropertyKind};
+use crate::structures::{self, fold_name, KeyDef, KeySource, PropertyKind};
 use crate::watch::WatchHub;
 
 pub struct EntityService {
@@ -38,41 +38,62 @@ impl EntityService {
     /// links and FTS name) in one tx and return the hydrated result. Shared by
     /// Create and Resolve. A new entity has no content, so no content-derived
     /// links or referenced dates: those are `RichTextService.PutRichText`'s (ADR 3).
-    async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, AppError> {
+    /// Every key the structure declares is written too, so a taken one is
+    /// `AlreadyExists` (see `map_unique_violation`).
+    async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, Status> {
         let now = chrono::Utc::now().timestamp_millis();
-        let date_key = date_key_for(entity);
-        let mut tx = begin_write(&self.pool).await?;
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
         sqlx::query!(
-            "INSERT INTO entities (id, structure_type, name, date_key, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?)",
             entity.id,
             entity.structure_type,
             entity.name,
-            date_key,
             now,
             now,
         )
         .execute(&mut *tx)
-        .await?;
+        .await
+        .map_err(AppError::from)?;
         self.replace_properties(&mut tx, entity).await?;
+        for def in declared_keys(&entity.structure_type) {
+            let value = key_value(def.source, &entity.name, &entity.properties);
+            let shown = shown_key_value(def.source, &entity.name, value.as_deref());
+            set_key(
+                &mut tx,
+                &entity.id,
+                &entity.structure_type,
+                def.key,
+                value.as_deref(),
+            )
+            .await
+            .map_err(|e| map_unique_violation(e, &entity.structure_type, def, shown))?;
+        }
         sync_relation_links(&mut tx, entity, now).await?;
         fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
-        tx.commit().await?;
+        tx.commit().await.map_err(AppError::from)?;
         // New entity: queue for embedding (no-op until it has content, but keeps
         // the path uniform — Resolve's creates flow here too).
         self.embed.enqueue(&entity.id);
-        self.load_entity(&entity.id).await
+        Ok(self.load_entity(&entity.id).await?)
     }
 
-    /// Case-insensitive lookup of an entity id by (structure_type, name). Only
-    /// Tag names are unique, so for other structures several entities can match:
-    /// the oldest `created_at` wins and `id` breaks ties, so a lookup always
-    /// returns the same one.
+    /// Case-insensitive lookup of an entity id by (structure_type, name). A
+    /// structure with a name key (Tag) is looked up in `entity_keys`, folded as
+    /// the write path folds it, so the lookup and the uniqueness rule agree.
+    /// Other names aren't unique, so several entities can match: the oldest
+    /// `created_at` wins and `id` breaks ties, so a lookup always returns the
+    /// same one.
     async fn find_by_name(
         &self,
         structure_type: &str,
         name: &str,
     ) -> Result<Option<String>, AppError> {
+        if let Some(def) = structures::structure(structure_type).and_then(|s| s.name_key()) {
+            return self
+                .find_by_key(structure_type, def.key, &fold_name(name))
+                .await;
+        }
         let row = sqlx::query_scalar!(
             r#"SELECT id AS "id!" FROM entities
                WHERE structure_type = ? AND name = ? COLLATE NOCASE
@@ -104,12 +125,31 @@ impl EntityService {
         Ok(candidate)
     }
 
-    /// The DailyNote for an ISO day, by its `date_key` mirror.
+    /// The DailyNote for an ISO day, by its `date` key.
     async fn find_daily_note(&self, date: &str) -> Result<Option<String>, AppError> {
         let row = sqlx::query_scalar!(
-            r#"SELECT id AS "id!" FROM entities
-               WHERE structure_type = 'DailyNote' AND date_key = ?"#,
+            "SELECT entity_id FROM entity_keys
+             WHERE structure_type = 'DailyNote' AND key = 'date' AND value = ?",
             date
+        )
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(row)
+    }
+
+    /// The `structure_type` entity whose `key` has the canonical `value`.
+    async fn find_by_key(
+        &self,
+        structure_type: &str,
+        key: &str,
+        value: &str,
+    ) -> Result<Option<String>, AppError> {
+        let row = sqlx::query_scalar!(
+            "SELECT entity_id FROM entity_keys
+             WHERE structure_type = ? AND key = ? AND value = ?",
+            structure_type,
+            key,
+            value
         )
         .fetch_optional(&self.pool)
         .await?;
@@ -165,10 +205,7 @@ impl EntityService {
         }
 
         let entity = new_entity(structure_type, Some(name), HashMap::new());
-        let saved = self
-            .persist_new_entity(&entity)
-            .await
-            .map_err(Status::from)?;
+        let saved = self.persist_new_entity(&entity).await?;
         Ok(self.created(saved))
     }
 
@@ -185,7 +222,7 @@ impl EntityService {
                 "resolving by date finds a DailyNote; structure_type must be empty or DailyNote, got {structure_type:?}"
             )));
         }
-        // Canonical form only, so one day can't get a second date_key spelling.
+        // Canonical form only, so one day can't get a second key spelling.
         let date = date.trim();
         if !is_iso_day(date) {
             return Err(Status::invalid_argument(format!(
@@ -205,10 +242,7 @@ impl EntityService {
         }
 
         let entity = new_entity("DailyNote", None, date_properties(date));
-        let saved = self
-            .persist_new_entity(&entity)
-            .await
-            .map_err(|e| map_unique_violation(e, &entity.name, Some(date)))?;
+        let saved = self.persist_new_entity(&entity).await?;
         Ok(self.created(saved))
     }
 
@@ -649,30 +683,80 @@ pub(crate) fn ts_from_millis(millis: i64) -> prost_types::Timestamp {
     }
 }
 
-/// The `date_key` mirror for an entity: the value of its `date` property when the
-/// entity is a DailyNote, else None. Populating this column is what arms the
-/// `one_daily_note_per_day` unique index. Returning None for non-DailyNote types
-/// keeps the partial index inert for everything else.
-fn date_key_for(entity: &Entity) -> Option<String> {
-    let value = entity.properties.get("date").and_then(|v| v.value.as_ref());
-    date_key_from(&entity.structure_type, "date", value)
+/// The natural keys a structure declares (ADR 10). Structures missing from the
+/// registry have none.
+fn declared_keys(structure_type: &str) -> &'static [KeyDef] {
+    structures::structure(structure_type).map_or(&[], |s| s.keys)
 }
 
-/// The `date_key` a single property contributes: its value when it's a
-/// DailyNote's non-empty `date`, else None. Shared by `date_key_for` and
-/// SetProperty, which only sees the one property.
-fn date_key_from(
-    structure_type: &str,
-    property_id: &str,
-    value: Option<&property_value::Value>,
+/// The canonical value of one natural key, from the entity's `name` and
+/// `properties`. None when the source is empty, e.g. a DailyNote with no date.
+fn key_value(
+    source: KeySource,
+    name: &str,
+    properties: &HashMap<String, PropertyValue>,
 ) -> Option<String> {
-    if structure_type != "DailyNote" || property_id != "date" {
-        return None;
+    match source {
+        KeySource::Name => Some(fold_name(name)).filter(|n| !n.is_empty()),
+        KeySource::Property(id) => {
+            property_key_value(properties.get(id).and_then(|v| v.value.as_ref()))
+        }
     }
+}
+
+/// The key value a single property contributes, for SetProperty, which only sees
+/// the one property. A key's property is canonical once `validate_property` has
+/// passed it (a date is an ISO day), so it's used as is.
+fn property_key_value(value: Option<&property_value::Value>) -> Option<String> {
     match value {
-        Some(property_value::Value::Date(d)) if !d.is_empty() => Some(d.clone()),
+        Some(
+            property_value::Value::Date(v)
+            | property_value::Value::Text(v)
+            | property_value::Value::Select(v),
+        ) if !v.is_empty() => Some(v.clone()),
         _ => None,
     }
+}
+
+/// How a key value is shown in a conflict message: a name as the user typed it,
+/// not folded; any other value as stored.
+fn shown_key_value<'a>(source: KeySource, name: &'a str, value: Option<&'a str>) -> &'a str {
+    match source {
+        KeySource::Name => name,
+        KeySource::Property(_) => value.unwrap_or_default(),
+    }
+}
+
+/// Replace an entity's value for one key: delete its `(entity_id, key)` row, then
+/// insert `value` if there is one. A value another entity of the structure holds
+/// fails the `entity_keys` primary key (see `map_unique_violation`). Call inside
+/// the same tx as the write that changed the key's source.
+async fn set_key(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    entity_id: &str,
+    structure_type: &str,
+    key: &str,
+    value: Option<&str>,
+) -> Result<(), AppError> {
+    sqlx::query!(
+        "DELETE FROM entity_keys WHERE entity_id = ? AND key = ?",
+        entity_id,
+        key
+    )
+    .execute(&mut **tx)
+    .await?;
+    if let Some(value) = value {
+        sqlx::query!(
+            "INSERT INTO entity_keys (structure_type, key, value, entity_id) VALUES (?, ?, ?, ?)",
+            structure_type,
+            key,
+            value,
+            entity_id,
+        )
+        .execute(&mut **tx)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Check every property of an entity against its structure. See
@@ -780,46 +864,48 @@ fn case_name(value: &property_value::Value) -> &'static str {
     }
 }
 
-/// Map a SQLite UNIQUE-constraint failure to `AlreadyExists` with a message for
-/// the index that failed, else fall back to the standard AppError -> Status
-/// conversion (I-25). `name` and `date` are the name and DailyNote date the write
-/// tried to store. Used by every write that can hit `one_daily_note_per_day` or
-/// `one_tag_per_name`.
-fn map_unique_violation(err: AppError, name: &str, date: Option<&str>) -> Status {
+/// Map a `set_key` failure: a value another entity of the structure already
+/// holds (the `entity_keys` primary key) is `AlreadyExists` with a message for
+/// the key (I-25); anything else, including a clash on `(entity_id, key)`, which
+/// would be a bug in `set_key`'s delete-then-insert, takes the standard AppError
+/// -> Status conversion. `shown` is the value as the user gave it.
+fn map_unique_violation(err: AppError, structure_type: &str, key: &KeyDef, shown: &str) -> Status {
     let AppError::Db(sqlx::Error::Database(ref db)) = err else {
         return Status::from(err);
     };
-    if !db.is_unique_violation() {
+    // SQLite names a failed unique constraint by its column list. The tests
+    // below pin the messages.
+    if !db.is_unique_violation()
+        || !db
+            .message()
+            .ends_with("entity_keys.structure_type, entity_keys.key, entity_keys.value")
+    {
         return Status::from(err);
     }
-    // SQLite names a failed unique index on plain columns by its column list,
-    // not the index name: "UNIQUE constraint failed: entities.date_key" for
-    // `one_daily_note_per_day` and "UNIQUE constraint failed: entities.name" for
-    // `one_tag_per_name` (its COLLATE NOCASE doesn't change that). Only an index
-    // on an expression is reported by name. The tests below pin both texts.
-    let message = db.message();
-    if message.ends_with("entities.date_key") {
-        let date = date.unwrap_or("this date");
-        Status::already_exists(format!("a DailyNote for {date} already exists"))
-    } else if message.ends_with("entities.name") {
-        Status::already_exists(format!("a Tag named \"{name}\" already exists"))
-    } else {
-        Status::already_exists(message.to_string())
-    }
+    let message = match (structure_type, key.key, key.source) {
+        ("DailyNote", "date", _) => format!("a DailyNote for {shown} already exists"),
+        (_, _, KeySource::Name) => format!("a {structure_type} named \"{shown}\" already exists"),
+        (_, key, _) => format!("a {structure_type} with {key} {shown:?} already exists"),
+    };
+    Status::already_exists(message)
 }
 
 /// The DailyNote name rule (ADR 8): a DailyNote is named for its date, as a long
-/// human date, on every write. `date_key` is the entity's `date_key` mirror (see
-/// `date_key_for` and `date_key_from`), so this is None for other structures and
-/// for an undated DailyNote, which keep the name they have.
-fn daily_note_name(date_key: Option<&str>) -> Option<String> {
-    date_key.map(format_long_date)
+/// human date, on every write. `date` is the value of a DailyNote's `date`
+/// property, so this is None for an undated DailyNote, which keeps the name it
+/// has.
+fn daily_note_name(date: Option<&str>) -> Option<String> {
+    date.map(format_long_date)
 }
 
 /// Apply `daily_note_name` to a whole entity, for `new_entity` (and so Create and
 /// Resolve). SetProperty applies it to the one row.
 fn apply_daily_note_name(entity: &mut Entity) {
-    if let Some(name) = daily_note_name(date_key_for(entity).as_deref()) {
+    if entity.structure_type != "DailyNote" {
+        return;
+    }
+    let date = property_key_value(entity.properties.get("date").and_then(|v| v.value.as_ref()));
+    if let Some(name) = daily_note_name(date.as_deref()) {
         entity.name = name;
     }
 }
@@ -937,17 +1023,14 @@ impl EntityServiceTrait for EntityService {
         }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
         let mut entity = new_entity(&structure_type, name.as_deref(), properties);
-        if name.is_none() && def.unique_names {
+        if name.is_none() && def.unique_names() {
             entity.name = self
                 .free_name(&structure_type, &entity.name)
                 .await
                 .map_err(Status::from)?;
         }
 
-        let saved = self
-            .persist_new_entity(&entity)
-            .await
-            .map_err(|e| map_unique_violation(e, &entity.name, date_key_for(&entity).as_deref()))?;
+        let saved = self.persist_new_entity(&entity).await?;
         self.hub
             .publish(watch_entities_response::Event::Upserted(saved.clone()));
         Ok(Response::new(CreateEntityResponse {
@@ -990,7 +1073,16 @@ impl EntityServiceTrait for EntityService {
         )
         .execute(&mut *tx)
         .await
-        .map_err(|e| map_unique_violation(AppError::from(e), name, None))?;
+        .map_err(AppError::from)?;
+        for def in declared_keys(&structure_type)
+            .iter()
+            .filter(|k| k.source == KeySource::Name)
+        {
+            let value = key_value(def.source, name, &HashMap::new());
+            set_key(&mut tx, &id, &structure_type, def.key, value.as_deref())
+                .await
+                .map_err(|e| map_unique_violation(e, &structure_type, def, name))?;
+        }
         fts_upsert_name(&mut tx, &id, name)
             .await
             .map_err(Status::from)?;
@@ -1101,27 +1193,37 @@ impl EntityServiceTrait for EntityService {
             .map_err(Status::from)?;
         }
 
-        // A DailyNote's `date` drives date_key and its name; every other property
-        // leaves both be. Clearing the date keeps the name it had.
+        // The keys this property is the source of. Clearing it drops their rows.
+        for def in declared_keys(&structure_type)
+            .iter()
+            .filter(|k| matches!(k.source, KeySource::Property(id) if id == property_id))
+        {
+            let key = property_key_value(value);
+            let shown = shown_key_value(def.source, "", key.as_deref());
+            set_key(
+                &mut tx,
+                &entity_id,
+                &structure_type,
+                def.key,
+                key.as_deref(),
+            )
+            .await
+            .map_err(|e| map_unique_violation(e, &structure_type, def, shown))?;
+        }
+
+        // A DailyNote's `date` drives its name; every other property leaves it
+        // be. Clearing the date keeps the name it had.
         if structure_type == "DailyNote" && property_id == "date" {
-            let date_key = date_key_from(&structure_type, &property_id, value);
-            let name = daily_note_name(date_key.as_deref());
+            let name = daily_note_name(property_key_value(value).as_deref());
             sqlx::query!(
-                "UPDATE entities SET name = COALESCE(?, name), date_key = ?, updated_at = ? WHERE id = ?",
+                "UPDATE entities SET name = COALESCE(?, name), updated_at = ? WHERE id = ?",
                 name,
-                date_key,
                 now,
                 entity_id,
             )
             .execute(&mut *tx)
             .await
-            .map_err(|e| {
-                map_unique_violation(
-                    AppError::from(e),
-                    name.as_deref().unwrap_or_default(),
-                    date_key.as_deref(),
-                )
-            })?;
+            .map_err(AppError::from)?;
             if let Some(name) = &name {
                 fts_upsert_name(&mut tx, &entity_id, name)
                     .await
@@ -1619,6 +1721,64 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::AlreadyExists);
         assert_eq!(err.message(), r#"a Tag named "Urgent" already exists"#);
         assert_eq!(entity_count(&pool).await, 1);
+    }
+
+    // ADR 10: a Tag name key folds Unicode case, not just ASCII as NOCASE did.
+    #[tokio::test]
+    async fn tag_names_differing_in_non_ascii_case_conflict() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        create(&svc, tag("Café")).await;
+
+        let err = try_create(&svc, tag("CAFÉ"))
+            .await
+            .expect_err("tag names are unique");
+
+        assert_eq!(err.code(), tonic::Code::AlreadyExists);
+        assert_eq!(err.message(), r#"a Tag named "CAFÉ" already exists"#);
+        assert_eq!(entity_count(&pool).await, 1);
+    }
+
+    #[tokio::test]
+    async fn rename_moves_a_tag_key_row() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let entity = create(&svc, tag("Reading")).await;
+        assert_eq!(
+            stored_key(&pool, &entity.id, "name").await.as_deref(),
+            Some("reading")
+        );
+
+        rename(&svc, &entity.id, " Writing ").await.expect("rename");
+
+        assert_eq!(
+            stored_key(&pool, &entity.id, "name").await.as_deref(),
+            Some("writing")
+        );
+        // The old name is free again.
+        create(&svc, tag("reading")).await;
+        assert_eq!(key_row_count(&pool).await, 2);
+    }
+
+    #[tokio::test]
+    async fn delete_removes_key_rows() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let label = create(&svc, tag("urgent")).await;
+        let day = daily_note(&svc, "2026-06-13").await;
+        assert_eq!(key_row_count(&pool).await, 2);
+
+        delete(&svc, &label.id).await;
+        delete(&svc, &day.id).await;
+
+        assert_eq!(key_row_count(&pool).await, 0);
+    }
+
+    async fn key_row_count(pool: &SqlitePool) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM entity_keys")
+            .fetch_one(pool)
+            .await
+            .expect("count keys")
     }
 
     // I-26: a DailyNote is named for its date, so Rename refuses it.
@@ -2376,12 +2536,18 @@ mod tests {
         .expect("property rows")
     }
 
-    async fn stored_date_key(pool: &SqlitePool, entity_id: &str) -> Option<String> {
-        sqlx::query_scalar("SELECT date_key FROM entities WHERE id = ?")
+    /// The entity's stored `entity_keys` value for `key`, if any.
+    async fn stored_key(pool: &SqlitePool, entity_id: &str, key: &str) -> Option<String> {
+        sqlx::query_scalar("SELECT value FROM entity_keys WHERE entity_id = ? AND key = ?")
             .bind(entity_id)
-            .fetch_one(pool)
+            .bind(key)
+            .fetch_optional(pool)
             .await
-            .expect("entity row")
+            .expect("key row")
+    }
+
+    async fn stored_date_key(pool: &SqlitePool, entity_id: &str) -> Option<String> {
+        stored_key(pool, entity_id, "date").await
     }
 
     #[test]
@@ -2574,6 +2740,24 @@ mod tests {
         assert_eq!(err.code(), tonic::Code::AlreadyExists);
     }
 
+    #[tokio::test]
+    async fn clearing_a_daily_note_date_removes_its_key_row() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let day = daily_note(&svc, "2026-06-13").await;
+
+        set_property(&svc, &day.id, "date", None)
+            .await
+            .expect("clear date");
+
+        assert_eq!(stored_date_key(&pool, &day.id).await, None);
+        assert_eq!(key_row_count(&pool).await, 0);
+        let resolved = resolve(&svc, "", by_date("2026-06-13"), true)
+            .await
+            .expect("the day is free");
+        assert!(resolved.created);
+    }
+
     async fn resolve(
         svc: &EntityService,
         structure_type: &str,
@@ -2755,6 +2939,27 @@ mod tests {
         set_created_at(high.id.clone(), 2_000).await;
         for _ in 0..3 {
             assert_eq!(resolved_id().await, low.id);
+        }
+    }
+
+    // A Tag is found by its folded name key, so any casing finds it.
+    #[tokio::test]
+    async fn resolve_tag_by_name_ignores_case() {
+        let svc = entity_service(memory_pool().await);
+        let reading = create(&svc, tag("Reading")).await;
+        let cafe = create(&svc, tag("Café")).await;
+
+        for (name, want) in [
+            ("reading", &reading),
+            (" READING ", &reading),
+            ("café", &cafe),
+            ("CAFÉ", &cafe),
+        ] {
+            let found = resolve(&svc, "Tag", by_name(name), true)
+                .await
+                .expect("resolve");
+            assert!(!found.created, "{name:?}");
+            assert_eq!(found.entity.expect("entity").id, want.id, "{name:?}");
         }
     }
 

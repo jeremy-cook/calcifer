@@ -1,7 +1,8 @@
 //! The structure registry: the one place structure data is authored (ADR 7).
 //! `StructureService.ListStructures` serves it to the browser, the MCP tools read
 //! it directly, and the helpers below derive what the write paths need from it.
-//! Tag name-uniqueness is enforced by the `one_tag_per_name` DB index, not here.
+//! A structure's natural keys (`keys`) are enforced by the `entity_keys` table
+//! (ADR 10): the registry declares them, the write paths fill the table.
 
 use crate::proto;
 
@@ -36,6 +37,23 @@ pub struct PropertyDef {
     pub target_structure: Option<&'static str>,
 }
 
+/// Where a natural key's value comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeySource {
+    /// The entity's name, trimmed and lowercased (see `fold_name`).
+    Name,
+    /// A property's value, already canonical (a date is an ISO day).
+    Property(&'static str),
+}
+
+/// A natural key: a value that identifies an entity of the structure besides its
+/// id. No two entities of a structure share a key's value.
+#[derive(Debug)]
+pub struct KeyDef {
+    pub key: &'static str,
+    pub source: KeySource,
+}
+
 #[derive(Debug)]
 pub struct StructureDef {
     pub type_: &'static str,
@@ -46,8 +64,27 @@ pub struct StructureDef {
     pub properties: &'static [PropertyDef],
     pub creatable: bool,
     pub mentionable: bool,
-    pub unique_names: bool,
     pub name_editable: bool,
+    pub keys: &'static [KeyDef],
+}
+
+impl StructureDef {
+    /// Whether the (folded) name is the identity: the structure declares a key
+    /// sourced from its name.
+    pub fn unique_names(&self) -> bool {
+        self.name_key().is_some()
+    }
+
+    /// The key sourced from the name, if the structure declares one.
+    pub fn name_key(&self) -> Option<&'static KeyDef> {
+        self.keys.iter().find(|k| k.source == KeySource::Name)
+    }
+}
+
+/// The canonical form of a name used as a key: trimmed and lowercased, with
+/// Unicode case folding (unlike SQLite's `NOCASE`, which only folds ASCII).
+pub fn fold_name(name: &str) -> String {
+    name.trim().to_lowercase()
 }
 
 const fn prop(id: &'static str, kind: PropertyKind, label: &'static str) -> PropertyDef {
@@ -95,8 +132,8 @@ pub const STRUCTURES: &[StructureDef] = &[
         properties: &[prop("content", PropertyKind::Richtext, "")],
         creatable: true,
         mentionable: true,
-        unique_names: false,
         name_editable: true,
+        keys: &[],
     },
     StructureDef {
         type_: "Tag",
@@ -107,8 +144,11 @@ pub const STRUCTURES: &[StructureDef] = &[
         creatable: true,
         // Reached via `#`, not bare `@`.
         mentionable: false,
-        unique_names: true,
         name_editable: true,
+        keys: &[KeyDef {
+            key: "name",
+            source: KeySource::Name,
+        }],
     },
     StructureDef {
         type_: "DailyNote",
@@ -123,8 +163,11 @@ pub const STRUCTURES: &[StructureDef] = &[
         // derives the name from the date.
         creatable: false,
         mentionable: false,
-        unique_names: false,
         name_editable: false,
+        keys: &[KeyDef {
+            key: "date",
+            source: KeySource::Property("date"),
+        }],
     },
     StructureDef {
         type_: "Todo",
@@ -156,8 +199,8 @@ pub const STRUCTURES: &[StructureDef] = &[
         ],
         creatable: true,
         mentionable: true,
-        unique_names: false,
         name_editable: true,
+        keys: &[],
     },
 ];
 
@@ -254,7 +297,7 @@ impl From<&StructureDef> for proto::StructureDef {
             properties: def.properties.iter().map(Into::into).collect(),
             creatable: def.creatable,
             mentionable: def.mentionable,
-            unique_names: def.unique_names,
+            unique_names: def.unique_names(),
             name_editable: def.name_editable,
         }
     }
@@ -299,6 +342,38 @@ mod tests {
         assert_eq!(tags.target_structure, Some("Tag"));
         assert!(property("Todo", "nope").is_none());
         assert!(property("Nope", "content").is_none());
+    }
+
+    #[test]
+    fn property_keys_name_declared_properties() {
+        for s in STRUCTURES {
+            for k in s.keys {
+                if let KeySource::Property(id) = k.source {
+                    assert!(
+                        property(s.type_, id).is_some(),
+                        "{} key {:?} names undeclared property {id:?}",
+                        s.type_,
+                        k.key
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unique_names_follows_a_name_key() {
+        let unique: Vec<&str> = STRUCTURES
+            .iter()
+            .filter(|s| s.unique_names())
+            .map(|s| s.type_)
+            .collect();
+        assert_eq!(unique, ["Tag"]);
+    }
+
+    #[test]
+    fn fold_name_trims_and_folds_unicode_case() {
+        assert_eq!(fold_name("  Reading "), "reading");
+        assert_eq!(fold_name("CAFÉ"), fold_name("Café"));
     }
 
     #[test]

@@ -15,6 +15,7 @@ supersedes the old one rather than editing history.
 | [7](0007-server-owned-structure-registry.md) | The server owns the structure registry; clients fetch it | Accepted |
 | [8](0008-server-builds-entities.md) | Clients send intent; the server builds entities | Accepted |
 | [9](0009-watch-fed-replica.md) | The frontend is a full replica fed by Watch | Accepted |
+| [10](0010-natural-keys-declared-by-the-registry.md) | Natural keys are declared by the registry and stored in `entity_keys` | Accepted (replaces ADR 4's `date_key` uniqueness) |
 
 Related: [`../reference/data-model.md`](../reference/data-model.md) for the shapes
 themselves, [`../specs/`](../specs/) for how built features work, and

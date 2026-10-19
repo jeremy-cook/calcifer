@@ -120,7 +120,7 @@ message StructureDef {
 |---|---|
 | `mentionable` | Whether bare `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
 | `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. Enforced: `CreateEntity`, and `ResolveEntity` by name with `create_if_missing`, of a non-creatable structure is `FAILED_PRECONDITION`; a DailyNote is made by `ResolveEntity` with a date. |
-| `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Enforced by the `one_tag_per_name` index (`ALREADY_EXISTS`). Other names can repeat; see `ResolveEntity` for which one a name lookup returns. |
+| `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Not authored: derived from the structure declaring a `name` key (see Natural keys below), and enforced by `entity_keys` (`ALREADY_EXISTS`). Other names can repeat; see `ResolveEntity` for which one a name lookup returns. |
 | `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. Enforced: `RenameEntity` of a structure with `name_editable: false` is `FAILED_PRECONDITION`. |
 
 The server derives what its write paths need from the same table: `richtext_properties`
@@ -128,6 +128,33 @@ The server derives what its write paths need from the same table: `richtext_prop
 in `services/entity.rs` puts on an entity `CreateEntity` or `ResolveEntity` creates),
 `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups.
+
+**Natural keys** ([ADR 10](../adr/0010-natural-keys-declared-by-the-registry.md)). A
+`StructureDef` declares `keys`: values that identify an entity besides its id. Each
+`KeyDef` has a `key` and a source, the entity's name (`KeySource::Name`, trimmed and
+lowercased with Unicode folding) or a property (`KeySource::Property(id)`, used as
+stored). `Tag` declares `name` from its name; `DailyNote` declares `date` from its
+`date` property. The values live in one table:
+
+```sql
+CREATE TABLE entity_keys (
+  structure_type TEXT NOT NULL,
+  key            TEXT NOT NULL,   -- 'date', 'name'
+  value          TEXT NOT NULL,   -- canonical: '2026-10-10', 'reading'
+  entity_id      TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  PRIMARY KEY (structure_type, key, value),
+  UNIQUE (entity_id, key)
+);
+```
+
+The primary key gives a key value to at most one entity of a structure. Create and
+Resolve write every declared key, `RenameEntity` the name keys and `SetEntityProperty`
+the keys sourced from that property, each in the write's transaction; clearing the
+property removes the row, and deleting the entity cascades. A taken value is
+`ALREADY_EXISTS`: `a DailyNote for <date> already exists`, or `a Tag named "<name>"
+already exists` with the name as given. Resolve looks keys up in the same table with
+the same folding. The table enforces identity only; values are still checked as
+described below.
 `CreateEntity`, `ResolveEntity` and `SetEntityProperty` check property values against it and return
 `InvalidArgument` for any value on a declared rich-text property (it takes none), a
 value whose case isn't the declared property's `PropertyKind`, a select key that isn't one of the
@@ -160,12 +187,13 @@ property today; they are rendered so one can be added in `structures.rs` alone.
 Current shape:
 
 - **`Note`** — properties: `content` (richtext).
-- **`Tag`** — no properties; `mentionable: false` (reached via `#`), `unique_names: true`.
+- **`Tag`** — no properties; `mentionable: false` (reached via `#`), a `name` key, so
+  `unique_names: true`.
 - **`DailyNote`** — properties: `date` (date), `content` (richtext); `creatable: false`,
   `mentionable: false`, `name_editable: false`. The server names it for its date (see
   the DailyNote name rule under RPC surface); the entity page moves a note by setting
-  `date` through `DailyNoteDateField`. Uniqueness per day is enforced by the `date_key`
-  column and the `one_daily_note_per_day` index.
+  `date` through `DailyNoteDateField`. Uniqueness per day is enforced by its `date`
+  key in `entity_keys`.
 - **`Todo`** — properties: `status` (select: `open`/`done`, default `open`), `priority`
   (select: `none`/`low`/`medium`/`high`, default `none`), `due` (date), `tags`
   (relations → `Tag`), `content` (richtext). `creatable` and `mentionable`, unlike
@@ -333,7 +361,7 @@ defaults, then the request's properties laid over them; a request value for a
 rich-text property is `INVALID_ARGUMENT`), saves it, publishes `upserted` and returns it. With no name (or a
 blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled To-do"; for a
 `unique_names` structure (Tag) the server takes the first free one of `Untitled Tag`,
-`Untitled Tag 2`, `Untitled Tag 3`, … (case-insensitive). A given name is trimmed.
+`Untitled Tag 2`, `Untitled Tag 3`, … (checked against its folded `name` key). A given name is trimmed.
 A new entity
 has no `referenced_dates`, and its only links are those from relation properties in
 the request.
@@ -341,11 +369,14 @@ the request.
 `ResolveEntity` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
 server). The `name` key trims the name and matches it case-insensitively within
-`structure_type`, which is required and must be in the registry. Only Tag names are
-unique, so for other structures several entities can share a name: the lookup returns
+`structure_type`, which is required and must be in the registry. For a structure with a
+`name` natural key (Tag) the match is on its folded key in `entity_keys`, so it folds
+Unicode case. Only Tag names are
+unique, so for other structures (matched with the ASCII-only `entities_name_ci` index)
+several entities can share a name: the lookup returns
 the one with the oldest `created_at`, and the lowest `id` breaks ties, so the same
 name always resolves to the same entity. The `date` key takes a canonical ISO day and finds
-the DailyNote whose `date_key` matches. `INVALID_ARGUMENT` for a missing key, an empty
+the DailyNote whose `date` key in `entity_keys` matches. `INVALID_ARGUMENT` for a missing key, an empty
 name, an empty or unknown `structure_type` (name), a malformed day, or a `structure_type` other than ""
 or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is set, in
 which case the server builds the entity (`new_entity`: minted id, select defaults,
@@ -357,8 +388,8 @@ DailyNote is resolved by `date`); looking one up by name still works.
 2026"), set by the server when `ResolveEntity` creates it and when `SetEntityProperty` changes its
 `date`. `CreateEntity` and `RenameEntity` refuse a DailyNote (`creatable` and `name_editable` are
 false). `SetEntityProperty` of
-`date` on a DailyNote moves it: it sets the name, the FTS name row and `date_key` in
-one transaction, and fails with `ALREADY_EXISTS` if that day already has a DailyNote.
+`date` on a DailyNote moves it: it sets the name, the FTS name row and its `date` key
+in one transaction, and fails with `ALREADY_EXISTS` if that day already has a DailyNote.
 Clearing the date keeps the name it had.
 
 `RichTextService` only addresses declared rich-text properties. Both `GetRichText` and

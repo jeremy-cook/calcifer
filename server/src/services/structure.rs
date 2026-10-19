@@ -152,7 +152,7 @@ mod tests {
                 (
                     def.creatable,
                     def.mentionable,
-                    def.unique_names,
+                    def.unique_names(),
                     def.name_editable
                 )
             );
