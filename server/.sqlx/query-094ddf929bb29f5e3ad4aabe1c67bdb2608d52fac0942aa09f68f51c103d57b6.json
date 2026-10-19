@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity_id FROM entity_keys\n             WHERE structure_type = ? AND key = ? AND value = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entity_keys",
+            "name": "entity_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "094ddf929bb29f5e3ad4aabe1c67bdb2608d52fac0942aa09f68f51c103d57b6"
+}

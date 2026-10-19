@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM referenced_dates WHERE entity_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "3883a23f7f89cf83e0ad79f49c3273b2d0f6c6ae9ca63c2254017754551e41f9"
+}

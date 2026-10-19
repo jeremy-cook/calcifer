@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\" FROM entities\n               WHERE structure_type = ? AND name = ? COLLATE NOCASE\n               ORDER BY created_at, id\n               LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f4563a2a7c0b9b3e04a40fce5ad8c85ca5409bff4b0d2d86968e3ac3ae137727"
+}

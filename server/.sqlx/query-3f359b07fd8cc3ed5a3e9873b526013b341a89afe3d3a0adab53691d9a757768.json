@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO richtext (entity_id, property_id, doc, updated_at)\n             VALUES (?, ?, ?, ?)\n             ON CONFLICT(entity_id, property_id)\n             DO UPDATE SET doc = excluded.doc, updated_at = excluded.updated_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "3f359b07fd8cc3ed5a3e9873b526013b341a89afe3d3a0adab53691d9a757768"
+}

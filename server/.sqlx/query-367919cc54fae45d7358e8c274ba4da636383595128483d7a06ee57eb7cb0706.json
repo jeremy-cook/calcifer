@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity_id AS \"entity_id!\", source_property_id AS \"source_property_id!\",\n                      created_at AS \"created_at!\"\n               FROM links\n               WHERE target_id = ?1 AND entity_id != ?1\n               ORDER BY created_at DESC, entity_id, link_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "name": "source_property_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "source_property_id"
+          }
+        }
+      },
+      {
+        "name": "created_at!",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "367919cc54fae45d7358e8c274ba4da636383595128483d7a06ee57eb7cb0706"
+}

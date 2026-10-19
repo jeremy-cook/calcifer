@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE properties SET value_blob = ? WHERE entity_id = ? AND property_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "605aecbe8cb9fa8dc56e77c7e2df32a5b11927ac66166fe8a607859debd52aa3"
+}

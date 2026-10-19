@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT property_id AS \"property_id!\", value_blob AS \"value_blob!\"\n           FROM properties WHERE entity_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "property_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "property_id"
+          }
+        }
+      },
+      {
+        "name": "value_blob!",
+        "ordinal": 1,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "value_blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "0ccb74e70d435cb49c0baaf0a149f734607c6a0e1e8739a0c99e70b67b8f8810"
+}

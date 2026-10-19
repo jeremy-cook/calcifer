@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT doc AS \"doc!\" FROM richtext WHERE entity_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "doc!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "richtext",
+            "name": "doc"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "be6966fb3bc63e6dc16798e623634046eff05634a7bcdde69db384cbba8caf03"
+}

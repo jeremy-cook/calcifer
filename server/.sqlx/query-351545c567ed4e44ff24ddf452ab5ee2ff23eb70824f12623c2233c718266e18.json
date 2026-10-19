@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO referenced_dates (entity_id, iso_date) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "351545c567ed4e44ff24ddf452ab5ee2ff23eb70824f12623c2233c718266e18"
+}

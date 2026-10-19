@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT iso_date AS \"iso_date!\" FROM referenced_dates\n           WHERE entity_id = ? ORDER BY iso_date",
+  "describe": {
+    "columns": [
+      {
+        "name": "iso_date!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "referenced_dates",
+            "name": "iso_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b07d5b966203d8f72212cad928aff3c49c37bec93871b1ecf0e4f13251c32458"
+}

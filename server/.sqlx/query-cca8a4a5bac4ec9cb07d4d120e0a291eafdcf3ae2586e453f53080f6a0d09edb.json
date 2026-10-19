@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT updated_at FROM richtext WHERE entity_id = ? AND property_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "updated_at",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "richtext",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cca8a4a5bac4ec9cb07d4d120e0a291eafdcf3ae2586e453f53080f6a0d09edb"
+}

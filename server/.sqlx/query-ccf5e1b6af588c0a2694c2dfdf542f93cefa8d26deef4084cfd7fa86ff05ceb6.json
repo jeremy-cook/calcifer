@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM properties WHERE entity_id = ? AND property_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "ccf5e1b6af588c0a2694c2dfdf542f93cefa8d26deef4084cfd7fa86ff05ceb6"
+}

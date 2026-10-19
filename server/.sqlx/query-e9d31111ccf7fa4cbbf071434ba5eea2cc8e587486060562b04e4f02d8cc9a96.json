@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT doc AS \"doc!\", updated_at AS \"updated_at!\"\n               FROM richtext WHERE entity_id = ? AND property_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "doc!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "richtext",
+            "name": "doc"
+          }
+        }
+      },
+      {
+        "name": "updated_at!",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "richtext",
+            "name": "updated_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e9d31111ccf7fa4cbbf071434ba5eea2cc8e587486060562b04e4f02d8cc9a96"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT fts_rowid AS \"fts_rowid!\" FROM entity_fts_rowids WHERE entity_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "fts_rowid!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "entity_fts_rowids",
+            "name": "fts_rowid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "005895af9128da56910a5179d3e9a0318f7e3b486509e9527cdbeb530fa51453"
+}

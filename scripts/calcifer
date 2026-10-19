@@ -71,9 +71,10 @@ ensure_database() {
   if [ -z "$file" ] || [ -f "$file" ]; then
     return
   fi
-  # A fresh checkout has no database for sqlx to check queries against.
-  command -v sqlx >/dev/null || die "no database at $file to compile against; install sqlx-cli (cargo install sqlx-cli --no-default-features --features sqlite) and re-run"
-  (cd "$server" && sqlx database create && sqlx migrate run)
+  # A fresh checkout has no database for sqlx to check queries against, so the
+  # build reads the committed query cache (server/.sqlx). The server creates
+  # and migrates the database when it starts.
+  export SQLX_OFFLINE=true
 }
 
 ensure_ui_deps() {

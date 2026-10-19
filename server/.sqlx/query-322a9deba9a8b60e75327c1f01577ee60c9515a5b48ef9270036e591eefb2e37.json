@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT entity_id AS \"entity_id!\", source_property_id AS \"property_id!\"\n           FROM links WHERE target_id = ? ORDER BY entity_id, source_property_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "name": "property_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "source_property_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "322a9deba9a8b60e75327c1f01577ee60c9515a5b48ef9270036e591eefb2e37"
+}

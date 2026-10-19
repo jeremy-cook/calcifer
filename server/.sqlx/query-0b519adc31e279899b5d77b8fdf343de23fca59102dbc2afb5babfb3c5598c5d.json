@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT value_blob FROM properties WHERE entity_id = ? AND property_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "value_blob",
+        "ordinal": 0,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "value_blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0b519adc31e279899b5d77b8fdf343de23fca59102dbc2afb5babfb3c5598c5d"
+}

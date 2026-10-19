@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT link_id, target_id, created_at FROM links\n         WHERE entity_id = ? AND source_property_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "link_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "link_id"
+          }
+        }
+      },
+      {
+        "name": "target_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "created_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f92f3963e1fabed3ec6bd5974c42033c1290ea353bf68f87892d7deac35a6834"
+}

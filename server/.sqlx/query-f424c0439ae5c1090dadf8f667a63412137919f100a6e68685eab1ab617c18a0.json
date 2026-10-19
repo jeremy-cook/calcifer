@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT structure_type FROM entities WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "structure_type",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "structure_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f424c0439ae5c1090dadf8f667a63412137919f100a6e68685eab1ab617c18a0"
+}

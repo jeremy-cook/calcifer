@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM links WHERE entity_id = ? AND source_property_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "5055bc17c39f3ec16d7e6da0f4765effa5e8e4d17b2f628a97b1ae4903c3146e"
+}

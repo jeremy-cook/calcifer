@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO entity_fts_rowids (entity_id) VALUES (?) RETURNING fts_rowid AS \"fts_rowid!\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "fts_rowid!",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "entity_fts_rowids",
+            "name": "fts_rowid"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bbc4cb3df6436ebff84c17e9f435755d7b73ab1af25b336b5c61709c27c72129"
+}
