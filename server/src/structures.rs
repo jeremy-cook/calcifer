@@ -66,6 +66,21 @@ pub struct StructureDef {
     pub mentionable: bool,
     pub name_editable: bool,
     pub keys: &'static [KeyDef],
+    /// Facet ids this structure accepts.
+    pub facets: &'static [&'static str],
+}
+
+/// A facet: a fixed group of properties an entity can have attached or not,
+/// if its structure accepts it. Properties only: keys, naming rules and rich
+/// text belong to the structure. Property ids are namespaced as `<id>.<name>`.
+#[derive(Debug)]
+pub struct FacetDef {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub plural: &'static str,
+    /// One line, for the agent (`list_structures`).
+    pub description: &'static str,
+    pub properties: &'static [PropertyDef],
 }
 
 impl StructureDef {
@@ -129,11 +144,15 @@ pub const STRUCTURES: &[StructureDef] = &[
         name: "Note",
         plural: "Notes",
         description: "a concept/topic note (the main building block; reference with [[Name]])",
-        properties: &[prop("content", PropertyKind::Richtext, "")],
+        properties: &[
+            relations("tags", "Tags", "Tag"),
+            prop("content", PropertyKind::Richtext, ""),
+        ],
         creatable: true,
         mentionable: true,
         name_editable: true,
         keys: &[],
+        facets: &["todo"],
     },
     StructureDef {
         type_: "Tag",
@@ -149,6 +168,7 @@ pub const STRUCTURES: &[StructureDef] = &[
             key: "name",
             source: KeySource::Name,
         }],
+        facets: &[],
     },
     StructureDef {
         type_: "DailyNote",
@@ -168,6 +188,7 @@ pub const STRUCTURES: &[StructureDef] = &[
             key: "date",
             source: KeySource::Property("date"),
         }],
+        facets: &[],
     },
     StructureDef {
         type_: "Todo",
@@ -201,8 +222,37 @@ pub const STRUCTURES: &[StructureDef] = &[
         mentionable: true,
         name_editable: true,
         keys: &[],
+        facets: &[],
     },
 ];
+
+/// Every facet, in the order clients list them.
+pub const FACETS: &[FacetDef] = &[FacetDef {
+    id: "todo",
+    name: "To-do",
+    plural: "To-dos",
+    description: "makes an entity actionable: status, priority and a due date",
+    properties: &[
+        select(
+            "todo.status",
+            "Status",
+            &[option("open", "Open"), option("done", "Done")],
+            "open",
+        ),
+        select(
+            "todo.priority",
+            "Priority",
+            &[
+                option("none", "None"),
+                option("low", "Low"),
+                option("medium", "Medium"),
+                option("high", "High"),
+            ],
+            "none",
+        ),
+        prop("todo.due", PropertyKind::Date, "Due"),
+    ],
+}];
 
 pub fn structure(structure_type: &str) -> Option<&'static StructureDef> {
     STRUCTURES.iter().find(|s| s.type_ == structure_type)
@@ -215,6 +265,55 @@ pub fn property(structure_type: &str, id: &str) -> Option<&'static PropertyDef> 
         .properties
         .iter()
         .find(|p| p.id == id)
+}
+
+pub fn facet(id: &str) -> Option<&'static FacetDef> {
+    FACETS.iter().find(|f| f.id == id)
+}
+
+/// The facet whose namespace (`<facet>.`) a property id is in, if any. Structure
+/// property ids never contain a `.`, so they belong to none.
+pub fn facet_of_property(property_id: &str) -> Option<&'static FacetDef> {
+    let (namespace, _) = property_id.split_once('.')?;
+    facet(namespace)
+}
+
+/// A property's definition on an entity of `structure_type` with `facets`
+/// attached: the structure's own properties first, then the attached facets'.
+/// A facet property is found only when its facet is in `facets`.
+pub fn property_for(
+    structure_type: &str,
+    facets: &[&str],
+    property_id: &str,
+) -> Option<&'static PropertyDef> {
+    property(structure_type, property_id).or_else(|| {
+        let f = facet_of_property(property_id)?;
+        if !facets.contains(&f.id) {
+            return None;
+        }
+        f.properties.iter().find(|p| p.id == property_id)
+    })
+}
+
+/// Select property ids (and their default option keys) written when the facet
+/// is attached.
+pub fn facet_select_defaults(facet: &FacetDef) -> Vec<(&'static str, &'static str)> {
+    facet
+        .properties
+        .iter()
+        .filter(|p| p.kind == PropertyKind::Select)
+        .filter_map(|p| p.default_option.map(|d| (p.id, d)))
+        .collect()
+}
+
+/// `relation`/`relations` property ids declared on the facet (full ids).
+pub fn facet_relation_properties(facet: &FacetDef) -> Vec<&'static str> {
+    facet
+        .properties
+        .iter()
+        .filter(|p| matches!(p.kind, PropertyKind::Relation | PropertyKind::Relations))
+        .map(|p| p.id)
+        .collect()
 }
 
 fn properties_of(structure_type: &str) -> impl Iterator<Item = &'static PropertyDef> {
@@ -299,6 +398,19 @@ impl From<&StructureDef> for proto::StructureDef {
             mentionable: def.mentionable,
             unique_names: def.unique_names(),
             name_editable: def.name_editable,
+            facets: def.facets.iter().map(|f| f.to_string()).collect(),
+        }
+    }
+}
+
+impl From<&FacetDef> for proto::FacetDef {
+    fn from(def: &FacetDef) -> Self {
+        proto::FacetDef {
+            id: def.id.to_string(),
+            name: def.name.to_string(),
+            plural: def.plural.to_string(),
+            description: def.description.to_string(),
+            properties: def.properties.iter().map(Into::into).collect(),
         }
     }
 }
@@ -326,7 +438,7 @@ mod tests {
         );
         assert!(select_defaults("Nope").is_empty());
 
-        assert!(relation_properties("Note").is_empty());
+        assert_eq!(relation_properties("Note"), ["tags"]);
         assert!(relation_properties("Tag").is_empty());
         assert!(relation_properties("DailyNote").is_empty());
         assert_eq!(relation_properties("Todo"), ["tags"]);
@@ -390,5 +502,93 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn facet_property_ids_are_namespaced() {
+        for f in FACETS {
+            let prefix = format!("{}.", f.id);
+            for p in f.properties {
+                assert!(
+                    p.id.starts_with(&prefix) && p.id.len() > prefix.len(),
+                    "facet {} property {:?} is not namespaced {prefix:?}",
+                    f.id,
+                    p.id
+                );
+                assert_eq!(facet_of_property(p.id).map(|f| f.id), Some(f.id));
+            }
+        }
+    }
+
+    #[test]
+    fn facets_declare_no_rich_text() {
+        for f in FACETS {
+            for p in f.properties {
+                assert_ne!(
+                    p.kind,
+                    PropertyKind::Richtext,
+                    "facet {} declares rich-text property {:?}",
+                    f.id,
+                    p.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn structure_property_ids_have_no_dot() {
+        for s in STRUCTURES {
+            for p in s.properties {
+                assert!(!p.id.contains('.'), "{}.{} contains a dot", s.type_, p.id);
+            }
+        }
+    }
+
+    #[test]
+    fn accepted_facets_are_declared() {
+        for s in STRUCTURES {
+            for id in s.facets {
+                assert!(
+                    facet(id).is_some(),
+                    "{} accepts undeclared facet {id:?}",
+                    s.type_
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn facet_select_defaults_are_declared_options() {
+        for f in FACETS {
+            for (id, default) in facet_select_defaults(f) {
+                let p = f.properties.iter().find(|p| p.id == id).expect("property");
+                assert!(
+                    p.options.iter().any(|o| o.key == default),
+                    "{id} default {default:?} is not one of its options"
+                );
+            }
+        }
+        let todo = facet("todo").expect("todo facet");
+        assert_eq!(
+            facet_select_defaults(todo),
+            [("todo.status", "open"), ("todo.priority", "none")]
+        );
+        assert!(facet_relation_properties(todo).is_empty());
+    }
+
+    #[test]
+    fn property_for_checks_structure_then_attached_facets() {
+        let tags = property_for("Note", &[], "tags").expect("Note.tags");
+        assert_eq!(tags.target_structure, Some("Tag"));
+        assert!(property_for("Note", &["todo"], "content").is_some());
+
+        assert!(property_for("Note", &[], "todo.status").is_none());
+        let status = property_for("Note", &["todo"], "todo.status").expect("todo.status");
+        assert_eq!(status.default_option, Some("open"));
+
+        assert!(property_for("Note", &["todo"], "nope").is_none());
+        assert!(property_for("Note", &["todo"], "todo.nope").is_none());
+        assert!(property_for("Note", &["todo"], "nope.status").is_none());
+        assert!(property_for("Nope", &[], "content").is_none());
     }
 }

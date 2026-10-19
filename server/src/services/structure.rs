@@ -4,7 +4,7 @@ use crate::proto::{
     structure_service_server::StructureService as StructureServiceTrait, ListStructuresRequest,
     ListStructuresResponse,
 };
-use crate::structures::STRUCTURES;
+use crate::structures::{FACETS, STRUCTURES};
 
 /// Serves the static registry in `structures.rs`. No state: the registry never
 /// changes while the server runs.
@@ -12,13 +12,14 @@ pub struct StructureService;
 
 #[tonic::async_trait]
 impl StructureServiceTrait for StructureService {
-    /// Every structure, in table order.
+    /// Every structure and every facet, each in table order.
     async fn list_structures(
         &self,
         _req: Request<ListStructuresRequest>,
     ) -> Result<Response<ListStructuresResponse>, Status> {
         Ok(Response::new(ListStructuresResponse {
             structures: STRUCTURES.iter().map(Into::into).collect(),
+            facets: FACETS.iter().map(Into::into).collect(),
         }))
     }
 }
@@ -28,22 +29,25 @@ mod tests {
     use super::*;
     use crate::proto::entity_service_server::EntityService as _;
     use crate::proto::{
-        property_value, resolve_entity_request, PropertyKind, ResolveEntityRequest, StructureDef,
+        property_value, resolve_entity_request, PropertyDef, PropertyKind, ResolveEntityRequest,
+        StructureDef,
     };
     use crate::test_support::{entity_service, memory_pool};
 
-    async fn list() -> Vec<StructureDef> {
+    async fn list_response() -> ListStructuresResponse {
         StructureService
             .list_structures(Request::new(ListStructuresRequest {}))
             .await
             .expect("list")
             .into_inner()
-            .structures
     }
 
-    fn options(s: &StructureDef, property_id: &str) -> Vec<(String, String)> {
-        let def = s
-            .properties
+    async fn list() -> Vec<StructureDef> {
+        list_response().await.structures
+    }
+
+    fn options(properties: &[PropertyDef], property_id: &str) -> Vec<(String, String)> {
+        let def = properties
             .iter()
             .find(|p| p.id == property_id)
             .expect("property");
@@ -104,7 +108,7 @@ mod tests {
         assert_eq!(status.kind(), PropertyKind::Select);
         assert_eq!(status.label, "Status");
         assert_contains_in_order(
-            &options(todo, "status"),
+            &options(&todo.properties, "status"),
             &[("open", "Open"), ("done", "Done")],
         );
         assert_eq!(status.default_option, "open");
@@ -113,7 +117,7 @@ mod tests {
         assert_eq!(priority.kind(), PropertyKind::Select);
         // Option order is rank order for the to-do priority sort.
         assert_contains_in_order(
-            &options(todo, "priority"),
+            &options(&todo.properties, "priority"),
             &[
                 ("none", "None"),
                 ("low", "Low"),
@@ -130,6 +134,57 @@ mod tests {
         let content = &todo.properties[4];
         assert_eq!(content.kind(), PropertyKind::Richtext);
         assert!(content.options.is_empty() && content.default_option.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_returns_facets() {
+        let response = list_response().await;
+        let ids: Vec<&str> = response.facets.iter().map(|f| f.id.as_str()).collect();
+        assert_eq!(ids, ["todo"]);
+
+        let todo = &response.facets[0];
+        assert_eq!(
+            (todo.name.as_str(), todo.plural.as_str()),
+            ("To-do", "To-dos")
+        );
+        assert!(!todo.description.is_empty());
+        let props: Vec<&str> = todo.properties.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(props, ["todo.status", "todo.priority", "todo.due"]);
+
+        let status = &todo.properties[0];
+        assert_eq!(status.kind(), PropertyKind::Select);
+        assert_contains_in_order(
+            &options(&todo.properties, "todo.status"),
+            &[("open", "Open"), ("done", "Done")],
+        );
+        assert_eq!(status.default_option, "open");
+
+        let priority = &todo.properties[1];
+        assert_eq!(priority.kind(), PropertyKind::Select);
+        assert_contains_in_order(
+            &options(&todo.properties, "todo.priority"),
+            &[
+                ("none", "None"),
+                ("low", "Low"),
+                ("medium", "Medium"),
+                ("high", "High"),
+            ],
+        );
+        assert_eq!(priority.default_option, "none");
+
+        let due = &todo.properties[2];
+        assert_eq!(due.kind(), PropertyKind::Date);
+        assert_eq!(due.label, "Due");
+
+        let note = response
+            .structures
+            .iter()
+            .find(|s| s.r#type == "Note")
+            .expect("Note");
+        assert_eq!(note.facets, ["todo"]);
+        for s in response.structures.iter().filter(|s| s.r#type != "Note") {
+            assert!(s.facets.is_empty(), "{} accepts {:?}", s.r#type, s.facets);
+        }
     }
 
     // Every field of the table reaches the wire unchanged.
@@ -156,6 +211,7 @@ mod tests {
                     def.name_editable
                 )
             );
+            assert_eq!(wire.facets, def.facets);
             assert_eq!(wire.properties.len(), def.properties.len());
             for (wp, dp) in wire.properties.iter().zip(def.properties) {
                 assert_eq!(wp.id, dp.id);
