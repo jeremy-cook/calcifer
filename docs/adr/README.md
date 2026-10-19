@@ -16,6 +16,7 @@ supersedes the old one rather than editing history.
 | [8](0008-server-builds-entities.md) | Clients send intent; the server builds entities | Accepted |
 | [9](0009-watch-fed-replica.md) | The frontend is a full replica fed by Watch | Accepted |
 | [10](0010-natural-keys-declared-by-the-registry.md) | Natural keys are declared by the registry and stored in `entity_keys` | Accepted (replaces ADR 4's `date_key` uniqueness) |
+| [11](0011-facets.md) | To-dos are a facet that Notes attach, not a structure | Accepted (removes the `Todo` structure) |
 
 Related: [`../reference/data-model.md`](../reference/data-model.md) for the shapes
 themselves, [`../specs/`](../specs/) for how built features work, and
