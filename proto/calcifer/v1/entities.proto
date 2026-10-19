@@ -89,4 +89,9 @@ message Entity {
   // Output only: the ISO "yyyy-MM-dd" days of every dateChip in the entity's
   // rich-text documents, de-duplicated, in no particular order.
   repeated string referenced_dates = 8;
+  // Output only: the attached facet ids (ADR 11), in registry order. Their
+  // values are in `properties` under the facet's namespaced ids
+  // ("todo.status"). Attach and detach with EntityService.AttachFacet and
+  // DetachFacet.
+  repeated string facets = 9;
 }

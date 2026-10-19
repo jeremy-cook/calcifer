@@ -18,6 +18,9 @@ service EntityService {
   // for a structure_type not in the registry or a property value of the wrong
   // kind; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
   // comes from ResolveEntity by date); ALREADY_EXISTS for a taken Tag name.
+  // `facets` are checked as in AttachFacet (INVALID_ARGUMENT for an unknown one,
+  // FAILED_PRECONDITION for one the structure doesn't accept), and a value for
+  // a facet that isn't requested is FAILED_PRECONDITION.
   rpc CreateEntity(CreateEntityRequest) returns (CreateEntityResponse);
   // Change only an entity's name. Other properties are untouched, so a rename
   // doesn't overwrite a concurrent SetEntityProperty. The name is trimmed; a blank
@@ -61,6 +64,17 @@ service EntityService {
   // panel excludes them. NOT_FOUND for an unknown entity_id.
   // For the agent: the frontend derives backlinks from its WatchEntities replica.
   rpc ListBacklinks(ListBacklinksRequest) returns (ListBacklinksResponse);
+  // Attach a facet (ADR 11) to an entity and write the facet's select defaults.
+  // NOT_FOUND for an unknown entity_id, INVALID_ARGUMENT for a facet not in the
+  // registry, FAILED_PRECONDITION for a facet the entity's structure doesn't
+  // accept (`StructureDef.facets`). Already attached: the entity is returned
+  // unchanged, with no write and no event.
+  rpc AttachFacet(AttachFacetRequest) returns (AttachFacetResponse);
+  // Detach a facet: delete its values (every `<facet>.*` property) and the links
+  // derived from them, in one transaction. NOT_FOUND for an unknown entity_id,
+  // INVALID_ARGUMENT for a facet not in the registry. Not attached: the entity is
+  // returned unchanged, with no write and no event.
+  rpc DetachFacet(DetachFacetRequest) returns (DetachFacetResponse);
 }
 
 service RichTextService {
@@ -137,6 +151,9 @@ message CreateEntityRequest {
   // Initial values, laid over the structure's defaults (the request wins on the
   // same id). The server mints the id, timestamps and default properties.
   map<string, PropertyValue> properties = 4;   // keyed by property id
+  // Facet ids to attach on create (ADR 11). Each facet's select defaults are
+  // laid under `properties`. Values may be set only on requested facets.
+  repeated string facets = 5;
 }
 message CreateEntityResponse  { Entity entity = 1; }
 message RenameEntityRequest   { string id = 1; string name = 2; }
@@ -158,6 +175,11 @@ message Backlink {
   google.protobuf.Timestamp created_at = 3;   // when that link was first derived
 }
 message ListBacklinksResponse { repeated Backlink backlinks = 1; }
+
+message AttachFacetRequest  { string entity_id = 1; string facet = 2; }
+message AttachFacetResponse { Entity entity = 1; }
+message DetachFacetRequest  { string entity_id = 1; string facet = 2; }
+message DetachFacetResponse { Entity entity = 1; }
 
 message ListStructuresRequest  {}
 message ListStructuresResponse {
