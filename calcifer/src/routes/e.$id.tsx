@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
-import { TrashIcon } from '@phosphor-icons/react'
+import { CheckSquareIcon, TrashIcon } from '@phosphor-icons/react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,13 +25,24 @@ import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
 import {
   deleteEntity,
+  hasFacet,
   propertyValueOf,
+  useAttachFacet,
+  useDetachFacet,
   useEntity,
   usePropertyWriters,
   useRenameEntity,
   type Entity,
 } from '~/model/store'
-import { PropertyKind, isNameEditable, useStructure, type PropertyDef } from '~/model/structures'
+import {
+  PropertyKind,
+  isNameEditable,
+  useFacets,
+  useStructure,
+  type FacetDef,
+  type PropertyDef,
+} from '~/model/structures'
+import { TODO_FACET } from '~/model/todos'
 
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
@@ -69,10 +80,12 @@ interface EntityHeaderProps {
 
 function EntityHeader({ entity }: EntityHeaderProps) {
   const navigate = useNavigate()
+  const attachFacet = useAttachFacet()
   const structure = useStructure(entity.structureType)
 
   const structureName = structure?.name ?? entity.structureType
   const nameEditable = isNameEditable(entity.structureType)
+  const canMakeTodo = (structure?.facets.includes(TODO_FACET) ?? false) && !hasFacet(entity, TODO_FACET)
 
   const handleDelete = () => {
     deleteEntity(entity.id)
@@ -89,6 +102,12 @@ function EntityHeader({ entity }: EntityHeaderProps) {
   return (
     <div className="flex items-center gap-2 border-b border-border px-12 py-6">
       {renderTitle()}
+      {canMakeTodo && (
+        <Button variant="ghost" size="sm" onClick={() => void attachFacet(entity.id, TODO_FACET)}>
+          <CheckSquareIcon />
+          Make a to-do
+        </Button>
+      )}
       <AlertDialog>
         <AlertDialogTrigger asChild>
           <Button variant="ghost" size="icon" aria-label="Delete entity">
@@ -187,16 +206,18 @@ interface EntityPropertiesProps {
 function EntityProperties({ entity }: EntityPropertiesProps) {
   const { setText, setNumber, setDate, setSelect, setRelation, setRelations } = usePropertyWriters()
   const structure = useStructure(entity.structureType)
-  if (!structure || structure.properties.length === 0) return null
+  const facets = useFacets().filter((f) => hasFacet(entity, f.id))
 
-  // Properties whose editor isn't the generic one for their type, keyed "Structure.propertyId".
+  // Properties whose editor isn't the generic one for their type. Structure
+  // properties are keyed "Structure.propertyId"; facet properties by their full
+  // id ("todo.status"), which already carries the facet.
   const overrides: Record<string, () => React.ReactNode> = {
     'DailyNote.date': () => <DailyNoteDateField key="date" entity={entity} />,
-    'Todo.status': () => <TodoStatusField key="status" entity={entity} />,
+    'todo.status': () => <TodoStatusField key="todo.status" entity={entity} />,
   }
 
-  const renderProperty = (def: PropertyDef) => {
-    const override = overrides[`${entity.structureType}.${def.id}`]
+  const renderProperty = (def: PropertyDef, facet?: FacetDef) => {
+    const override = overrides[facet ? def.id : `${entity.structureType}.${def.id}`]
     if (override) return override()
 
     const value = propertyValueOf(entity, def.id)
@@ -286,5 +307,34 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     }
   }
 
-  return <>{structure.properties.map(renderProperty)}</>
+  return (
+    <>
+      {structure?.properties.map((def) => renderProperty(def))}
+      {facets.map((facet) => (
+        <FacetSection key={facet.id} entity={entity} facet={facet} renderProperty={renderProperty} />
+      ))}
+    </>
+  )
+}
+
+interface FacetSectionProps {
+  entity: Entity
+  facet: FacetDef
+  renderProperty: (def: PropertyDef, facet: FacetDef) => React.ReactNode
+}
+
+function FacetSection({ entity, facet, renderProperty }: FacetSectionProps) {
+  const detachFacet = useDetachFacet()
+
+  return (
+    <section className="border-t border-border py-3">
+      <div className="flex items-center justify-between px-12 py-1">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{facet.name}</h2>
+        <Button variant="ghost" size="sm" onClick={() => void detachFacet(entity.id, facet.id)}>
+          Remove
+        </Button>
+      </div>
+      {facet.properties.map((def) => renderProperty(def, facet))}
+    </section>
+  )
 }
