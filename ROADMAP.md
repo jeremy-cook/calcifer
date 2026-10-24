@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-23, against `main` @ `a1486a4`; the facet work is on the `todo-facet` branch.
+**Last reviewed:** 2026-10-24, against `todo-facet` @ `294d877`, where the to-do facet is built.
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,35 +22,12 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | To-dos as a facet (below) | L | Server side built; frontend, Todo removal and MCP remain. |
-| 2 | I-34: relation edits resend the whole list | M | Live once the facet lands: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
-| 3 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
-| 4 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
-| 5 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
-| 6 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
-| 7 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
-
-### To-dos as a facet · size: L · in progress
-
-[ADR 11](docs/adr/0011-facets.md) replaces the `Todo` structure with a `todo` facet that
-a Note can attach and detach (`todo.status`, `todo.priority`, `todo.due`), and moves
-tags onto Note as a `tags` property. The server half is built: the registry declares
-facets, `ListStructures` serves them, and `CreateEntity.facets`, `AttachFacet` and
-`DetachFacet` store and validate them.
-
-What remains:
-
-- **Frontend model** — read to-dos through the facet (`todo.*` ids, `hasFacet`,
-  `useEntitiesWithFacet`, attach/detach mutations).
-- **Frontend UI** — a facet section with "Remove" on the entity page and a "Make a
-  to-do" action; the to-do list moves to `/v/todos`; quick-add creates a Note with
-  the facet and turns `#word` tokens into `tags`; sidebar and "+ New" entries; calendar
-  rows branch on the facet.
-- **Remove the `Todo` structure** from the registry, tests and FE presentation. No data
-  conversion; the dev DB is recreated afterwards.
-- **MCP** — `list_structures` shows facets, `create_note` takes `tags`, and the hashtag
-  wording says a `#tag` references a Tag without tagging the note.
-- **Reference docs** — facets in `docs/reference/data-model.md`.
+| 1 | I-34: relation edits resend the whole list | M | Live now: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
+| 2 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
+| 3 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
+| 4 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
+| 5 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
+| 6 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ### Connection status · size: M
 
@@ -114,6 +91,14 @@ calls and results inline. An `agent_calls` audit table
 bulk-edit) require per-call confirmation. Agent tools for creating and completing
 to-dos belong here, on the facet.
 
+Until then the MCP tools stay Note-shaped and are extended one gap at a time (decided
+2026-10-24). When this lands, consider a generic surface for both agents: an entity
+addressed by one `ref` string (`Name`, `Structure/Name`, `DailyNote/<date>` or an id),
+rich text by `ref` plus `property`, and about ten tools (`create_entity`,
+`update_entity`, `find_text`, `edit_text`, `append_text`, …) in place of one per
+structure. The in-app agent could also be offered over MCP as a single `ask` tool,
+beside the explicit tools rather than in place of them.
+
 ### Markdown converter from the editor's schema · size: M
 
 `server/src/mcp/markdown.rs` hand-writes the markdown ↔ TipTap mapping and copies
@@ -136,8 +121,8 @@ the acceptance suite, and I-61's escaping cases belong in it.
 ## Smaller items
 
 - **Sidebar completion** — recents / pinned / favourites. Structure nav, "+ New" and the
-  calendar entry point already ship (facet nav comes with the to-do facet); the sidebar
-  is otherwise static.
+  calendar entry point already ship, as does facet nav ("To-dos"); the sidebar is
+  otherwise static.
 - **Command palette (`Cmd+K`)** — deferred. `cmdk` is already a dependency. Revisit when
   entity count outgrows the sidebar, or when in-app agent tool-use wants a
   keyboard-driven action surface.
@@ -154,6 +139,11 @@ the acceptance suite, and I-61's escaping cases belong in it.
   tags. Add the properties, taking inspiration from Taskwarrior's `task add` (`due:fri`,
   `priority:H`, named dates like `eow`). Decide how a property token is told apart from
   the end of the name, and whether the agent shares the parser.
+- **Agent reads and edits daily notes** — the agent can create and append to a daily
+  note, but `get_note`, `query_text_location` and `edit_note` look up Notes by name
+  only, so it can't read a day in full or fix what's already there. Let those three
+  take a `date` as an alternative to `name`, through the same `ResolveEntity` date key
+  `append_to_daily_note` uses (without creating a missing day).
 - **Tags on DailyNote** — ADR 11 gives only Note the `tags` property; adding it to
   DailyNote is a one-line registry edit once there's a reason.
 - **Editor gaps** — none blocking: emoji picker, math/KaTeX, table of contents,

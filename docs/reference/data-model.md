@@ -52,6 +52,7 @@ message Entity {
   google.protobuf.Timestamp created_at = 6;   // output only
   google.protobuf.Timestamp updated_at = 7;   // output only
   repeated string referenced_dates = 8;       // output only
+  repeated string facets = 9;   // output only; attached facet ids, in registry order
 }
 ```
 
@@ -59,10 +60,22 @@ message Entity {
 `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `ResolveEntity`) and the server owns the id, links,
 referenced dates and timestamps ([ADR 8](../adr/0008-server-builds-entities.md)).
 
+`facets` lists the facets attached to the entity (see Facets under Structures), and
+their values are in `properties` under the facet's namespaced ids (`todo.status`). Which
+facets an entity has lives in its own table; deleting the entity cascades:
+
+```sql
+CREATE TABLE entity_facets (
+  entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  facet     TEXT NOT NULL,   -- 'todo'
+  PRIMARY KEY (entity_id, facet)
+);
+```
+
 Rich text lives in a parallel slice, so list and metadata reads never pull document
 bodies. A document is addressed by declared property: a `RichTextRef` is the entity's
 id plus one of the property ids its structure declares with `PROPERTY_KIND_RICHTEXT`
-(today `content` on Note, DailyNote and Todo). A rich-text property has no
+(today `content` on Note and DailyNote). A rich-text property has no
 `PropertyValue` and never appears in `Entity.properties`; clients build the ref from
 the entity id and the registry, and every declared rich-text property has a document
 to read (empty until first saved).
@@ -86,7 +99,8 @@ server reads only each `EntityRef`'s `id`; `structure_type` may be empty.
 
 The registry is authored in exactly one place, the static `STRUCTURES` table in
 `server/src/structures.rs` ([ADR 7](../adr/0007-server-owned-structure-registry.md)),
-and served by `StructureService.ListStructures`. Today: `Note`, `Tag`, `DailyNote`, `Todo`.
+and served by `StructureService.ListStructures`. Today: `Note`, `Tag`, `DailyNote`, plus
+the `todo` facet (`FACETS`, see Facets below).
 Proto defines only its shape, in `proto/calcifer/v1/structures.proto`:
 
 ```proto
@@ -113,6 +127,15 @@ message StructureDef {
   string description = 4;              // one line, for the agent
   repeated PropertyDef properties = 5; // in display order
   bool creatable = 6;  bool mentionable = 7;  bool unique_names = 8;  bool name_editable = 9;
+  repeated string facets = 10;         // facet ids this structure accepts, e.g. 'todo'
+}
+
+message FacetDef {
+  string id = 1;                       // 'todo'
+  string name = 2;                     // 'To-do'
+  string plural = 3;                   // 'To-dos'
+  string description = 4;              // one line, for the agent
+  repeated PropertyDef properties = 5; // full namespaced ids: 'todo.status'; in display order
 }
 ```
 
@@ -122,12 +145,16 @@ message StructureDef {
 | `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. Enforced: `CreateEntity`, and `ResolveEntity` by name with `create_if_missing`, of a non-creatable structure is `FAILED_PRECONDITION`; a DailyNote is made by `ResolveEntity` with a date. |
 | `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Not authored: derived from the structure declaring a `name` key (see Natural keys below), and enforced by `entity_keys` (`ALREADY_EXISTS`). Other names can repeat; see `ResolveEntity` for which one a name lookup returns. |
 | `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. Enforced: `RenameEntity` of a structure with `name_editable: false` is `FAILED_PRECONDITION`. |
+| `facets` | The facets an entity of this structure can have attached. `["todo"]` for `Note`, empty for the others. Enforced: attaching any other facet is `FAILED_PRECONDITION`. |
 
 The server derives what its write paths need from the same table: `richtext_properties`
 (which property ids `RichTextService` addresses), `select_defaults` (what `new_entity`
 in `services/entity.rs` puts on an entity `CreateEntity` or `ResolveEntity` creates),
 `relation_properties`
-(what link sync clears), and `property(type, id)` for single-definition lookups.
+(what link sync clears), and `property(type, id)` for single-definition lookups. For
+facets: `facet(id)`, `facet_of_property(id)` (the facet whose namespace an id is in),
+`facet_select_defaults` and `facet_relation_properties`; `property_for(type, facets,
+id)` looks a definition up in the structure, then in the attached facets.
 
 **Natural keys** ([ADR 10](../adr/0010-natural-keys-declared-by-the-registry.md)). A
 `StructureDef` declares `keys`: values that identify an entity besides its id. Each
@@ -168,15 +195,23 @@ properties aren't checked.
 The frontend fetches the registry once (TanStack Query, `staleTime: Infinity`) and
 doesn't render the router until it has loaded, so synchronous code reads it from the
 cache via `getStructures()`; components use `useStructures()`/`useStructure()`
-(`calcifer/src/model/structures.ts`). The frontend keeps only presentation keyed by
-type (icon and color, with a fallback for unknown types) and per-option presentation
+(`calcifer/src/model/structures.ts`), and facets the same way via `getFacet()`,
+`useFacets()` and `useFacet()`; `propertyDefFor(entity, id)` looks in the entity's
+structure, then its attached facets. The frontend keeps only presentation keyed by
+type (icon and color, with a fallback for unknown types), presentation keyed by facet id
+(icon, nav label and list route: `todo` → check-square, "To-dos", `/v/todos`; an unknown
+facet falls back to its plural and no list page) and per-option presentation
 such as `PriorityBadge`'s variants (with a fallback variant). Option keys the UI
 branches on (status `done`/`open`, priority `none`) stay literal in the code that uses
 them. The MCP `list_structures` tool formats the same RPC response.
 
 The entity page (`calcifer/src/routes/e.$id.tsx`) renders a generic editor for every
-`PropertyKind`, in the structure's property order, unless the property has a custom one
-(`DailyNote.date`, `Todo.status`): richtext → an editor for its document; text and
+`PropertyKind`, in the structure's property order, then one section per attached facet
+(its name, its properties in order and a "Remove" action that detaches it). "Make a
+to-do" appears when the structure accepts `todo` and it isn't attached. A property with
+a custom editor skips the generic one: overrides are keyed `Structure.propertyId` for a
+structure property (`DailyNote.date`) and by the full id for a facet property
+(`todo.status`). Generic editors: richtext → an editor for its document; text and
 number → an inline input that writes on blur or Enter (empty clears the value); date →
 a date picker; select → a dropdown of its options; relation → a picker for one target;
 relations → a list of targets with an "Add" picker. The relation pickers list entities
@@ -186,7 +221,9 @@ property today; they are rendered so one can be added in `structures.rs` alone.
 
 Current shape:
 
-- **`Note`** — properties: `content` (richtext).
+- **`Note`** — properties: `tags` (relations → `Tag`), `content` (richtext); accepts the
+  `todo` facet. `tags` is what the note is tagged with. A `#tag` in its body only
+  references the Tag (the link shows in the Tag's backlinks) and doesn't set `tags`.
 - **`Tag`** — no properties; `mentionable: false` (reached via `#`), a `name` key, so
   `unique_names: true`.
 - **`DailyNote`** — properties: `date` (date), `content` (richtext); `creatable: false`,
@@ -194,14 +231,36 @@ Current shape:
   the DailyNote name rule under RPC surface); the entity page moves a note by setting
   `date` through `DailyNoteDateField`. Uniqueness per day is enforced by its `date`
   key in `entity_keys`.
-- **`Todo`** — properties: `status` (select: `open`/`done`, default `open`), `priority`
-  (select: `none`/`low`/`medium`/`high`, default `none`), `due` (date), `tags`
-  (relations → `Tag`), `content` (richtext). `creatable` and `mentionable`, unlike
-  `Tag`/`DailyNote`.
+
+**Facets** ([ADR 11](../adr/0011-facets.md)). A facet is a fixed group of properties,
+declared in `FACETS` next to the structures, that an entity can have attached or not
+when its structure accepts it. It is served in `ListStructuresResponse.facets` and
+changed only with a server restart; there are no user-defined facets. A facet declares
+properties only: no keys, naming rules or rich text, which belong to the structure. An
+entity has at most one of each facet.
+
+- Facet property ids are namespaced and full, `<facet>.<name>`, everywhere: in
+  `PropertyDef.id`, the `properties` table, `Entity.properties` and
+  `SetEntityPropertyRequest.property_id`. Structure property ids never contain a `.`,
+  so the two can't collide. Registry tests enforce this, that no facet declares a
+  rich-text property, and that every id in a `StructureDef.facets` names a facet.
+- A value on a facet's id is written only while the facet is attached (see
+  `AttachFacet` under RPC surface); clearing one is always allowed.
+- Values are checked like structure property values, and links derived from a facet
+  relation property (none today) use its full id as `source_property_id`.
+
+Today there is one facet:
+
+- **`todo`** ("To-do") — makes an entity actionable. Properties: `todo.status` (select:
+  `open`/`done`, default `open`), `todo.priority` (select: `none`/`low`/`medium`/`high`,
+  default `none`), `todo.due` (date). Accepted by `Note`. A to-do is any entity with
+  this facet; the frontend lists them at `/v/todos`, and the calendar shows each one
+  with a `todo.due`. It is unrelated to a task item (a checkbox line in a document).
 
 Adding a select option, or changing a label or default, is a change to
 `structures.rs` alone. Adding a Structure is `structures.rs` plus, optionally, an
-icon/color entry in the frontend and any custom rendering. No DB migration; the server
+icon/color entry in the frontend and any custom rendering; a facet likewise, with a
+facet presentation entry. No DB migration; the server
 must be restarted and clients pick the change up on next load.
 
 ---
@@ -234,7 +293,8 @@ All of this is recomputed server-side on write; none of it is client-authored. S
   linking to itself is excluded, on the server and in the frontend's backlinks panel
   (`calcifer/src/model/backlinks.ts`) alike.
 - **Deletion** — `DeleteEntity` removes everything the entity owns in one transaction.
-  `properties`, `links`, `referenced_dates`, `entity_keys`, `richtext` and `chunks` all
+  `properties`, `links`, `referenced_dates`, `entity_keys`, `entity_facets`, `richtext` and
+  `chunks` all
   reference `entities(id) ON DELETE CASCADE`. `entity_vec` is a `vec0` virtual table
   keyed by `chunks.id` and can't cascade, so the server deletes the entity's
   embeddings first, while its chunks still name them. Mention chips in other
@@ -273,7 +333,22 @@ service EntityService {
   // excluded; newest created_at first, then source id, then link id. NOT_FOUND
   // for an unknown entity_id.
   rpc ListBacklinks(ListBacklinksRequest) returns (ListBacklinksResponse);
+  // Attach or detach a facet (ADR 11); see below.
+  rpc AttachFacet(AttachFacetRequest) returns (AttachFacetResponse);  // entity_id, facet -> entity
+  rpc DetachFacet(DetachFacetRequest) returns (DetachFacetResponse);  // entity_id, facet -> entity
 }
+
+message CreateEntityRequest {
+  reserved 1; reserved "entity";
+  string structure_type = 2;
+  optional string name = 3;                    // unset or blank: the server's default name
+  map<string, PropertyValue> properties = 4;   // keyed by property id
+  repeated string facets = 5;                  // attached on create, with their select defaults
+}
+message AttachFacetRequest  { string entity_id = 1; string facet = 2; }
+message AttachFacetResponse { Entity entity = 1; }
+message DetachFacetRequest  { string entity_id = 1; string facet = 2; }
+message DetachFacetResponse { Entity entity = 1; }
 
 message ListBacklinksRequest { string entity_id = 1; }
 message Backlink {
@@ -339,7 +414,11 @@ message MatchRange { uint32 start = 1; uint32 end = 2; }  // half-open, UTF-16 c
 
 // The structure registry (see Structures). No filters; every structure in table order.
 service StructureService {
-  rpc ListStructures(ListStructuresRequest) returns (ListStructuresResponse);  // repeated StructureDef
+  rpc ListStructures(ListStructuresRequest) returns (ListStructuresResponse);
+}
+message ListStructuresResponse {
+  repeated StructureDef structures = 1;
+  repeated FacetDef facets = 2;          // in registry order
 }
 ```
 
@@ -364,12 +443,29 @@ The `structure_type` must be in the registry (`INVALID_ARGUMENT`) and `creatable
 (`FAILED_PRECONDITION`, pointing at `ResolveEntity`). The server builds the entity with `new_entity` (minted id and timestamps, select
 defaults, then the request's properties laid over them; a request value for a
 rich-text property is `INVALID_ARGUMENT`), saves it, publishes `upserted` and returns it. With no name (or a
-blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled To-do"; for a
+blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled Note"; for a
 `unique_names` structure (Tag) the server takes the first free one of `Untitled Tag`,
 `Untitled Tag 2`, `Untitled Tag 3`, … (checked against its folded `name` key). A given name is trimmed.
 A new entity
 has no `referenced_dates`, and its only links are those from relation properties in
 the request.
+
+`facets` names the facets to attach on create, each checked as in `AttachFacet`
+(`INVALID_ARGUMENT` for one not in the registry, `FAILED_PRECONDITION` for one the
+structure doesn't accept). Each one's select defaults are laid under the request's
+`properties`. A value on a facet that isn't requested is `FAILED_PRECONDITION`.
+
+**Facets.** `AttachFacet` and `DetachFacet` return `NOT_FOUND` for an unknown
+`entity_id` and `INVALID_ARGUMENT` for a facet not in the registry. `AttachFacet` is
+also `FAILED_PRECONDITION` for a facet the entity's structure doesn't accept. Attaching
+inserts the `entity_facets` row and writes the facet's select defaults; detaching
+deletes the row, every `<facet>.*` property row and the links derived from the facet's
+relation properties. Both run in one transaction, bump `updated_at`, publish `upserted`
+and return the entity. Attaching a facet that is already attached, or detaching one
+that isn't, returns the entity unchanged with no write and no event. `SetEntityProperty`
+of a value on a facet's id while that facet isn't attached is `FAILED_PRECONDITION`
+(`attach the todo facet before setting todo.status`); a clear is allowed. There is no
+facet argument on `ResolveEntity`: an entity it creates has no facets.
 
 `ResolveEntity` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
@@ -434,7 +530,8 @@ and the filtered `ListEntities`, `ListBacklinks` and `Search` are there for the 
   an upsert or a delete is idempotent, so clients apply every event in order.
 
 Every write publishes after its transaction commits: `CreateEntity`, `RenameEntity`,
-`SetEntityProperty` and a creating `ResolveEntity` publish `upserted`, `DeleteEntity` publishes
+`SetEntityProperty`, a creating `ResolveEntity` and a changing `AttachFacet` or
+`DetachFacet` publish `upserted`, `DeleteEntity` publishes
 `deleted_id` then one `upserted` per entity whose relation values it stripped (in id
 order), and `PutRichText` publishes `rich_text_changed` then `upserted`. The
 server reads the current revision before loading a snapshot and skips queued events at
@@ -499,12 +596,19 @@ It exposes eleven tools:
 hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
 
 `list_structures` formats the structure registry (`structures.rs`): each structure's type,
-description and properties (kinds, select options and defaults, relation targets).
+description, properties (kinds, select options and defaults, relation targets) and the
+facets it accepts (`facets: todo`), then each facet as `- facet todo (To-do):
+<description>` with its properties and the structures that accept it (`accepted by:
+Note`). No tool attaches or detaches a facet.
 
 Writes go through the same service methods the browser's RPCs reach. Markdown is converted
 to TipTap JSON in `server/src/mcp/markdown.rs`, resolving `[[wikilink]]` and `#tag` through
 `ResolveEntity` by name. A missing `#tag` is created; a `[[wikilink]]` to a missing target
-fails the call, which writes nothing. `create_note` fails for a name that already exists.
+fails the call, which writes nothing. A body `#tag` only references its Tag; it doesn't
+tag the note. `create_note` fails for a name that already exists, and takes an optional
+`tags` list: each name is resolved or created as a Tag (repeats folded) and set as the
+note's `tags` property through `SetEntityProperty`, after the body is written. Its result
+counts the body's links (`Wikilinks: N`) apart from the `tags` links (`tags: N`).
 `create_daily_note` and `append_to_daily_note` get-or-create the
 day's note with `ResolveEntity` by date; `create_daily_note` says whether it was created or
 already existed. An agent creates a note with wikilinks, the server derives the graph,

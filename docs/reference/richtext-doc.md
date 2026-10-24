@@ -165,11 +165,13 @@ The rest of the schema is StarterKit plus the extensions listed in
 subset of the same schema. Chip ids come from `ResolveEntity` by name. Only a missing
 `#tag` is created; a `[[wikilink]]` to anything that doesn't exist fails the tool call and
 writes nothing, so an agent never invents a note (or links a typo) without being told.
+A `#tag` only references its Tag; it doesn't set the note's `tags` property, which
+`create_note` takes as a separate argument.
 
 | Markdown | Node |
 |---|---|
 | `[[Name]]`, `[[Name\|label]]` | `mention` of a Note, `char: "@"` |
-| `[[Structure/Name]]`, `[[Structure/Name\|label]]` | `mention` of that structure, when `Structure` is exactly a registry structure type (e.g. `[[Todo/Ship]]`); otherwise the whole text is a Note name |
+| `[[Structure/Name]]`, `[[Structure/Name\|label]]` | `mention` of that structure, when `Structure` is exactly a registry structure type (e.g. `[[Tag/ship]]`); otherwise the whole text is a Note name |
 | `#name` after whitespace or at the start of a line (letters, digits, `_`, `-`) | `hashtag`, `structureType: "Tag"`, `char: "#"` |
 | `yyyy-MM-dd` after whitespace or at the start of a line, with no digit after it, naming a real day | `dateChip` |
 | headings, `-`/`*` and `1.` lists, `>` quotes, fenced code | `heading` (`level`), `bulletList`/`orderedList`/`listItem`, `blockquote`, `codeBlock` (`language`) |
@@ -191,7 +193,7 @@ A mention's `structureType` is the structure it resolved in, and its `label` is 
 target's **current** name and structure, looked up by id, not from its stored `label`:
 a Note mention as `[[Name]]`, a mention of any other structure as `[[Structure/Name]]`,
 a hashtag as `#Name`. A Note whose name itself starts with a registry prefix (a Note
-named `Todo/Ship`) is written `[[Note/Todo/Ship]]`, so it reads back as the same Note.
+named `Tag/ship`) is written `[[Note/Tag/ship]]`, so it reads back as the same Note.
 A chip whose target no longer exists is written as its stored `label` in plain text, so
 writing the markdown back creates nothing. A date chip is written as its `date`. Marks
 round-trip as `` `…` ``, `**…**`, `*…*`, `~~…~~` and `[…](href)`; adjacent text nodes
