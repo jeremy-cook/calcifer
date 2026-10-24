@@ -137,7 +137,7 @@ export interface FacetPresentation {
 // Keyed by facet id. A facet the server adds without an entry here still
 // renders, with the fallback icon, its plural as the label and no list page.
 const FACET_PRESENTATION: Record<string, FacetPresentation> = {
-  todo: { icon: CheckSquareIcon, navLabel: 'To-dos', route: '/views/todos' },
+  todo: { icon: CheckSquareIcon, navLabel: 'To-dos', route: '/v/todos' },
 }
 
 export function facetPresentation(id: string): FacetPresentation {

@@ -108,7 +108,7 @@ CREATE TABLE entity_facets (
 );
 ```
 
-The to-do list moves to `/views/todos`, a facet route rather than a structure route. Its
+The to-do list moves to `/v/todos`, a facet route rather than a structure route. Its
 quick-add creates a Note with `facets: ['todo']`, and moves `#word` tokens out of the
 name into the `tags` property. For the agent, `list_structures` lists facets after
 structures, and `create_note` takes an optional `tags` argument that resolves or creates

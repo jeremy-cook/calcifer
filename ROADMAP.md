@@ -43,7 +43,7 @@ What remains:
 - **Frontend model** — read to-dos through the facet (`todo.*` ids, `hasFacet`,
   `useEntitiesWithFacet`, attach/detach mutations).
 - **Frontend UI** — a facet section with "Remove" on the entity page and a "Make a
-  to-do" action; the to-do list moves to `/views/todos`; quick-add creates a Note with
+  to-do" action; the to-do list moves to `/v/todos`; quick-add creates a Note with
   the facet and turns `#word` tokens into `tags`; sidebar and "+ New" entries; calendar
   rows branch on the facet.
 - **Remove the `Todo` structure** from the registry, tests and FE presentation. No data
