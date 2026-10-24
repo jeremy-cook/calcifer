@@ -26,24 +26,27 @@ running app. Nothing below has been reproduced yet.
 lost. Related to I-14.
 
 **Fix:** Add and remove single relation targets (e.g. add/remove ops on `SetProperty`)
-instead of replacing the list. Deferred: revisit if the agent starts tagging.
+instead of replacing the list. Deferred until the agent starts tagging, which the to-do
+facet brings: its quick-add and the MCP `create_note` `tags` argument both write `tags`
+(ADR 11).
 
 **Done when:** concurrent tag additions from two clients both survive.
 
 ---
 
-### I-36 · `ResolveByName` returns a generic error when it loses a create race · low · confirmed
+### I-36 · `ResolveEntity` fails instead of returning the winner when it loses a create race · low · confirmed
 
-**Where:** `server/src/services/entity.rs:803-804` (`resolve_by_name`)
+**Where:** `server/src/services/entity.rs` (`resolve_name`, `resolve_date`)
 
-**Problem:** `ResolveByName` with `create_if_missing` looks the name up, then creates.
-If a concurrent call creates the same unique-named entity (a Tag) in between, the
-insert hits `one_tag_per_name` and is mapped with `Status::from`, not
-`map_unique_violation`, so the caller gets a generic database error instead of the
-winner. Found during T01 of the API review.
+**Problem:** `ResolveEntity` with `create_if_missing` looks the key up, then creates.
+If a concurrent call creates the same keyed entity (a Tag by name, a DailyNote by date)
+in between, the insert fails the `entity_keys` primary key and the caller gets
+`ALREADY_EXISTS` instead of the winner. Found during T01 of the API review; narrowed
+2026-10-23 after ADR 10, which replaced the generic database error with
+`ALREADY_EXISTS`.
 
-**Fix:** On a unique violation, re-read by name and return the winner with
-`created = false`. T07's `Resolve` replaces this path and must do this for both keys.
+**Fix:** On `ALREADY_EXISTS` from `persist_new_entity`, re-read with `find_by_key` and
+return the winner with `created = false`, for both keys.
 
 **Deferred:** Calcifer is a single-user local app, so this race is very unlikely. Revisit if it's ever seen.
 
@@ -132,7 +135,8 @@ published last.
 **Problem:** `link_notes` writes `[[{to}]]` raw, and `get_note` writes a Note's name
 unescaped. A name containing `|` or `]]` is misparsed, and a name like `Todo/X` passed
 to `link_notes` targets a Todo (the serializer already writes such a Note as
-`[[Note/Todo/X]]`). Found in T28.
+`[[Note/Todo/X]]`). Any structure prefix does the same (`Tag/X`), so the bug outlives
+the Todo structure (ADR 11). Found in T28.
 
 **Fix:** Define an escape for `|` and `]]` in names and use it in both writers and the
 parser; have `link_notes` go through the serializer instead of formatting by hand.
@@ -140,7 +144,7 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 **Deferred:** by the user, 2026-09-29. It needs an escape syntax for names in links first
 (the proposal: a backslash escapes the next character inside `[[…]]`).
 
-**Done when:** Notes named `A|B`, `x]]y` and `Todo/X` round-trip through `link_notes`,
+**Done when:** Notes named `A|B`, `x]]y` and `Tag/X` round-trip through `link_notes`,
 `get_note` and `create_note`.
 
 ---

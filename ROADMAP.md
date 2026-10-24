@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-18, against `main` @ `f4dbca2`.
+**Last reviewed:** 2026-10-23, against `todo-facet` @ `ddb3a84` (`main` @ `d33e00f`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -16,19 +16,51 @@ Everything below is what that foundation is *for*.
 
 ## Current work
 
-Fixes and small features to work before the next big feature, ranked by value for effort.
-Effort is a rough guess: S under an hour, M a few hours to a day, L several days. Defects
-live in [`ISSUES.md`](ISSUES.md); this is the order to work them in. Race-condition
-entries stay deferred (single-user app, see ADR 5).
+Ranked by value for effort. Effort is a rough guess: S under an hour, M a few hours to a
+day, L several days. Defects live in [`ISSUES.md`](ISSUES.md); this is the order to work
+them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | Connection status (see Smaller items) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
-| 2 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
-| 3 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
-| 4 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
-| 5 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
-| 6 | I-34: relation edits resend the whole list | M | Deferred until the agent starts tagging. Touches the proto and all three clients. |
+| 1 | I-66: `cargo fmt --check` fails | S | Every server change's checks fail until it's fixed. |
+| 2 | To-dos as a facet (below) | L | Server side built; frontend, Todo removal and MCP remain. |
+| 3 | I-34: relation edits resend the whole list | M | Live once the facet lands: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
+| 4 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
+| 5 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
+| 6 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
+| 7 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
+| 8 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+
+### To-dos as a facet · size: L · in progress
+
+[ADR 11](docs/adr/0011-facets.md) replaces the `Todo` structure with a `todo` facet that
+a Note can attach and detach (`todo.status`, `todo.priority`, `todo.due`), and moves
+tags onto Note as a `tags` property. The server half is built: the registry declares
+facets, `ListStructures` serves them, and `CreateEntity.facets`, `AttachFacet` and
+`DetachFacet` store and validate them.
+
+What remains:
+
+- **Frontend model** — read to-dos through the facet (`todo.*` ids, `hasFacet`,
+  `useEntitiesWithFacet`, attach/detach mutations).
+- **Frontend UI** — a facet section with "Remove" on the entity page and a "Make a
+  to-do" action; the to-do list moves to `/views/todos`; quick-add creates a Note with
+  the facet and turns `#word` tokens into `tags`; sidebar and "+ New" entries; calendar
+  rows branch on the facet.
+- **Remove the `Todo` structure** from the registry, tests and FE presentation. No data
+  conversion; the dev DB is recreated afterwards.
+- **MCP** — `list_structures` shows facets, `create_note` takes `tags`, and the hashtag
+  wording says a `#tag` references a Tag without tagging the note.
+- **Reference docs** — facets in `docs/reference/data-model.md`.
+
+### Connection status · size: M
+
+Pages that read the Watch replica render nothing until the first snapshot, and Watch
+retries silently, so with the server unreachable a deep link to `/e/<id>` stays blank
+forever. Have the replica track the stream's state (connecting, live, retrying) in
+`model/replica.ts`, set it from `model/sync.ts`, and show "Can't reach the server" once
+the first connection attempt fails. Covers every page, not just `/e/<id>`. Chosen over a
+`GetEntity` on load, which fails the same way and renders a page without its relations.
 
 ---
 
@@ -75,12 +107,13 @@ auto-edits** — always user-confirmed.
 
 ### In-app agent with tool use · size: L · deps: AI chat panel
 
-Largely proven already by the MCP tools in `server/src/mcp/`; this brings it in-app. Tool schemas generated
-from the Connect service descriptors (proto reflection → LLM tool JSON), an
-`AIService.Agent(stream)` tool-use loop, and a chat "Agent" mode showing tool calls and
-results inline. An `agent_calls` audit table
+Largely proven already by the MCP tools in `server/src/mcp/`; this brings it in-app.
+Tool schemas generated from the Connect service descriptors (proto reflection → LLM tool
+JSON), an `AIService.Agent(stream)` tool-use loop, and a chat "Agent" mode showing tool
+calls and results inline. An `agent_calls` audit table
 (`id, tool, args_json, result_json, user_approved, ts`); destructive tools (delete,
-bulk-edit) require per-call confirmation.
+bulk-edit) require per-call confirmation. Agent tools for creating and completing
+to-dos belong here, on the facet.
 
 ### Markdown converter from the editor's schema · size: M
 
@@ -97,31 +130,27 @@ by name through the Rust services, `[[Structure/Name]]`, date chips, `_` not bei
 emphasis, `<!-- calcifer:<type> -->` placeholders, and the refusal of an edit over
 content markdown can't carry (`inexpressible`). Check first that the library runs
 without a DOM and doesn't silently drop marks it can't write. The converter's tests are
-the acceptance suite.
+the acceptance suite, and I-61's escaping cases belong in it.
 
 ---
 
 ## Smaller items
 
 - **Sidebar completion** — recents / pinned / favourites. Structure nav, "+ New" and the
-  calendar entry point already ship; the sidebar is otherwise static.
+  calendar entry point already ship (facet nav comes with the to-do facet); the sidebar
+  is otherwise static.
 - **Command palette (`Cmd+K`)** — deferred. `cmdk` is already a dependency. Revisit when
   entity count outgrows the sidebar, or when in-app agent tool-use wants a
   keyboard-driven action surface.
 - **User-facing search** — FTS5 and hybrid retrieval exist but aren't surfaced in the UI
   at all. Revisit after the chat panel; it may make a dedicated search view redundant.
+- **Tags on DailyNote** — ADR 11 gives only Note the `tags` property; adding it to
+  DailyNote is a one-line registry edit once there's a reason.
 - **Editor gaps** — none blocking: emoji picker, math/KaTeX, table of contents,
   character count, YouTube/Excalidraw embeds, multi-column layout, HTML import/export,
   version history, and a general text-format floating toolbar. Full status in the
   README.
 - **Image polish** — caption support and paste-from-clipboard (insert + resize ship).
-- **Connection status** — pages that read the Watch replica render nothing until the
-  first snapshot, and Watch retries silently, so with the server unreachable a deep
-  link to `/e/<id>` stays blank forever. Have the replica track the stream's state
-  (connecting, live, retrying) in `model/replica.ts`, set it from `model/sync.ts`, and
-  show "Can't reach the server" once the first connection attempt fails. Covers every
-  page, not just `/e/<id>`. Chosen over a `GetEntity` on load, which fails the same way
-  and renders a page without its relations.
 
 ---
 
@@ -129,14 +158,14 @@ the acceptance suite.
 
 - **Provenance / `Source` structure** — a `Source` Structure plus provenance properties
   (`authored_by` human|machine, `agent_id`, `sources` relation, `retrieved_at`) on the
-  existing `PropertyValue` oneof, stamped by the MCP write tools, with a
-  `StructureService.List` RPC making structures server-authoritative and a provenance
-  badge on the FE. Shelved — "doesn't matter who wrote what." Spec kept here in case
-  machine-written notes grow enough to need attribution.
+  existing `PropertyValue` oneof, stamped by the MCP write tools, and a provenance badge
+  on the FE. Shelved — "doesn't matter who wrote what." Spec kept here in case
+  machine-written notes grow enough to need attribution. (Structures are already
+  server-authoritative through `ListStructures`, ADR 7.)
 - **Natural-language date parsing** on chip insert (`"next monday"`, `"+3d"`).
   `/today`, `/tomorrow`, `/yesterday` and `/Date` cover the real cases.
 - **Runtime structure editor** — the user owns the source; adding a Structure is a code
-  edit, not a UI flow.
+  edit, not a UI flow. The same goes for facets (ADR 11).
 - **Multi-user / sync / auth** — single-user by design.
 - **Table of contents** — written on the `tiptap.toc` branch, kept as the tag
   `archive/tiptap.toc` (`TableOfContents.tsx`), never merged to `main`. It and
