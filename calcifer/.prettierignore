@@ -5,3 +5,6 @@ yarn.lock
 .claude
 src/components/ui/*
 tsconfig.*
+
+# TanStack Router generates this file on every build
+src/routeTree.gen.ts
