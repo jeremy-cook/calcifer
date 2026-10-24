@@ -117,7 +117,6 @@ const PRESENTATION: Record<string, StructurePresentation> = {
   Note: { icon: NoteIcon, color: 'var(--chart-1)' },
   Tag: { icon: HashIcon, color: 'var(--chart-2)' },
   DailyNote: { icon: NotebookIcon, color: 'var(--chart-3)' },
-  Todo: { icon: CheckSquareIcon, color: 'var(--chart-4)' },
 }
 
 const FALLBACK_PRESENTATION: StructurePresentation = { icon: FileIcon, color: 'var(--muted-foreground)' }
