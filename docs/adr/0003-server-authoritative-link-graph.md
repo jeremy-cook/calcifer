@@ -54,3 +54,10 @@ case-insensitively, for both the browser and the agent.
   referentially clean, which is safe precisely because the server holds the
   authoritative entity set. Dangling references are harmless: backlinks only surface
   live sources.
+
+## Notes
+
+- **2026-10-24:** [ADR 12](0012-direct-relationships.md) (proposed) adds a third source of
+  links: direct relationships, stored in the `relationships` table and derived into
+  `links` under the reserved scope `@related`. Clients still never write a `links` row,
+  and every row is derived from a stored source.
