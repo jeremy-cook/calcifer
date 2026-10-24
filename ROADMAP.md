@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `todo-facet` @ `294d877`, where the to-do facet is built.
+**Last reviewed:** 2026-10-24, against `tooling-pass` @ `763ba04`, where I-67, I-68, I-69 and I-71 are fixed.
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,13 +22,14 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-34: relation edits resend the whole list | M | Live now: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
-| 2 | I-72: the agent can't see or change a note's tags | S–M | A gap since ADR 11: only `create_note` writes `tags`. Shares the add/remove shape with I-34, so do it with I-34 or right after. |
+| 1 | I-34 + I-72: tags edited one at a time, by the browser and the agent | M | New `AddRelationTarget` / `RemoveRelationTarget` RPCs, and a `tag_entity` MCP tool with add and remove lists (decided 2026-10-24). `get_note` shows `tags`. |
+| 2 | Agent reads and edits daily notes (Smaller items) | S | `get_note`, `query_text_location` and `edit_note` take a `date` as an alternative to `name`. |
 | 3 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
-| 4 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
-| 5 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. Direct relationships (below) remove the `link_notes` half. |
-| 6 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 7 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 4 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses Connection status's retrying state. |
+| 5 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
+| 6 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
+| 7 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 8 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ### Connection status · size: M
 
@@ -36,14 +37,19 @@ Pages that read the Watch replica render nothing until the first snapshot, and W
 retries silently, so with the server unreachable a deep link to `/e/<id>` stays blank
 forever. Have the replica track the stream's state (connecting, live, retrying) in
 `model/replica.ts`, set it from `model/sync.ts`, and show "Can't reach the server" once
-the first connection attempt fails. Covers every page, not just `/e/<id>`. Chosen over a
-`GetEntity` on load, which fails the same way and renders a page without its relations.
+the first connection attempt fails. Covers every page, not just `/e/<id>`.
+Decided 2026-10-24: the notice is a full-width banner under the top bar reading "Can't reach
+the server. Retrying…", shown whenever the stream isn't live after a failed attempt (on
+first load and when a live stream drops), and hidden once it's live again.
+
+The replica approach was chosen over a `GetEntity` on load, which fails the same way and
+renders a page without its relations.
 
 ---
 
 ## Next up
 
-### 1. Direct relationships · size: L · ADR 12 (proposed)
+### 1. Direct relationships · size: L · ADR 12 (accepted 2026-10-24)
 
 Associate two notes without writing a mention into the text. A relationship is a row in a
 new `relationships` table, added and removed one at a time by `AddRelationship` and
@@ -56,6 +62,8 @@ back-references, one row per other entity labelled *related* and/or *mentioned*,
 "Add" picker. The agent's `link_notes` calls `AddRelationship` instead of appending
 `Related: [[to]]`, a new `unlink_notes` removes one, and both take a name or an id.
 Fixes I-34 for associations (not for `tags`) and removes the `link_notes` half of I-61.
+ADR 12's open questions, answered 2026-10-24: referenced dates stay on the calendar, there's
+no "Keep" action on mention-only rows yet, and DailyNote keeps `relates_to: []`.
 
 ### 2. AI chat panel (RAG) · size: L · **blocked: LLM provider undecided**
 
@@ -154,7 +162,7 @@ the acceptance suite, and I-61's escaping cases belong in it.
   tags. Add the properties, taking inspiration from Taskwarrior's `task add` (`due:fri`,
   `priority:H`, named dates like `eow`). Decide how a property token is told apart from
   the end of the name, and whether the agent shares the parser.
-- **Agent reads and edits daily notes** — the agent can create and append to a daily
+- **Agent reads and edits daily notes** (Current work 2) — the agent can create and append to a daily
   note, but `get_note`, `query_text_location` and `edit_note` look up Notes by name
   only, so it can't read a day in full or fix what's already there. Let those three
   take a `date` as an alternative to `name`, through the same `ResolveEntity` date key
