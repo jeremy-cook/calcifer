@@ -75,6 +75,20 @@ service EntityService {
   // INVALID_ARGUMENT for a facet not in the registry. Not attached: the entity is
   // returned unchanged, with no write and no event.
   rpc DetachFacet(DetachFacetRequest) returns (DetachFacetResponse);
+  // Add one target to a `relations` property without resending the list, so two
+  // writers adding different targets both keep theirs (I-34). The target is
+  // appended. Already present is a no-op: the entity unchanged, no write, no
+  // event. NOT_FOUND for an unknown entity or target; INVALID_ARGUMENT for an
+  // empty id, a property that isn't a declared `relations` property of the
+  // entity's structure or an attached facet, or a target of the wrong
+  // structure; FAILED_PRECONDITION for a property of a facet that isn't attached.
+  rpc AddRelationTarget(AddRelationTargetRequest) returns (AddRelationTargetResponse);
+  // Remove one target from a `relations` property. Not present (including a target
+  // id that doesn't exist) is a no-op: no write, no event. Removing the last
+  // target clears the property (its row is deleted). NOT_FOUND for an unknown
+  // entity; INVALID_ARGUMENT and FAILED_PRECONDITION for the property as in
+  // AddRelationTarget.
+  rpc RemoveRelationTarget(RemoveRelationTargetRequest) returns (RemoveRelationTargetResponse);
 }
 
 service RichTextService {
@@ -178,6 +192,10 @@ message AttachFacetRequest  { string entity_id = 1; string facet = 2; }
 message AttachFacetResponse { Entity entity = 1; }
 message DetachFacetRequest  { string entity_id = 1; string facet = 2; }
 message DetachFacetResponse { Entity entity = 1; }
+message AddRelationTargetRequest    { string entity_id = 1; string property_id = 2; string target_id = 3; }
+message AddRelationTargetResponse   { Entity entity = 1; }
+message RemoveRelationTargetRequest { string entity_id = 1; string property_id = 2; string target_id = 3; }
+message RemoveRelationTargetResponse { Entity entity = 1; }
 
 message ListStructuresRequest  {}
 message ListStructuresResponse {
