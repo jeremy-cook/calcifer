@@ -47,7 +47,10 @@ async fn check_host(State(listener): State<SocketAddr>, req: Request, next: Next
 }
 
 async fn check_origin(req: Request, next: Next) -> Response {
-    let origin = req.headers().get(header::ORIGIN).map(|v| v.to_str().unwrap_or(""));
+    let origin = req
+        .headers()
+        .get(header::ORIGIN)
+        .map(|v| v.to_str().unwrap_or(""));
     if !origin.is_none_or(origin_allowed) {
         return (StatusCode::FORBIDDEN, "Origin is not this machine").into_response();
     }
@@ -56,14 +59,21 @@ async fn check_origin(req: Request, next: Next) -> Response {
 
 async fn check_content_type(req: Request, next: Next) -> Response {
     if req.method() == Method::POST && !is_json(req.headers()) {
-        return (StatusCode::UNSUPPORTED_MEDIA_TYPE, "Content-Type must be application/json").into_response();
+        return (
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "Content-Type must be application/json",
+        )
+            .into_response();
     }
     next.run(req).await
 }
 
 /// `application/json`, with or without parameters such as `; charset=utf-8`.
 fn is_json(headers: &HeaderMap) -> bool {
-    let Some(value) = headers.get(header::CONTENT_TYPE).and_then(|v| v.to_str().ok()) else {
+    let Some(value) = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+    else {
         return false;
     };
     let essence = value.split(';').next().unwrap_or("").trim();
@@ -73,7 +83,11 @@ fn is_json(headers: &HeaderMap) -> bool {
 /// The host of an authority (`host[:port]`), brackets and port removed, when it
 /// is `localhost` or an IP; callers decide which IPs name this machine.
 fn parse_host(authority: &str) -> Option<Host> {
-    let host = authority.parse::<Authority>().ok()?.host().to_ascii_lowercase();
+    let host = authority
+        .parse::<Authority>()
+        .ok()?
+        .host()
+        .to_ascii_lowercase();
     let host = host.trim_start_matches('[').trim_end_matches(']');
     if host == "localhost" {
         return Some(Host::Localhost);
@@ -101,7 +115,10 @@ fn host_allowed(authority: &str, listener: SocketAddr) -> bool {
 /// An `http(s)` origin whose host is loopback, like the MCP Inspector's
 /// `http://localhost:6274`. `null` (a sandboxed or file page) is not.
 fn origin_allowed(origin: &str) -> bool {
-    let Some(authority) = origin.strip_prefix("http://").or_else(|| origin.strip_prefix("https://")) else {
+    let Some(authority) = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+    else {
         return false;
     };
     match parse_host(authority) {
@@ -122,10 +139,26 @@ mod tests {
     #[test]
     fn hosts_must_name_this_machine() {
         let loopback = addr("127.0.0.1:8081");
-        for ok in ["localhost", "localhost:8081", "LocalHost:1", "127.0.0.1", "127.0.0.1:8080", "[::1]", "[::1]:8081"] {
+        for ok in [
+            "localhost",
+            "localhost:8081",
+            "LocalHost:1",
+            "127.0.0.1",
+            "127.0.0.1:8080",
+            "[::1]",
+            "[::1]:8081",
+        ] {
             assert!(host_allowed(ok, loopback), "{ok}");
         }
-        for bad in ["evil.example", "evil.example:8081", "localhost.evil.example", "192.168.1.5:8081", "::1", "", "[::1"] {
+        for bad in [
+            "evil.example",
+            "evil.example:8081",
+            "localhost.evil.example",
+            "192.168.1.5:8081",
+            "::1",
+            "",
+            "[::1",
+        ] {
             assert!(!host_allowed(bad, loopback), "{bad}");
         }
     }
@@ -143,10 +176,24 @@ mod tests {
 
     #[test]
     fn origins_must_be_loopback_http() {
-        for ok in ["http://localhost:6274", "https://localhost", "http://127.0.0.1:5173", "http://[::1]:6274", "http://LOCALHOST"] {
+        for ok in [
+            "http://localhost:6274",
+            "https://localhost",
+            "http://127.0.0.1:5173",
+            "http://[::1]:6274",
+            "http://LOCALHOST",
+        ] {
             assert!(origin_allowed(ok), "{ok}");
         }
-        for bad in ["null", "https://evil.example", "http://localhost.evil.example", "file://", "ws://localhost", "localhost", ""] {
+        for bad in [
+            "null",
+            "https://evil.example",
+            "http://localhost.evil.example",
+            "file://",
+            "ws://localhost",
+            "localhost",
+            "",
+        ] {
             assert!(!origin_allowed(bad), "{bad}");
         }
     }

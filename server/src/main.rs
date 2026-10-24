@@ -80,7 +80,10 @@ async fn main() -> anyhow::Result<()> {
     let mcp_addr = bind_addr("CALCIFER_MCP_ADDR", DEFAULT_MCP_ADDR)?;
 
     // Both listeners only answer requests addressed to this machine (ADR 5).
-    let mcp = security::local::mcp(mcp::router(mcp::Knowledge::new(entity, richtext, search)), mcp_addr);
+    let mcp = security::local::mcp(
+        mcp::router(mcp::Knowledge::new(entity, richtext, search)),
+        mcp_addr,
+    );
     let ui_dir = std::env::var("CALCIFER_UI_DIR").unwrap_or_else(|_| DEFAULT_UI_DIR.to_string());
     let app = security::local::app(app_router(api, ui_service(PathBuf::from(ui_dir))), app_addr);
 
@@ -89,14 +92,21 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("UI and API listening on {}", app_addr);
     tracing::info!("MCP listening on {}", mcp_addr);
     // Either server ending (it only does on error) takes the process down.
-    tokio::try_join!(axum::serve(app_listener, app), axum::serve(mcp_listener, mcp))?;
+    tokio::try_join!(
+        axum::serve(app_listener, app),
+        axum::serve(mcp_listener, mcp)
+    )?;
 
     Ok(())
 }
 
 /// gRPC-Web for the browser (GrpcWebLayer lets it speak over HTTP/1.1). A path
 /// under `/api` that names no RPC is a 404, rather than falling through to the UI.
-fn api_router(entity: Arc<EntityService>, richtext: Arc<RichTextService>, search: Arc<SearchService>) -> axum::Router {
+fn api_router(
+    entity: Arc<EntityService>,
+    richtext: Arc<RichTextService>,
+    search: Arc<SearchService>,
+) -> axum::Router {
     let web = tonic_web::GrpcWebLayer::new();
     Routes::new(web.layer(EntityServiceServer::from_arc(entity)))
         .add_service(web.layer(RichTextServiceServer::from_arc(richtext)))
@@ -117,7 +127,8 @@ fn app_router(api: axum::Router, ui: Option<ServeDir<ServeFile>>) -> axum::Route
 
 fn bind_addr(var: &str, default: &str) -> anyhow::Result<SocketAddr> {
     let addr = std::env::var(var).unwrap_or_else(|_| default.to_string());
-    addr.parse().map_err(|e| anyhow::anyhow!("{var}={addr:?} isn't a host:port address: {e}"))
+    addr.parse()
+        .map_err(|e| anyhow::anyhow!("{var}={addr:?} isn't a host:port address: {e}"))
 }
 
 #[cfg(test)]
@@ -140,16 +151,30 @@ mod tests {
         let entity = Arc::new(entity_service(pool.clone()));
         let richtext = Arc::new(richtext_service(pool.clone(), WatchHub::new()));
         let search = Arc::new(SearchService::new(pool, EmbedHandle::disabled()));
-        let app = app_router(api_router(entity, richtext, search), ui_service(dir.clone()));
+        let app = app_router(
+            api_router(entity, richtext, search),
+            ui_service(dir.clone()),
+        );
         let status = |method: &str, uri: &str| {
-            let req = Request::builder().method(method).uri(uri).body(Body::empty()).unwrap();
+            let req = Request::builder()
+                .method(method)
+                .uri(uri)
+                .body(Body::empty())
+                .unwrap();
             let app = app.clone();
             async move { app.oneshot(req).await.unwrap().status() }
         };
 
-        assert_eq!(status("GET", "/e/some-entity").await, StatusCode::OK, "a client-side route loads the UI");
+        assert_eq!(
+            status("GET", "/e/some-entity").await,
+            StatusCode::OK,
+            "a client-side route loads the UI"
+        );
         assert_eq!(status("GET", "/api/nope").await, StatusCode::NOT_FOUND);
-        assert_eq!(status("POST", "/api/calcifer.v1.NoService/Nope").await, StatusCode::NOT_FOUND);
+        assert_eq!(
+            status("POST", "/api/calcifer.v1.NoService/Nope").await,
+            StatusCode::NOT_FOUND
+        );
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

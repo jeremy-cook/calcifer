@@ -14,8 +14,9 @@ use crate::proto::entity_service_server::EntityService as EntityServiceTrait;
 use crate::proto::rich_text_service_server::RichTextService as RichTextServiceTrait;
 use crate::proto::search_service_server::SearchService as SearchServiceTrait;
 use crate::proto::{
-    resolve_entity_request, Entity, GetEntityRequest, GetRichTextRequest, ListBacklinksRequest, MatchRange,
-    PutRichTextRequest, ResolveEntityRequest, ResolveEntityResponse, SearchMode, SearchRequest,
+    resolve_entity_request, Entity, GetEntityRequest, GetRichTextRequest, ListBacklinksRequest,
+    MatchRange, PutRichTextRequest, ResolveEntityRequest, ResolveEntityResponse, SearchMode,
+    SearchRequest,
 };
 use crate::services::entity::{ts_from_millis, EntityService};
 use crate::services::richtext::RichTextService;
@@ -59,7 +60,12 @@ fn blocks(doc: &Value) -> Vec<Value> {
 fn unknown_targets(missing: &[&Reference]) -> ToolError {
     let listed: Vec<String> = missing
         .iter()
-        .map(|r| markdown::mention_markdown(&ChipTarget { name: r.name.clone(), structure_type: r.structure_type.clone() }))
+        .map(|r| {
+            markdown::mention_markdown(&ChipTarget {
+                name: r.name.clone(),
+                structure_type: r.structure_type.clone(),
+            })
+        })
         .collect();
     ToolError(format!(
         "Nothing was written: {} link(s) to something that doesn't exist: {}. Fix the name (search_notes finds existing ones) or create the target first: create_note for a note, create_daily_note for a day.",
@@ -96,7 +102,12 @@ struct BlockSpan {
 /// The doc blocks `from..to` that body lines `start..=end` cover; an empty range
 /// (end = start - 1) is an insertion point. A line range may start and end on
 /// blank lines but never inside a block.
-fn block_range(spans: &[BlockSpan], block_count: usize, start: usize, end: usize) -> Result<(usize, usize), ToolError> {
+fn block_range(
+    spans: &[BlockSpan],
+    block_count: usize,
+    start: usize,
+    end: usize,
+) -> Result<(usize, usize), ToolError> {
     let total = spans.last().map_or(0, |s| s.last);
     if start > total + 1 {
         return fail(format!(
@@ -123,10 +134,16 @@ fn block_range(spans: &[BlockSpan], block_count: usize, start: usize, end: usize
     }
     let last = spans.iter().rfind(|s| s.first <= end);
     let (Some(first), Some(last)) = (first, last) else {
-        return fail(format!("lines {start}-{end} contain no block; to insert there, use end = {}.", start - 1));
+        return fail(format!(
+            "lines {start}-{end} contain no block; to insert there, use end = {}.",
+            start - 1
+        ));
     };
     if last.index < first.index {
-        return fail(format!("lines {start}-{end} contain no block; to insert there, use end = {}.", start - 1));
+        return fail(format!(
+            "lines {start}-{end} contain no block; to insert there, use end = {}.",
+            start - 1
+        ));
     }
     if end < last.last {
         return fail(format!(
@@ -144,7 +161,12 @@ fn is_empty_paragraph(block: &Value) -> bool {
 /// Blocks `from..to` are about to be replaced from markdown; refuse if one holds
 /// a node or formatting markdown can't express, which the replacement would
 /// silently drop.
-fn refuse_inexpressible(spans: &[BlockSpan], blocks: &[Value], from: usize, to: usize) -> Result<(), ToolError> {
+fn refuse_inexpressible(
+    spans: &[BlockSpan],
+    blocks: &[Value],
+    from: usize,
+    to: usize,
+) -> Result<(), ToolError> {
     for span in spans.iter().filter(|s| (from..to).contains(&s.index)) {
         if let Some(what) = markdown::inexpressible(&blocks[span.index]) {
             return fail(format!(
@@ -156,13 +178,16 @@ fn refuse_inexpressible(spans: &[BlockSpan], blocks: &[Value], from: usize, to: 
     Ok(())
 }
 
-static FRONTMATTER: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^---\r?\n(?:[A-Za-z_][\w-]*:.*\r?\n)+---[ \t]*(?:\r?\n|$)").unwrap());
+static FRONTMATTER: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"^---\r?\n(?:[A-Za-z_][\w-]*:.*\r?\n)+---[ \t]*(?:\r?\n|$)").unwrap()
+});
 
 /// A leading `---` block of `key: value` lines, as get_note writes it. Anything
 /// else starting with `---` is note content and is left alone.
 fn strip_frontmatter(markdown: &str) -> &str {
-    FRONTMATTER.find(markdown).map_or(markdown, |m| &markdown[m.end()..])
+    FRONTMATTER
+        .find(markdown)
+        .map_or(markdown, |m| &markdown[m.end()..])
 }
 
 const APPEND_ATTEMPTS: usize = 3;
@@ -184,8 +209,16 @@ struct BacklinkSource {
 }
 
 impl Knowledge {
-    pub fn new(entity: Arc<EntityService>, richtext: Arc<RichTextService>, search: Arc<SearchService>) -> Self {
-        Self { entity, richtext, search }
+    pub fn new(
+        entity: Arc<EntityService>,
+        richtext: Arc<RichTextService>,
+        search: Arc<SearchService>,
+    ) -> Self {
+        Self {
+            entity,
+            richtext,
+            search,
+        }
     }
 
     /// Get (or, with `create_if_missing`, create) the (structure_type, name)
@@ -201,13 +234,22 @@ impl Knowledge {
             key: Some(resolve_entity_request::Key::Name(name.to_string())),
             create_if_missing,
         };
-        Ok(self.entity.resolve_entity(Request::new(req)).await?.into_inner())
+        Ok(self
+            .entity
+            .resolve_entity(Request::new(req))
+            .await?
+            .into_inner())
     }
 
     pub(super) async fn entity(&self, id: &str) -> Result<Entity, Status> {
         let req = GetEntityRequest { id: id.to_string() };
-        let res = self.entity.get_entity(Request::new(req)).await?.into_inner();
-        res.entity.ok_or_else(|| Status::internal("GetEntity returned no entity"))
+        let res = self
+            .entity
+            .get_entity(Request::new(req))
+            .await?
+            .into_inner();
+        res.entity
+            .ok_or_else(|| Status::internal("GetEntity returned no entity"))
     }
 
     /// [[wikilinks]] / #tags resolve to canonical entities, keyed by
@@ -257,7 +299,13 @@ impl Knowledge {
     async fn chip_targets(&self, doc: &Value) -> Result<HashMap<String, ChipTarget>, ToolError> {
         let found = try_join_all(markdown::chip_ids(doc).into_iter().map(|id| async move {
             match self.entity(&id).await {
-                Ok(e) => Ok(Some((id, ChipTarget { name: e.name, structure_type: e.structure_type }))),
+                Ok(e) => Ok(Some((
+                    id,
+                    ChipTarget {
+                        name: e.name,
+                        structure_type: e.structure_type,
+                    },
+                ))),
                 Err(e) if is_code(&e, Code::NotFound) => Ok(None),
                 Err(e) => Err(e),
             }
@@ -279,7 +327,11 @@ impl Knowledge {
                 continue;
             }
             let last = line + md.split('\n').count() - 1;
-            spans.push(BlockSpan { index, first: line, last });
+            spans.push(BlockSpan {
+                index,
+                first: line,
+                last,
+            });
             parts.push(md);
             line = last + 2;
         }
@@ -289,13 +341,26 @@ impl Knowledge {
     /// A declared-but-unsaved doc comes back empty at the epoch (see
     /// RichTextService.GetRichText), so `updated_at` is always something a
     /// conditional PutRichText can echo back.
-    pub(super) async fn get_doc(&self, r: &DocRef) -> Result<(Value, prost_types::Timestamp), ToolError> {
-        let req = GetRichTextRequest { entity_id: r.entity_id.clone(), property_id: r.property_id.clone() };
-        let rt = self.richtext.get_rich_text(Request::new(req)).await?.into_inner().rich_text.unwrap_or_default();
+    pub(super) async fn get_doc(
+        &self,
+        r: &DocRef,
+    ) -> Result<(Value, prost_types::Timestamp), ToolError> {
+        let req = GetRichTextRequest {
+            entity_id: r.entity_id.clone(),
+            property_id: r.property_id.clone(),
+        };
+        let rt = self
+            .richtext
+            .get_rich_text(Request::new(req))
+            .await?
+            .into_inner()
+            .rich_text
+            .unwrap_or_default();
         let doc = if rt.doc.is_empty() {
             empty_doc()
         } else {
-            serde_json::from_str(&rt.doc).map_err(|e| ToolError(format!("the stored document isn't valid JSON: {e}")))?
+            serde_json::from_str(&rt.doc)
+                .map_err(|e| ToolError(format!("the stored document isn't valid JSON: {e}")))?
         };
         Ok((doc, rt.updated_at.unwrap_or_else(|| ts_from_millis(0))))
     }
@@ -337,11 +402,19 @@ impl Knowledge {
     /// one Backlink per link row (self-links excluded), so a source that links
     /// from two properties is folded into one entry here.
     async fn backlink_sources(&self, target_id: &str) -> Result<Vec<BacklinkSource>, ToolError> {
-        let req = ListBacklinksRequest { entity_id: target_id.to_string() };
-        let res = self.entity.list_backlinks(Request::new(req)).await?.into_inner();
+        let req = ListBacklinksRequest {
+            entity_id: target_id.to_string(),
+        };
+        let res = self
+            .entity
+            .list_backlinks(Request::new(req))
+            .await?
+            .into_inner();
         let mut sources: Vec<(String, BacklinkSource)> = Vec::new();
         for backlink in res.backlinks {
-            let Some(source) = backlink.source else { continue };
+            let Some(source) = backlink.source else {
+                continue;
+            };
             let at = match sources.iter().position(|(id, _)| *id == source.id) {
                 Some(at) => at,
                 None => {
@@ -378,7 +451,11 @@ impl Knowledge {
 
         let parsed = markdown::parse(strip_frontmatter(markdown));
         let (mut ids, missing) = self.resolve_references(&parsed.references).await?;
-        let own_key = Reference { structure_type: "Note".into(), name: name.into() }.key();
+        let own_key = Reference {
+            structure_type: "Note".into(),
+            name: name.into(),
+        }
+        .key();
         let missing: Vec<&Reference> = missing.into_iter().filter(|r| r.key() != own_key).collect();
         if !missing.is_empty() {
             return Err(unknown_targets(&missing));
@@ -392,10 +469,19 @@ impl Knowledge {
         let id = res.entity.map(|e| e.id).unwrap_or_default();
         ids.insert(own_key, id.clone());
         // Unconditional: the note was created just above, so it has no body to lose.
-        self.put_doc(&doc_ref("Note", &id)?, &parsed.resolve(&ids), None).await?;
+        self.put_doc(&doc_ref("Note", &id)?, &parsed.resolve(&ids), None)
+            .await?;
         let ent = self.entity(&id).await?;
-        let linked = ent.links.iter().map(|l| l.target.as_ref().map_or("", |t| t.structure_type.as_str())).collect::<Vec<_>>();
-        let linked = if linked.is_empty() { "none".to_string() } else { linked.join(", ") };
+        let linked = ent
+            .links
+            .iter()
+            .map(|l| l.target.as_ref().map_or("", |t| t.structure_type.as_str()))
+            .collect::<Vec<_>>();
+        let linked = if linked.is_empty() {
+            "none".to_string()
+        } else {
+            linked.join(", ")
+        };
         Ok(format!(
             "Saved note \"{}\" ({id}). Wikilinks: {} [{linked}]; dates: {}.",
             ent.name,
@@ -409,7 +495,9 @@ impl Knowledge {
     async fn existing_note_id(&self, name: &str) -> Result<String, ToolError> {
         match self.resolve_name("Note", name, false).await {
             Ok(res) => Ok(res.entity.map(|e| e.id).unwrap_or_default()),
-            Err(e) if is_code(&e, Code::NotFound) => fail(format!("No note named \"{name}\". Use search_notes or create_note.")),
+            Err(e) if is_code(&e, Code::NotFound) => fail(format!(
+                "No note named \"{name}\". Use search_notes or create_note."
+            )),
             Err(e) => Err(e.into()),
         }
     }
@@ -417,9 +505,18 @@ impl Knowledge {
     pub async fn append_to_note(&self, name: &str, markdown: &str) -> ToolResult {
         let id = self.existing_note_id(name).await?;
         let addition = self.parse_markdown(markdown).await?;
-        self.append_doc(&doc_ref("Note", &id)?, &format!("Note \"{name}\""), &addition).await?;
+        self.append_doc(
+            &doc_ref("Note", &id)?,
+            &format!("Note \"{name}\""),
+            &addition,
+        )
+        .await?;
         let ent = self.entity(&id).await?;
-        Ok(format!("Appended to \"{}\" ({id}); now {} wikilink(s).", ent.name, ent.links.len()))
+        Ok(format!(
+            "Appended to \"{}\" ({id}); now {} wikilink(s).",
+            ent.name,
+            ent.links.len()
+        ))
     }
 
     /// Where `query` occurs in a note's body, as the whole-block line ranges
@@ -462,16 +559,32 @@ impl Knowledge {
             .iter()
             .take(MAX_FOUND_BLOCKS)
             .map(|(s, n)| {
-                let matches = if *n == 1 { "1 match".to_string() } else { format!("{n} matches") };
-                format!("lines {}-{} ({matches}):\n{}", s.first, s.last, lines[s.first - 1..s.last].join("\n"))
+                let matches = if *n == 1 {
+                    "1 match".to_string()
+                } else {
+                    format!("{n} matches")
+                };
+                format!(
+                    "lines {}-{} ({matches}):\n{}",
+                    s.first,
+                    s.last,
+                    lines[s.first - 1..s.last].join("\n")
+                )
             })
             .collect();
         let more = if hits.len() > shown.len() {
-            format!("\n\n({} more block(s) not shown; use a longer query.)", hits.len() - shown.len())
+            format!(
+                "\n\n({} more block(s) not shown; use a longer query.)",
+                hits.len() - shown.len()
+            )
         } else {
             String::new()
         };
-        Ok(format!("version: {}\n\n{}{more}", timestamp_ms(&updated_at), shown.join("\n\n")))
+        Ok(format!(
+            "version: {}\n\n{}{more}",
+            timestamp_ms(&updated_at),
+            shown.join("\n\n")
+        ))
     }
 
     /// Replace lines `start..=end` (1-based) of a note's body with `markdown`. An
@@ -479,12 +592,23 @@ impl Knowledge {
     /// deletes the range. `version` is the one get_note put in the frontmatter:
     /// line numbers only mean something against the document they were read
     /// from, so a changed note is an error, not a retry.
-    pub async fn edit_note(&self, name: &str, start: usize, end: usize, markdown: &str, version: i64) -> ToolResult {
+    pub async fn edit_note(
+        &self,
+        name: &str,
+        start: usize,
+        end: usize,
+        markdown: &str,
+        version: i64,
+    ) -> ToolResult {
         if start == 0 || version < 0 {
             return fail("start must be at least 1 and version at least 0; nothing was written.");
         }
         let id = self.existing_note_id(name).await?;
-        let stale = || ToolError(format!("Note \"{name}\" changed since you read it. Call get_note again and redo the edit."));
+        let stale = || {
+            ToolError(format!(
+                "Note \"{name}\" changed since you read it. Call get_note again and redo the edit."
+            ))
+        };
 
         let r = doc_ref("Note", &id)?;
         let (doc, updated_at) = self.get_doc(&r).await?;
@@ -502,7 +626,11 @@ impl Knowledge {
         let (from, to) = block_range(&spans, existing.len(), start, end)?;
         refuse_inexpressible(&spans, &existing, from, to)?;
 
-        let replacement = if markdown.trim().is_empty() { Vec::new() } else { blocks(&self.parse_markdown(markdown).await?) };
+        let replacement = if markdown.trim().is_empty() {
+            Vec::new()
+        } else {
+            blocks(&self.parse_markdown(markdown).await?)
+        };
         let mut content = existing[..from].to_vec();
         content.extend(replacement.iter().cloned());
         content.extend(existing[to..].iter().cloned());
@@ -525,7 +653,11 @@ impl Knowledge {
         } else {
             format!("Replaced lines {start}-{end}")
         };
-        Ok(format!("{action} of \"{}\" ({id}); now {} wikilink(s).", ent.name, ent.links.len()))
+        Ok(format!(
+            "{action} of \"{}\" ({id}); now {} wikilink(s).",
+            ent.name,
+            ent.links.len()
+        ))
     }
 
     /// The note as markdown under a frontmatter block (name, version,
@@ -535,12 +667,21 @@ impl Knowledge {
     pub async fn get_note(&self, name: &str) -> ToolResult {
         let found = match self.resolve_name("Note", name, false).await {
             Ok(res) => res.entity.unwrap_or_default(),
-            Err(e) if is_code(&e, Code::NotFound) => return Ok(format!("No note named \"{name}\". Use search_notes or create_note.")),
+            Err(e) if is_code(&e, Code::NotFound) => {
+                return Ok(format!(
+                    "No note named \"{name}\". Use search_notes or create_note."
+                ))
+            }
             Err(e) => return Err(e.into()),
         };
         let (doc, updated_at) = self.get_doc(&doc_ref("Note", &found.id)?).await?;
         let (body, _) = self.render_body(&doc).await?;
-        let linked_from: Vec<String> = self.backlink_sources(&found.id).await?.into_iter().map(|s| s.name).collect();
+        let linked_from: Vec<String> = self
+            .backlink_sources(&found.id)
+            .await?
+            .into_iter()
+            .map(|s| s.name)
+            .collect();
         Ok(format!(
             "---\nname: {}\nversion: {}\nlinked_from: {}\n---\n{body}",
             json!(found.name),
@@ -551,7 +692,11 @@ impl Knowledge {
 
     pub async fn search_notes(&self, query: &str, limit: u32, mode: SearchMode) -> ToolResult {
         // The server falls back to lexical for semantic/hybrid when embeddings are off.
-        let req = SearchRequest { query: query.to_string(), limit, mode: mode as i32 };
+        let req = SearchRequest {
+            query: query.to_string(),
+            limit,
+            mode: mode as i32,
+        };
         let res = self.search.search(Request::new(req)).await?.into_inner();
         if res.hits.is_empty() {
             return Ok(format!("No matches for \"{query}\"."));
@@ -575,19 +720,26 @@ impl Knowledge {
     pub async fn get_backlinks(&self, name: &str) -> ToolResult {
         let entity = match self.resolve_name("Note", name, false).await {
             Ok(res) => res.entity.unwrap_or_default(),
-            Err(e) if is_code(&e, Code::NotFound) => return Ok(format!("No note named \"{name}\".")),
+            Err(e) if is_code(&e, Code::NotFound) => {
+                return Ok(format!("No note named \"{name}\"."))
+            }
             Err(e) => return Err(e.into()),
         };
         let sources = self.backlink_sources(&entity.id).await?;
         if sources.is_empty() {
             return Ok(format!("Nothing links to \"{name}\" yet."));
         }
-        Ok(sources.iter().map(|s| format!("- {}", backlink_label(s))).collect::<Vec<_>>().join("\n"))
+        Ok(sources
+            .iter()
+            .map(|s| format!("- {}", backlink_label(s)))
+            .collect::<Vec<_>>()
+            .join("\n"))
     }
 
     pub async fn link_notes(&self, from: &str, to: &str) -> ToolResult {
         // Links are content-derived, so "linking" = adding a [[to]] mention to `from`.
-        self.append_to_note(from, &format!("Related: [[{to}]]")).await?;
+        self.append_to_note(from, &format!("Related: [[{to}]]"))
+            .await?;
         Ok(format!("Linked \"{from}\" -> \"{to}\"."))
     }
 
@@ -599,24 +751,42 @@ impl Knowledge {
             key: Some(resolve_entity_request::Key::Date(date.to_string())),
             create_if_missing: true,
         };
-        let res = self.entity.resolve_entity(Request::new(req)).await?.into_inner();
+        let res = self
+            .entity
+            .resolve_entity(Request::new(req))
+            .await?
+            .into_inner();
         let entity = res.entity.unwrap_or_default();
         Ok((entity.id, entity.name, res.created))
     }
 
     pub async fn create_daily_note(&self, date: &str) -> ToolResult {
         let (id, name, created) = self.resolve_daily_note(date).await?;
-        let outcome = if created { "created" } else { "already existed" };
-        Ok(format!("Daily note \"{name}\" ({id}) for {date} {outcome}."))
+        let outcome = if created {
+            "created"
+        } else {
+            "already existed"
+        };
+        Ok(format!(
+            "Daily note \"{name}\" ({id}) for {date} {outcome}."
+        ))
     }
 
     pub async fn append_to_daily_note(&self, date: &str, markdown: &str) -> ToolResult {
         // Links first, so a bad one doesn't leave a new, empty day behind.
         let addition = self.parse_markdown(markdown).await?;
         let (id, name, _) = self.resolve_daily_note(date).await?;
-        self.append_doc(&doc_ref("DailyNote", &id)?, &format!("Daily note \"{name}\""), &addition).await?;
+        self.append_doc(
+            &doc_ref("DailyNote", &id)?,
+            &format!("Daily note \"{name}\""),
+            &addition,
+        )
+        .await?;
         let ent = self.entity(&id).await?;
-        Ok(format!("Appended to daily note \"{name}\" ({id}); now {} wikilink(s).", ent.links.len()))
+        Ok(format!(
+            "Appended to daily note \"{name}\" ({id}); now {} wikilink(s).",
+            ent.links.len()
+        ))
     }
 
     /// The registry lives in `structures.rs`; this only formats it.
@@ -643,7 +813,10 @@ impl Knowledge {
 fn mark_matches(snippet: &str, matches: &[MatchRange]) -> String {
     let units: Vec<u16> = snippet.encode_utf16().collect();
     let slice = |from: usize, to: usize| String::from_utf16_lossy(&units[from..to]);
-    let mut ranges: Vec<(usize, usize)> = matches.iter().map(|m| (m.start as usize, m.end as usize)).collect();
+    let mut ranges: Vec<(usize, usize)> = matches
+        .iter()
+        .map(|m| (m.start as usize, m.end as usize))
+        .collect();
     ranges.sort_unstable();
     let mut out = String::new();
     let mut at = 0;
@@ -662,7 +835,11 @@ fn mark_matches(snippet: &str, matches: &[MatchRange]) -> String {
 /// The source's name, plus the linking properties unless they're all rich-text docs.
 fn backlink_label(source: &BacklinkSource) -> String {
     let docs = structures::richtext_properties(&source.structure_type);
-    if source.property_ids.iter().all(|p| docs.contains(&p.as_str())) {
+    if source
+        .property_ids
+        .iter()
+        .all(|p| docs.contains(&p.as_str()))
+    {
         source.name.clone()
     } else {
         format!("{} (via {})", source.name, source.property_ids.join(", "))
@@ -683,11 +860,18 @@ fn describe_property(p: &PropertyDef) -> String {
     match p.kind {
         PropertyKind::Select => {
             let keys: Vec<&str> = p.options.iter().map(|o| o.key).collect();
-            let default = p.default_option.map(|d| format!(", default {d}")).unwrap_or_default();
+            let default = p
+                .default_option
+                .map(|d| format!(", default {d}"))
+                .unwrap_or_default();
             format!("{} ({kind}: {}{default})", p.id, keys.join("|"))
         }
         PropertyKind::Relation | PropertyKind::Relations => {
-            format!("{} ({kind} -> {})", p.id, p.target_structure.unwrap_or("any"))
+            format!(
+                "{} ({kind} -> {})",
+                p.id,
+                p.target_structure.unwrap_or("any")
+            )
         }
         _ => format!("{} ({kind})", p.id),
     }
@@ -699,7 +883,9 @@ mod unit {
 
     fn spans() -> Vec<BlockSpan> {
         // Blocks on lines 1, 3, 5-6 and 8.
-        [(0, 1, 1), (1, 3, 3), (2, 5, 6), (3, 8, 8)].map(|(index, first, last)| BlockSpan { index, first, last }).to_vec()
+        [(0, 1, 1), (1, 3, 3), (2, 5, 6), (3, 8, 8)]
+            .map(|(index, first, last)| BlockSpan { index, first, last })
+            .to_vec()
     }
 
     fn range(start: usize, end: usize) -> Result<(usize, usize), String> {
@@ -714,13 +900,21 @@ mod unit {
         assert_eq!(range(1, 8), Ok((0, 4)));
         assert_eq!(range(1, 0), Ok((0, 0)), "insert before line 1");
         assert_eq!(range(9, 8), Ok((4, 4)), "start = last + 1 appends");
-        assert_eq!(range(4, 3), Ok((2, 2)), "inserting on a blank line goes before the next block");
+        assert_eq!(
+            range(4, 3),
+            Ok((2, 2)),
+            "inserting on a blank line goes before the next block"
+        );
     }
 
     #[test]
     fn block_range_rejects_what_cuts_a_block() {
-        assert!(range(6, 6).unwrap_err().contains("line 6 is inside the block at lines 5-6; edits take whole blocks, so start at 5"));
-        assert!(range(5, 5).unwrap_err().contains("line 5 is inside the block at lines 5-6; edits take whole blocks, so end at 6"));
+        assert!(range(6, 6).unwrap_err().contains(
+            "line 6 is inside the block at lines 5-6; edits take whole blocks, so start at 5"
+        ));
+        assert!(range(5, 5).unwrap_err().contains(
+            "line 5 is inside the block at lines 5-6; edits take whole blocks, so end at 6"
+        ));
         assert!(range(2, 2).unwrap_err().contains("contain no block"));
         assert!(range(99, 99).unwrap_err().contains("start 99 is outside"));
         assert!(range(1, 99).unwrap_err().contains("end 99 is outside"));
@@ -729,14 +923,23 @@ mod unit {
 
     #[test]
     fn frontmatter_is_stripped_only_when_it_is_key_value_lines() {
-        assert_eq!(strip_frontmatter("---\nname: \"x\"\nversion: 3\n---\nBody"), "Body");
-        assert_eq!(strip_frontmatter("---\nplain text\n---"), "---\nplain text\n---");
+        assert_eq!(
+            strip_frontmatter("---\nname: \"x\"\nversion: 3\n---\nBody"),
+            "Body"
+        );
+        assert_eq!(
+            strip_frontmatter("---\nplain text\n---"),
+            "---\nplain text\n---"
+        );
         assert_eq!(strip_frontmatter("Body"), "Body");
     }
 
     #[test]
     fn matches_are_bolded_by_utf16_offset() {
-        let ranges = [MatchRange { start: 3, end: 5 }, MatchRange { start: 9, end: 10 }];
+        let ranges = [
+            MatchRange { start: 3, end: 5 },
+            MatchRange { start: 9, end: 10 },
+        ];
         // "😀" is two UTF-16 units, so "ab" starts at 3.
         assert_eq!(mark_matches("😀 abc d", &ranges[..1]), "😀 **ab**c d");
         assert_eq!(mark_matches("no matches", &[]), "no matches");
@@ -746,8 +949,22 @@ mod unit {
     #[test]
     fn overlapping_unordered_and_stray_matches_dont_panic() {
         let range = |start, end| MatchRange { start, end };
-        let messy = [range(6, 8), range(1, 4), range(2, 5), range(3, 3), range(9, 99), range(50, 60)];
-        assert_eq!(mark_matches("0123456789", &messy), "0**123****4**5**67**8**9**");
-        assert_eq!(mark_matches("abc", &[range(2, 1)]), "abc", "an end before its start is empty");
+        let messy = [
+            range(6, 8),
+            range(1, 4),
+            range(2, 5),
+            range(3, 3),
+            range(9, 99),
+            range(50, 60),
+        ];
+        assert_eq!(
+            mark_matches("0123456789", &messy),
+            "0**123****4**5**67**8**9**"
+        );
+        assert_eq!(
+            mark_matches("abc", &[range(2, 1)]),
+            "abc",
+            "an end before its start is empty"
+        );
     }
 }

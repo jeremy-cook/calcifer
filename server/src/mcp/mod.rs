@@ -36,7 +36,9 @@ const PARSE_ERROR: i64 = -32700;
 
 /// `POST /mcp`. Any other method on the path is answered 405 by the router.
 pub fn router(knowledge: Knowledge) -> axum::Router {
-    axum::Router::new().route("/mcp", post(post_mcp)).with_state(knowledge)
+    axum::Router::new()
+        .route("/mcp", post(post_mcp))
+        .with_state(knowledge)
 }
 
 async fn post_mcp(State(knowledge): State<Knowledge>, body: Bytes) -> Response {
@@ -45,13 +47,17 @@ async fn post_mcp(State(knowledge): State<Knowledge>, body: Bytes) -> Response {
     };
     // A batch is answered with a batch of the replies; notifications have none.
     let reply = match message {
-        Value::Array(messages) if messages.is_empty() => Some(error_reply(Value::Null, INVALID_REQUEST, "empty batch")),
+        Value::Array(messages) if messages.is_empty() => {
+            Some(error_reply(Value::Null, INVALID_REQUEST, "empty batch"))
+        }
         Value::Array(messages) => {
-            let replies: Vec<Value> = futures::future::join_all(messages.into_iter().map(|m| handle_message(&knowledge, m)))
-                .await
-                .into_iter()
-                .flatten()
-                .collect();
+            let replies: Vec<Value> = futures::future::join_all(
+                messages.into_iter().map(|m| handle_message(&knowledge, m)),
+            )
+            .await
+            .into_iter()
+            .flatten()
+            .collect();
             (!replies.is_empty()).then_some(Value::Array(replies))
         }
         message => handle_message(&knowledge, message).await,
@@ -63,7 +69,11 @@ async fn post_mcp(State(knowledge): State<Knowledge>, body: Bytes) -> Response {
 }
 
 fn json_response(body: Value) -> Response {
-    ([(header::CONTENT_TYPE, "application/json")], body.to_string()).into_response()
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        body.to_string(),
+    )
+        .into_response()
 }
 
 fn error_reply(id: Value, code: i64, message: &str) -> Value {
@@ -74,7 +84,11 @@ fn error_reply(id: Value, code: i64, message: &str) -> Value {
 /// (no `method`, or no `id`) get none; anything that isn't an object is an error.
 async fn handle_message(knowledge: &Knowledge, message: Value) -> Option<Value> {
     if !message.is_object() {
-        return Some(error_reply(Value::Null, INVALID_REQUEST, "not a JSON-RPC message"));
+        return Some(error_reply(
+            Value::Null,
+            INVALID_REQUEST,
+            "not a JSON-RPC message",
+        ));
     }
     let id = message.get("id").cloned();
     let Some(method) = message["method"].as_str() else {
@@ -109,7 +123,10 @@ fn initialize(params: &Value) -> Value {
 
 async fn call_tool(knowledge: &Knowledge, params: &Value) -> Result<Value, (i64, String)> {
     let name = params["name"].as_str().unwrap_or_default();
-    let args = params.get("arguments").cloned().unwrap_or_else(|| json!({}));
+    let args = params
+        .get("arguments")
+        .cloned()
+        .unwrap_or_else(|| json!({}));
     let outcome = match dispatch(knowledge, name, args).await {
         Ok(outcome) => outcome,
         Err(rejected) => return Err((INVALID_PARAMS, rejected)),
@@ -186,7 +203,11 @@ struct DailyArgs {
 
 /// Runs the named tool. The outer error is a request the server can't read
 /// (unknown tool, bad arguments); the inner one is the tool failing.
-async fn dispatch(k: &Knowledge, name: &str, args: Value) -> Result<Result<String, ToolError>, String> {
+async fn dispatch(
+    k: &Knowledge,
+    name: &str,
+    args: Value,
+) -> Result<Result<String, ToolError>, String> {
     Ok(match name {
         "search_notes" => {
             let a: SearchArgs = parse_args(name, args)?;
@@ -196,7 +217,9 @@ async fn dispatch(k: &Knowledge, name: &str, args: Value) -> Result<Result<Strin
                 Mode::Hybrid => SearchMode::Hybrid,
             };
             match a.limit {
-                Some(0) => return Err("invalid arguments for search_notes: limit must be positive".into()),
+                Some(0) => {
+                    return Err("invalid arguments for search_notes: limit must be positive".into())
+                }
                 limit => k.search_notes(&a.query, limit.unwrap_or(10), mode).await,
             }
         }
@@ -207,7 +230,8 @@ async fn dispatch(k: &Knowledge, name: &str, args: Value) -> Result<Result<Strin
         }
         "edit_note" => {
             let a: EditArgs = parse_args(name, args)?;
-            k.edit_note(&a.name, a.start, a.end, &a.markdown, a.version).await
+            k.edit_note(&a.name, a.start, a.end, &a.markdown, a.version)
+                .await
         }
         "create_note" => {
             let a: NoteArgs = parse_args(name, args)?;
@@ -221,8 +245,14 @@ async fn dispatch(k: &Knowledge, name: &str, args: Value) -> Result<Result<Strin
             let a: LinkArgs = parse_args(name, args)?;
             k.link_notes(&a.from, &a.to).await
         }
-        "get_backlinks" => k.get_backlinks(&parse_args::<NameArgs>(name, args)?.name).await,
-        "create_daily_note" => k.create_daily_note(&parse_args::<DateArgs>(name, args)?.date).await,
+        "get_backlinks" => {
+            k.get_backlinks(&parse_args::<NameArgs>(name, args)?.name)
+                .await
+        }
+        "create_daily_note" => {
+            k.create_daily_note(&parse_args::<DateArgs>(name, args)?.date)
+                .await
+        }
         "append_to_daily_note" => {
             let a: DailyArgs = parse_args(name, args)?;
             k.append_to_daily_note(&a.date, &a.markdown).await
@@ -333,7 +363,8 @@ mod tests {
     use crate::embed::EmbedHandle;
     use crate::proto::entity_service_server::EntityService as _;
     use crate::proto::{
-        resolve_entity_request, CreateEntityRequest, ListEntitiesRequest, RenameEntityRequest, ResolveEntityRequest,
+        resolve_entity_request, CreateEntityRequest, ListEntitiesRequest, RenameEntityRequest,
+        ResolveEntityRequest,
     };
     use crate::services::search::SearchService;
     use crate::test_support::{entity_service, memory_pool, richtext_service};
@@ -349,7 +380,10 @@ mod tests {
         let entity = Arc::new(entity_service(pool.clone()));
         let richtext = Arc::new(richtext_service(pool.clone(), WatchHub::new()));
         let search = Arc::new(SearchService::new(pool, EmbedHandle::disabled()));
-        Fixture { k: Knowledge::new(entity.clone(), richtext, search), entity }
+        Fixture {
+            k: Knowledge::new(entity.clone(), richtext, search),
+            entity,
+        }
     }
 
     impl Fixture {
@@ -359,12 +393,27 @@ mod tests {
                 key: Some(resolve_entity_request::Key::Name(name.into())),
                 create_if_missing: false,
             };
-            self.entity.resolve_entity(Request::new(req)).await.unwrap().into_inner().entity.unwrap().id
+            self.entity
+                .resolve_entity(Request::new(req))
+                .await
+                .unwrap()
+                .into_inner()
+                .entity
+                .unwrap()
+                .id
         }
 
         async fn entity_count(&self) -> usize {
-            let req = ListEntitiesRequest { structure_type: String::new() };
-            self.entity.list_entities(Request::new(req)).await.unwrap().into_inner().entities.len()
+            let req = ListEntitiesRequest {
+                structure_type: String::new(),
+            };
+            self.entity
+                .list_entities(Request::new(req))
+                .await
+                .unwrap()
+                .into_inner()
+                .entities
+                .len()
         }
 
         /// A note's derived link targets, as sorted "Structure:id" strings.
@@ -376,7 +425,13 @@ mod tests {
                 .unwrap()
                 .links
                 .iter()
-                .map(|l| format!("{}:{}", l.target.as_ref().unwrap().structure_type, l.target.as_ref().unwrap().id))
+                .map(|l| {
+                    format!(
+                        "{}:{}",
+                        l.target.as_ref().unwrap().structure_type,
+                        l.target.as_ref().unwrap().id
+                    )
+                })
                 .collect();
             targets.sort();
             targets
@@ -399,7 +454,11 @@ mod tests {
 
     /// get_note's frontmatter version, the token edit_note checks line numbers against.
     fn version(note: &str) -> i64 {
-        note.lines().find_map(|l| l.strip_prefix("version: ")).unwrap().parse().unwrap()
+        note.lines()
+            .find_map(|l| l.strip_prefix("version: "))
+            .unwrap()
+            .parse()
+            .unwrap()
     }
 
     fn err(result: Result<String, ToolError>) -> String {
@@ -411,29 +470,68 @@ mod tests {
         let f = fixture().await;
         f.k.create_note("Attention", "").await.unwrap();
         f.k.create_note("Positional Encoding", "").await.unwrap();
-        let saved = f.k.create_note("Transformers", "An architecture built on [[Attention]]. #ml").await.unwrap();
-        assert!(saved.contains("Wikilinks: 2 [") && saved.contains("Note") && saved.contains("Tag"), "{saved}");
+        let saved =
+            f.k.create_note(
+                "Transformers",
+                "An architecture built on [[Attention]]. #ml",
+            )
+            .await
+            .unwrap();
+        assert!(
+            saved.contains("Wikilinks: 2 [") && saved.contains("Note") && saved.contains("Tag"),
+            "{saved}"
+        );
 
-        assert_eq!(f.k.get_backlinks("Attention").await.unwrap(), "- Transformers");
-        assert_eq!(f.k.get_backlinks("Transformers").await.unwrap(), "Nothing links to \"Transformers\" yet.");
-        assert_eq!(f.k.get_backlinks("Nowhere").await.unwrap(), "No note named \"Nowhere\".");
+        assert_eq!(
+            f.k.get_backlinks("Attention").await.unwrap(),
+            "- Transformers"
+        );
+        assert_eq!(
+            f.k.get_backlinks("Transformers").await.unwrap(),
+            "Nothing links to \"Transformers\" yet."
+        );
+        assert_eq!(
+            f.k.get_backlinks("Nowhere").await.unwrap(),
+            "No note named \"Nowhere\"."
+        );
 
         let note = f.k.get_note("Transformers").await.unwrap();
-        assert!(note.contains("[[Attention]]") && note.contains("#ml"), "{note}");
+        assert!(
+            note.contains("[[Attention]]") && note.contains("#ml"),
+            "{note}"
+        );
 
-        f.k.append_to_note("Transformers", "They use [[Positional Encoding]] too.").await.unwrap();
+        f.k.append_to_note("Transformers", "They use [[Positional Encoding]] too.")
+            .await
+            .unwrap();
         let note = f.k.get_note("Transformers").await.unwrap();
-        assert!(note.contains("[[Positional Encoding]]") && note.contains("[[Attention]]"), "{note}");
-        assert_eq!(f.k.get_backlinks("Positional Encoding").await.unwrap(), "- Transformers");
+        assert!(
+            note.contains("[[Positional Encoding]]") && note.contains("[[Attention]]"),
+            "{note}"
+        );
+        assert_eq!(
+            f.k.get_backlinks("Positional Encoding").await.unwrap(),
+            "- Transformers"
+        );
     }
 
     #[tokio::test]
     async fn search_finds_notes_by_prefix() {
         let f = fixture().await;
-        f.k.create_note("Transformers", "An architecture.").await.unwrap();
-        let found = f.k.search_notes("trans", 10, SearchMode::Hybrid).await.unwrap();
+        f.k.create_note("Transformers", "An architecture.")
+            .await
+            .unwrap();
+        let found =
+            f.k.search_notes("trans", 10, SearchMode::Hybrid)
+                .await
+                .unwrap();
         assert!(found.contains("[Note] Transformers"), "{found}");
-        assert_eq!(f.k.search_notes("zzzz", 10, SearchMode::Lexical).await.unwrap(), "No matches for \"zzzz\".");
+        assert_eq!(
+            f.k.search_notes("zzzz", 10, SearchMode::Lexical)
+                .await
+                .unwrap(),
+            "No matches for \"zzzz\"."
+        );
     }
 
     #[tokio::test]
@@ -456,24 +554,45 @@ mod tests {
         let f = fixture().await;
         f.k.create_note("Transformers", "x").await.unwrap();
         let created = f.k.create_daily_note("2026-06-13").await.unwrap();
-        assert!(created.contains("\"June 13, 2026\"") && created.ends_with("for 2026-06-13 created."), "{created}");
+        assert!(
+            created.contains("\"June 13, 2026\"") && created.ends_with("for 2026-06-13 created."),
+            "{created}"
+        );
         let again = f.k.create_daily_note("2026-06-13").await.unwrap();
-        assert!(again.ends_with("for 2026-06-13 already existed."), "{again}");
+        assert!(
+            again.ends_with("for 2026-06-13 already existed."),
+            "{again}"
+        );
 
-        f.k.append_to_daily_note("2026-06-13", "Read about [[Transformers]] today.").await.unwrap();
-        assert!(f.k.get_backlinks("Transformers").await.unwrap().contains("June 13, 2026"));
+        f.k.append_to_daily_note("2026-06-13", "Read about [[Transformers]] today.")
+            .await
+            .unwrap();
+        assert!(f
+            .k
+            .get_backlinks("Transformers")
+            .await
+            .unwrap()
+            .contains("June 13, 2026"));
     }
 
     #[tokio::test]
     async fn get_note_writes_chips_from_the_targets_current_names() {
         let f = fixture().await;
         f.k.create_note("Old Name", "").await.unwrap();
-        f.k.create_note("Source", "Points at [[Old Name]].").await.unwrap();
+        f.k.create_note("Source", "Points at [[Old Name]].")
+            .await
+            .unwrap();
         let id = f.note_id("Old Name").await;
-        let rename = RenameEntityRequest { id, name: "New Name".into() };
+        let rename = RenameEntityRequest {
+            id,
+            name: "New Name".into(),
+        };
         f.entity.rename_entity(Request::new(rename)).await.unwrap();
         let note = f.k.get_note("Source").await.unwrap();
-        assert!(note.contains("[[New Name]]") && !note.contains("Old Name"), "{note}");
+        assert!(
+            note.contains("[[New Name]]") && !note.contains("Old Name"),
+            "{note}"
+        );
     }
 
     #[tokio::test]
@@ -488,20 +607,42 @@ mod tests {
         let id = f.note_id("Round Trip").await;
         let links_before = f.link_targets(&id).await;
         assert_eq!(links_before.len(), 5, "{links_before:?}");
-        assert!(links_before.iter().any(|l| l.starts_with("Todo:")) && links_before.iter().any(|l| l.starts_with("DailyNote:")));
+        assert!(
+            links_before.iter().any(|l| l.starts_with("Todo:"))
+                && links_before.iter().any(|l| l.starts_with("DailyNote:"))
+        );
 
         let count = f.entity_count().await;
         let note = f.k.get_note("Round Trip").await.unwrap();
-        assert!(note.contains("[[Todo/Ship]]") && note.contains("[[DailyNote/June 13, 2026]]"), "{note}");
-        assert!(note.contains("[[RT Alias]]") && !note.contains("the alias") && note.contains("#rt"), "{note}");
-        assert!(note.starts_with("---\nname: \"Round Trip\"\nversion: "), "{note}");
+        assert!(
+            note.contains("[[Todo/Ship]]") && note.contains("[[DailyNote/June 13, 2026]]"),
+            "{note}"
+        );
+        assert!(
+            note.contains("[[RT Alias]]") && !note.contains("the alias") && note.contains("#rt"),
+            "{note}"
+        );
+        assert!(
+            note.starts_with("---\nname: \"Round Trip\"\nversion: "),
+            "{note}"
+        );
         assert!(note.contains("\nlinked_from: []\n---\n"), "{note}");
 
         // The whole result, frontmatter included, goes into a new note.
         f.k.create_note("Round Trip Copy", &note).await.unwrap();
-        assert_eq!(body(&f.k.get_note("Round Trip Copy").await.unwrap()), body(&note));
-        assert_eq!(f.link_targets(&f.note_id("Round Trip Copy").await).await, links_before);
-        assert_eq!(f.entity_count().await, count + 1, "only the copy itself is created");
+        assert_eq!(
+            body(&f.k.get_note("Round Trip Copy").await.unwrap()),
+            body(&note)
+        );
+        assert_eq!(
+            f.link_targets(&f.note_id("Round Trip Copy").await).await,
+            links_before
+        );
+        assert_eq!(
+            f.entity_count().await,
+            count + 1,
+            "only the copy itself is created"
+        );
     }
 
     #[tokio::test]
@@ -510,11 +651,17 @@ mod tests {
         f.k.create_note("Existing", "Original.").await.unwrap();
         let refused = err(f.k.create_note("Existing", "Replacement.").await);
         assert!(refused.contains("already exists"), "{refused}");
-        assert!(err(f.k.create_note("existing", "Case.").await).contains("already exists"), "names match case-insensitively");
+        assert!(
+            err(f.k.create_note("existing", "Case.").await).contains("already exists"),
+            "names match case-insensitively"
+        );
         assert_eq!(body(&f.k.get_note("Existing").await.unwrap()), "Original.");
 
         f.k.create_note("Blank", "").await.unwrap();
-        assert!(err(f.k.create_note("Blank", "Filled.").await).contains("already exists"), "even a blank note exists");
+        assert!(
+            err(f.k.create_note("Blank", "Filled.").await).contains("already exists"),
+            "even a blank note exists"
+        );
     }
 
     #[tokio::test]
@@ -527,21 +674,48 @@ mod tests {
             err(f.k.create_note("New", md).await),
             err(f.k.append_to_note("Existing", md).await),
             err(f.k.append_to_daily_note("2026-06-13", md).await),
-            err(f.k.edit_note("Existing", 1, 1, md, version(&f.k.get_note("Existing").await.unwrap())).await),
+            err(f
+                .k
+                .edit_note(
+                    "Existing",
+                    1,
+                    1,
+                    md,
+                    version(&f.k.get_note("Existing").await.unwrap()),
+                )
+                .await),
         ] {
-            assert!(failure.contains("Nothing was written: 3 link(s)"), "{failure}");
-            assert!(failure.contains("[[Attenton]], [[Todo/Ship]], [[DailyNote/February 1, 1901]]"), "{failure}");
+            assert!(
+                failure.contains("Nothing was written: 3 link(s)"),
+                "{failure}"
+            );
+            assert!(
+                failure.contains("[[Attenton]], [[Todo/Ship]], [[DailyNote/February 1, 1901]]"),
+                "{failure}"
+            );
         }
         assert!(err(f.k.link_notes("Existing", "Nowhere").await).contains("[[Nowhere]]"));
-        assert_eq!(f.entity_count().await, before, "not even append_to_daily_note's day");
+        assert_eq!(
+            f.entity_count().await,
+            before,
+            "not even append_to_daily_note's day"
+        );
         assert_eq!(body(&f.k.get_note("Existing").await.unwrap()), "Body.");
-        assert!(f.k.get_note("New").await.unwrap().starts_with("No note named"));
+        assert!(f
+            .k
+            .get_note("New")
+            .await
+            .unwrap()
+            .starts_with("No note named"));
     }
 
     #[tokio::test]
     async fn a_missing_tag_is_created() {
         let f = fixture().await;
-        let saved = f.k.create_note("Tagged", "About #brandnew things.").await.unwrap();
+        let saved =
+            f.k.create_note("Tagged", "About #brandnew things.")
+                .await
+                .unwrap();
         assert!(saved.contains("Wikilinks: 1 [Tag]"), "{saved}");
     }
 
@@ -550,14 +724,19 @@ mod tests {
         let f = fixture().await;
         f.k.create_note("Selfie", "I am [[Selfie]].").await.unwrap();
         let id = f.note_id("Selfie").await;
-        assert_eq!(body(&f.k.get_note("Selfie").await.unwrap()), "I am [[Selfie]].");
+        assert_eq!(
+            body(&f.k.get_note("Selfie").await.unwrap()),
+            "I am [[Selfie]]."
+        );
         assert_eq!(f.link_targets(&id).await, [format!("Note:{id}")]);
     }
 
     #[tokio::test]
     async fn a_leading_rule_that_is_not_frontmatter_is_note_content() {
         let f = fixture().await;
-        f.k.create_note("Rule", "---\nplain text\n---").await.unwrap();
+        f.k.create_note("Rule", "---\nplain text\n---")
+            .await
+            .unwrap();
         assert!(body(&f.k.get_note("Rule").await.unwrap()).contains("plain text"));
     }
 
@@ -565,21 +744,50 @@ mod tests {
     async fn query_text_location_reports_whole_blocks_and_the_version() {
         let f = fixture().await;
         f.k.create_note("Link", "").await.unwrap();
-        f.k.create_note("Subject", "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].").await.unwrap();
+        f.k.create_note(
+            "Subject",
+            "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].",
+        )
+        .await
+        .unwrap();
         let note = f.k.get_note("Subject").await.unwrap();
-        assert_eq!(body(&note), "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].");
+        assert_eq!(
+            body(&note),
+            "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]]."
+        );
         let v = version(&note);
 
         let found = f.k.query_text_location("Subject", "two").await.unwrap();
-        assert_eq!(found, format!("version: {v}\n\nlines 5-6 (1 match):\n- one\n- two"));
-        let found = f.k.query_text_location("Subject", "Alpha.\n\n## Heading").await.unwrap();
-        assert!(found.contains("lines 1-1 (1 match):\nAlpha.\n\nlines 3-3 (1 match):\n## Heading"), "{found}");
+        assert_eq!(
+            found,
+            format!("version: {v}\n\nlines 5-6 (1 match):\n- one\n- two")
+        );
+        let found =
+            f.k.query_text_location("Subject", "Alpha.\n\n## Heading")
+                .await
+                .unwrap();
+        assert!(
+            found.contains("lines 1-1 (1 match):\nAlpha.\n\nlines 3-3 (1 match):\n## Heading"),
+            "{found}"
+        );
         let found = f.k.query_text_location("Subject", "o").await.unwrap();
-        assert!(found.ends_with("lines 5-6 (2 matches):\n- one\n- two"), "{found}");
+        assert!(
+            found.ends_with("lines 5-6 (2 matches):\n- one\n- two"),
+            "{found}"
+        );
         let found = f.k.query_text_location("Subject", "n").await.unwrap();
-        let (a, b, c) = (found.find("lines 3-3").unwrap(), found.find("lines 5-6").unwrap(), found.find("lines 8-8").unwrap());
+        let (a, b, c) = (
+            found.find("lines 3-3").unwrap(),
+            found.find("lines 5-6").unwrap(),
+            found.find("lines 8-8").unwrap(),
+        );
         assert!(a < b && b < c, "{found}");
-        assert!(f.k.query_text_location("Subject", "nowhere in the note").await.unwrap().starts_with("No match"));
+        assert!(f
+            .k
+            .query_text_location("Subject", "nowhere in the note")
+            .await
+            .unwrap()
+            .starts_with("No match"));
         assert!(err(f.k.query_text_location("Subject", "").await).contains("query is empty"));
     }
 
@@ -587,7 +795,12 @@ mod tests {
     async fn edit_note_replaces_inserts_and_deletes_whole_blocks() {
         let f = fixture().await;
         f.k.create_note("Link", "").await.unwrap();
-        f.k.create_note("Subject", "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].").await.unwrap();
+        f.k.create_note(
+            "Subject",
+            "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].",
+        )
+        .await
+        .unwrap();
         let id = f.note_id("Subject").await;
         let read = || async {
             let note = f.k.get_note("Subject").await.unwrap();
@@ -595,16 +808,25 @@ mod tests {
         };
 
         let (_, v) = read().await;
-        f.k.edit_note("Subject", 3, 3, "## Renamed heading", v).await.unwrap();
+        f.k.edit_note("Subject", 3, 3, "## Renamed heading", v)
+            .await
+            .unwrap();
         let (text, v) = read().await;
-        assert_eq!(text, "Alpha.\n\n## Renamed heading\n\n- one\n- two\n\nLast [[Link]].");
+        assert_eq!(
+            text,
+            "Alpha.\n\n## Renamed heading\n\n- one\n- two\n\nLast [[Link]]."
+        );
 
         let stale = err(f.k.edit_note("Subject", 1, 1, "Stale", v - 1).await);
         assert!(stale.contains("changed since you read"), "{stale}");
         assert!(!read().await.0.contains("Stale"));
 
         let inside_start = err(f.k.edit_note("Subject", 6, 6, "x", v).await);
-        assert!(inside_start.contains("line 6 is inside the block at lines 5-6") && inside_start.contains("start at 5"), "{inside_start}");
+        assert!(
+            inside_start.contains("line 6 is inside the block at lines 5-6")
+                && inside_start.contains("start at 5"),
+            "{inside_start}"
+        );
         let inside_end = err(f.k.edit_note("Subject", 5, 5, "x", v).await);
         assert!(inside_end.contains("end at 6"), "{inside_end}");
         assert!(err(f.k.edit_note("Subject", 2, 2, "x", v).await).contains("contain no block"));
@@ -612,30 +834,50 @@ mod tests {
 
         f.k.edit_note("Subject", 1, 0, "First.", v).await.unwrap();
         let (text, v) = read().await;
-        assert!(text.starts_with("First.\n\nAlpha.\n\n## Renamed heading"), "{text}");
+        assert!(
+            text.starts_with("First.\n\nAlpha.\n\n## Renamed heading"),
+            "{text}"
+        );
 
         // Blank lines at either edge of a range are fine.
-        f.k.edit_note("Subject", 2, 4, "Alpha two.", v).await.unwrap();
+        f.k.edit_note("Subject", 2, 4, "Alpha two.", v)
+            .await
+            .unwrap();
         let (text, v) = read().await;
-        assert!(text.starts_with("First.\n\nAlpha two.\n\n## Renamed heading"), "{text}");
+        assert!(
+            text.starts_with("First.\n\nAlpha two.\n\n## Renamed heading"),
+            "{text}"
+        );
 
         // Now: First. 1, Alpha two. 3, heading 5, list 7-8, Last 10.
         assert_eq!(f.link_targets(&id).await.len(), 1);
-        f.k.edit_note("Subject", 10, 10, "Last, rewritten.", v).await.unwrap();
-        assert!(f.link_targets(&id).await.is_empty(), "replacing the block that held a link drops the link");
+        f.k.edit_note("Subject", 10, 10, "Last, rewritten.", v)
+            .await
+            .unwrap();
+        assert!(
+            f.link_targets(&id).await.is_empty(),
+            "replacing the block that held a link drops the link"
+        );
 
         let (_, v) = read().await;
         f.k.edit_note("Subject", 5, 8, "", v).await.unwrap();
         let (text, v) = read().await;
         assert_eq!(text, "First.\n\nAlpha two.\n\nLast, rewritten.");
 
-        f.k.edit_note("Subject", 6, 5, "Appended.", v).await.unwrap();
+        f.k.edit_note("Subject", 6, 5, "Appended.", v)
+            .await
+            .unwrap();
         let (text, v) = read().await;
-        assert_eq!(text, "First.\n\nAlpha two.\n\nLast, rewritten.\n\nAppended.");
+        assert_eq!(
+            text,
+            "First.\n\nAlpha two.\n\nLast, rewritten.\n\nAppended."
+        );
 
         assert!(err(f.k.edit_note("Subject", 99, 99, "x", v).await).contains("start 99 is outside"));
         assert!(err(f.k.edit_note("Subject", 1, 99, "x", v).await).contains("end 99 is outside"));
-        assert!(err(f.k.edit_note("Subject", 0, 0, "x", v).await).contains("start must be at least 1"));
+        assert!(
+            err(f.k.edit_note("Subject", 0, 0, "x", v).await).contains("start must be at least 1")
+        );
         assert!(err(f.k.edit_note("Subject", 1, 1, "x", -1).await).contains("version at least 0"));
         assert!(err(f.k.edit_note("Subject", 3, 1, "x", v).await).contains("end 1 is outside"));
 
@@ -644,8 +886,15 @@ mod tests {
         assert_eq!(text, "", "deleting every block leaves an empty body");
         f.k.edit_note("Subject", 1, 0, "Fresh.", v).await.unwrap();
         assert_eq!(read().await.0, "Fresh.");
-        let (doc, _) = f.k.get_doc(&tools::doc_ref("Note", &id).unwrap()).await.unwrap();
-        assert_eq!(doc["content"].as_array().unwrap().len(), 1, "no stray empty paragraph");
+        let (doc, _) =
+            f.k.get_doc(&tools::doc_ref("Note", &id).unwrap())
+                .await
+                .unwrap();
+        assert_eq!(
+            doc["content"].as_array().unwrap().len(),
+            1,
+            "no stray empty paragraph"
+        );
     }
 
     #[tokio::test]
@@ -673,7 +922,13 @@ mod tests {
         f.k.create_note(name, "").await.unwrap();
         let r = tools::doc_ref("Note", &f.note_id(name).await).unwrap();
         let (_, updated_at) = f.k.get_doc(&r).await.unwrap();
-        f.k.put_doc(&r, &json!({ "type": "doc", "content": content }), Some(updated_at)).await.unwrap();
+        f.k.put_doc(
+            &r,
+            &json!({ "type": "doc", "content": content }),
+            Some(updated_at),
+        )
+        .await
+        .unwrap();
         r
     }
 
@@ -685,7 +940,9 @@ mod tests {
         let note = f.k.get_note("Picture").await.unwrap();
         assert_eq!(body(&note), "<!-- calcifer:image -->");
 
-        f.k.edit_note("Picture", 1, 0, "Caption first.", version(&note)).await.unwrap();
+        f.k.edit_note("Picture", 1, 0, "Caption first.", version(&note))
+            .await
+            .unwrap();
         let (doc, _) = f.k.get_doc(&r).await.unwrap();
         assert_eq!(doc["content"][0]["content"][0]["text"], "Caption first.");
         assert_eq!(doc["content"][1], image, "the image survives the insert");
@@ -696,17 +953,36 @@ mod tests {
         let f = fixture().await;
         let table = json!({ "type": "table", "content": [] });
         let para = |text: &str| json!({ "type": "paragraph", "content": [{ "type": "text", "text": text }] });
-        let r = note_with_blocks(&f, "Tabular", json!([para("Intro."), table, para("Outro.")])).await;
+        let r = note_with_blocks(
+            &f,
+            "Tabular",
+            json!([para("Intro."), table, para("Outro.")]),
+        )
+        .await;
         let note = f.k.get_note("Tabular").await.unwrap();
         assert_eq!(body(&note), "Intro.\n\n<!-- calcifer:table -->\n\nOutro.");
         let (before, _) = f.k.get_doc(&r).await.unwrap();
 
-        let refused = err(f.k.edit_note("Tabular", 1, 5, "Everything, rewritten.", version(&note)).await);
-        assert!(refused.contains("lines 3-3 hold a table that markdown can't express; leave them out of the range"), "{refused}");
-        assert_eq!(f.k.get_doc(&r).await.unwrap().0, before, "a refused edit writes nothing");
+        let refused = err(f
+            .k
+            .edit_note("Tabular", 1, 5, "Everything, rewritten.", version(&note))
+            .await);
+        assert!(
+            refused.contains(
+                "lines 3-3 hold a table that markdown can't express; leave them out of the range"
+            ),
+            "{refused}"
+        );
+        assert_eq!(
+            f.k.get_doc(&r).await.unwrap().0,
+            before,
+            "a refused edit writes nothing"
+        );
 
         // Ranges beside it are fine.
-        f.k.edit_note("Tabular", 5, 5, "Outro, rewritten.", version(&note)).await.unwrap();
+        f.k.edit_note("Tabular", 5, 5, "Outro, rewritten.", version(&note))
+            .await
+            .unwrap();
         let (after, _) = f.k.get_doc(&r).await.unwrap();
         assert_eq!(after["content"][1], table);
     }
@@ -731,22 +1007,52 @@ mod tests {
             ] },
         ])).await;
         let note = f.k.get_note("Styled").await.unwrap();
-        assert_eq!(body(&note), "An underlined word.\n\n## Centred\n\nSee [the site](https://example.com).");
+        assert_eq!(
+            body(&note),
+            "An underlined word.\n\n## Centred\n\nSee [the site](https://example.com)."
+        );
         let (before, _) = f.k.get_doc(&r).await.unwrap();
 
-        let underline = err(f.k.edit_note("Styled", 1, 1, "Rewritten.", version(&note)).await);
-        assert!(underline.contains("lines 1-1 hold underline formatting that markdown can't express"), "{underline}");
-        let centred = err(f.k.edit_note("Styled", 3, 3, "## Rewritten", version(&note)).await);
-        assert!(centred.contains("lines 3-3 hold a heading's textAlign that markdown can't express"), "{centred}");
-        assert_eq!(f.k.get_doc(&r).await.unwrap().0, before, "a refused edit writes nothing");
+        let underline = err(f
+            .k
+            .edit_note("Styled", 1, 1, "Rewritten.", version(&note))
+            .await);
+        assert!(
+            underline.contains("lines 1-1 hold underline formatting that markdown can't express"),
+            "{underline}"
+        );
+        let centred = err(f
+            .k
+            .edit_note("Styled", 3, 3, "## Rewritten", version(&note))
+            .await);
+        assert!(
+            centred.contains("lines 3-3 hold a heading's textAlign that markdown can't express"),
+            "{centred}"
+        );
+        assert_eq!(
+            f.k.get_doc(&r).await.unwrap().0,
+            before,
+            "a refused edit writes nothing"
+        );
 
-        f.k.edit_note("Styled", 5, 5, "Now see [the docs](https://docs.rs/x_(y)).", version(&note)).await.unwrap();
+        f.k.edit_note(
+            "Styled",
+            5,
+            5,
+            "Now see [the docs](https://docs.rs/x_(y)).",
+            version(&note),
+        )
+        .await
+        .unwrap();
         let (after, _) = f.k.get_doc(&r).await.unwrap();
         let linked = &after["content"][2]["content"][1];
         assert_eq!(linked["text"], "the docs");
         assert_eq!(linked["marks"][0]["type"], "link");
         assert_eq!(linked["marks"][0]["attrs"]["href"], "https://docs.rs/x_(y)");
-        assert_eq!(after["content"][0], before["content"][0], "the blocks before it are untouched");
+        assert_eq!(
+            after["content"][0], before["content"][0],
+            "the blocks before it are untouched"
+        );
         assert_eq!(after["content"][1], before["content"][1]);
     }
 
@@ -754,7 +1060,10 @@ mod tests {
     async fn list_structures_describes_the_registry() {
         let f = fixture().await;
         let listed = f.k.list_structures().unwrap();
-        assert!(listed.contains("- Note: ") && listed.contains("- Todo: "), "{listed}");
+        assert!(
+            listed.contains("- Note: ") && listed.contains("- Todo: "),
+            "{listed}"
+        );
         assert!(listed.contains("priority (select: "), "{listed}");
         assert!(listed.contains("(relations -> Tag)"), "{listed}");
     }
@@ -772,38 +1081,97 @@ mod tests {
         let unknown_version = rpc(json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": { "protocolVersion": "1999-01-01" } }))
             .await
             .unwrap();
-        assert_eq!(unknown_version["result"]["protocolVersion"], PROTOCOL_VERSIONS[0]);
+        assert_eq!(
+            unknown_version["result"]["protocolVersion"],
+            PROTOCOL_VERSIONS[0]
+        );
 
-        assert!(rpc(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })).await.is_none());
+        assert!(
+            rpc(json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }))
+                .await
+                .is_none()
+        );
 
-        let listed = rpc(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" })).await.unwrap();
-        let names: Vec<&str> = listed["result"]["tools"].as_array().unwrap().iter().map(|t| t["name"].as_str().unwrap()).collect();
+        let listed = rpc(json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }))
+            .await
+            .unwrap();
+        let names: Vec<&str> = listed["result"]["tools"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap())
+            .collect();
         assert_eq!(
             names,
             [
-                "search_notes", "get_note", "query_text_location", "edit_note", "create_note", "append_to_note",
-                "link_notes", "get_backlinks", "create_daily_note", "append_to_daily_note", "list_structures",
+                "search_notes",
+                "get_note",
+                "query_text_location",
+                "edit_note",
+                "create_note",
+                "append_to_note",
+                "link_notes",
+                "get_backlinks",
+                "create_daily_note",
+                "append_to_daily_note",
+                "list_structures",
             ]
         );
 
         let call = |name: &str, arguments: Value| {
-            rpc(json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": name, "arguments": arguments } }))
+            rpc(
+                json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": { "name": name, "arguments": arguments } }),
+            )
         };
-        call("create_note", json!({ "name": "B", "markdown": "" })).await.unwrap();
-        let created = call("create_note", json!({ "name": "A", "markdown": "See [[B]]." })).await.unwrap();
+        call("create_note", json!({ "name": "B", "markdown": "" }))
+            .await
+            .unwrap();
+        let created = call(
+            "create_note",
+            json!({ "name": "A", "markdown": "See [[B]]." }),
+        )
+        .await
+        .unwrap();
         assert_eq!(created["result"]["isError"], false);
-        assert!(created["result"]["content"][0]["text"].as_str().unwrap().starts_with("Saved note \"A\""));
+        assert!(created["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .starts_with("Saved note \"A\""));
 
-        let failed = call("append_to_note", json!({ "name": "Nope", "markdown": "x" })).await.unwrap();
-        assert_eq!(failed["result"]["isError"], true, "a failing tool is a result, not a protocol error");
+        let failed = call("append_to_note", json!({ "name": "Nope", "markdown": "x" }))
+            .await
+            .unwrap();
+        assert_eq!(
+            failed["result"]["isError"], true,
+            "a failing tool is a result, not a protocol error"
+        );
 
-        assert_eq!(call("no_such_tool", json!({})).await.unwrap()["error"]["code"], INVALID_PARAMS);
-        assert_eq!(call("get_note", json!({})).await.unwrap()["error"]["code"], INVALID_PARAMS);
-        let start_zero = call("edit_note", json!({ "name": "A", "start": 0, "end": 0, "markdown": "", "version": 0 })).await.unwrap();
+        assert_eq!(
+            call("no_such_tool", json!({})).await.unwrap()["error"]["code"],
+            INVALID_PARAMS
+        );
+        assert_eq!(
+            call("get_note", json!({})).await.unwrap()["error"]["code"],
+            INVALID_PARAMS
+        );
+        let start_zero = call(
+            "edit_note",
+            json!({ "name": "A", "start": 0, "end": 0, "markdown": "", "version": 0 }),
+        )
+        .await
+        .unwrap();
         assert_eq!(start_zero["result"]["isError"], true, "{start_zero}");
         let not_an_object = rpc(json!(42)).await.unwrap();
-        assert_eq!((&not_an_object["id"], &not_an_object["error"]["code"]), (&Value::Null, &json!(INVALID_REQUEST)));
-        assert_eq!(rpc(json!({ "jsonrpc": "2.0", "id": 4, "method": "nope" })).await.unwrap()["error"]["code"], METHOD_NOT_FOUND);
+        assert_eq!(
+            (&not_an_object["id"], &not_an_object["error"]["code"]),
+            (&Value::Null, &json!(INVALID_REQUEST))
+        );
+        assert_eq!(
+            rpc(json!({ "jsonrpc": "2.0", "id": 4, "method": "nope" }))
+                .await
+                .unwrap()["error"]["code"],
+            METHOD_NOT_FOUND
+        );
     }
 
     /// The status `POST /mcp` answers through the local-only layers, sent with
@@ -812,7 +1180,8 @@ mod tests {
         use axum::body::Body;
         use tower::ServiceExt;
 
-        let app = crate::security::local::mcp(router(f.k.clone()), "127.0.0.1:8081".parse().unwrap());
+        let app =
+            crate::security::local::mcp(router(f.k.clone()), "127.0.0.1:8081".parse().unwrap());
         let mut req = axum::http::Request::post("/mcp");
         for (name, value) in headers {
             req = req.header(*name, *value);
@@ -824,19 +1193,34 @@ mod tests {
     #[tokio::test]
     async fn the_router_answers_only_this_machine() {
         let f = fixture().await;
-        let (host, json) = (("host", "localhost:8081"), ("content-type", "application/json"));
+        let (host, json) = (
+            ("host", "localhost:8081"),
+            ("content-type", "application/json"),
+        );
 
         // Claude Code: no Origin, a JSON body.
         assert_eq!(post_status(&f, &[host, json]).await, StatusCode::OK);
         let inspector = ("origin", "http://localhost:6274");
-        assert_eq!(post_status(&f, &[host, json, inspector]).await, StatusCode::OK);
+        assert_eq!(
+            post_status(&f, &[host, json, inspector]).await,
+            StatusCode::OK
+        );
 
         let rebound = ("host", "evil.example:8081");
-        assert_eq!(post_status(&f, &[rebound, json]).await, StatusCode::FORBIDDEN);
+        assert_eq!(
+            post_status(&f, &[rebound, json]).await,
+            StatusCode::FORBIDDEN
+        );
         let foreign = ("origin", "https://evil.example");
-        assert_eq!(post_status(&f, &[host, json, foreign]).await, StatusCode::FORBIDDEN);
+        assert_eq!(
+            post_status(&f, &[host, json, foreign]).await,
+            StatusCode::FORBIDDEN
+        );
         // A no-cors form post from another site.
         let text = ("content-type", "text/plain");
-        assert_eq!(post_status(&f, &[host, text]).await, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+        assert_eq!(
+            post_status(&f, &[host, text]).await,
+            StatusCode::UNSUPPORTED_MEDIA_TYPE
+        );
     }
 }

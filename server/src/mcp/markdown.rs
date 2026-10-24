@@ -84,7 +84,8 @@ fn split_structure_prefix(text: &str) -> ChipTarget {
 // ---------------------------------------------------------------- markdown -> doc
 
 static TAG: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^#([\p{L}\p{N}_-]+)").unwrap());
-static ISO_DATE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})").unwrap());
+static ISO_DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})").unwrap());
 static HEADING: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(#{1,6})\s+(.*)$").unwrap());
 /// A list item's marker: `- ` or `* ` (a task item when `[ ]` or `[x]`
 /// follows), or `N. `.
@@ -95,13 +96,18 @@ static SPECIAL_BLOCK: LazyLock<Regex> =
 static RULE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^---\s*$").unwrap());
 /// `![alt](src "title")`: `\` escapes in alt and title, no space or quote in src.
 static IMAGE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r#"^!\[((?:[^\]\\]|\\.)*)\]\(([^\s()<>"]+)(?:\s+"((?:[^"\\]|\\.)*)")?\)\s*$"#).unwrap()
+    Regex::new(r#"^!\[((?:[^\]\\]|\\.)*)\]\(([^\s()<>"]+)(?:\s+"((?:[^"\\]|\\.)*)")?\)\s*$"#)
+        .unwrap()
 });
-static PLACEHOLDER: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^<!-- calcifer:\S+ -->\s*$").unwrap());
+static PLACEHOLDER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^<!-- calcifer:\S+ -->\s*$").unwrap());
 
 /// A line that opens a block of its own, so it never continues a paragraph.
 fn starts_block(line: &str) -> bool {
-    SPECIAL_BLOCK.is_match(line) || RULE.is_match(line) || IMAGE.is_match(line) || PLACEHOLDER.is_match(line)
+    SPECIAL_BLOCK.is_match(line)
+        || RULE.is_match(line)
+        || IMAGE.is_match(line)
+        || PLACEHOLDER.is_match(line)
 }
 
 /// The character a backslash at the start of `text` escapes: ASCII punctuation
@@ -111,7 +117,9 @@ fn escaped_char(text: &str) -> Option<char> {
     if chars.next() != Some('\\') {
         return None;
     }
-    chars.next().filter(|c| c.is_ascii_punctuation() || c.is_ascii_digit())
+    chars
+        .next()
+        .filter(|c| c.is_ascii_punctuation() || c.is_ascii_digit())
 }
 
 /// `\X` read as the literal X.
@@ -170,7 +178,11 @@ fn link_at(text: &str) -> Option<LinkSpan<'_>> {
         let rest = &after[end..];
         end += if let Some(c) = escaped_char(rest) {
             1 + c.len_utf8()
-        } else if let Some(close) = rest.strip_prefix('`').and_then(|r| r.find('`')).filter(|&e| e > 0) {
+        } else if let Some(close) = rest
+            .strip_prefix('`')
+            .and_then(|r| r.find('`'))
+            .filter(|&e| e > 0)
+        {
             close + 2
         } else if let Some(close) = rest.strip_prefix("[[").and_then(|r| r.find("]]")) {
             close + 4
@@ -200,11 +212,19 @@ fn link_at(text: &str) -> Option<LinkSpan<'_>> {
         at += c.len_utf8();
     }
     let len = 1 + end + 2 + at + 1;
-    (end > 0 && !href.is_empty()).then(|| LinkSpan { text: &after[..end], href, len })
+    (end > 0 && !href.is_empty()).then(|| LinkSpan {
+        text: &after[..end],
+        href,
+        len,
+    })
 }
 
 fn image_node(m: &regex::Captures) -> Value {
-    let attr = |i: usize| m.get(i).map(|t| unescape(t.as_str())).filter(|t| !t.is_empty());
+    let attr = |i: usize| {
+        m.get(i)
+            .map(|t| unescape(t.as_str()))
+            .filter(|t| !t.is_empty())
+    };
     json!({ "type": "image", "attrs": { "src": &m[2], "alt": attr(1), "title": attr(3) } })
 }
 
@@ -268,12 +288,16 @@ fn link_href(attrs: &Value) -> Option<&str> {
             return None;
         }
     }
-    let defaults = attrs.as_object().into_iter().flatten().all(|(key, value)| match key.as_str() {
-        "href" => true,
-        "target" => value == LINK_TARGET,
-        "rel" => value == LINK_REL,
-        _ => value.is_null(),
-    });
+    let defaults = attrs
+        .as_object()
+        .into_iter()
+        .flatten()
+        .all(|(key, value)| match key.as_str() {
+            "href" => true,
+            "target" => value == LINK_TARGET,
+            "rel" => value == LINK_REL,
+            _ => value.is_null(),
+        });
     (depth == 0 && defaults).then_some(href)
 }
 
@@ -322,7 +346,11 @@ fn parse_inline(text: &str, marks: &[Mark]) -> Vec<Value> {
     let mut i = 0;
     while i < text.len() {
         let rest = &text[i..];
-        let at_boundary = i == 0 || text[..i].chars().next_back().is_some_and(char::is_whitespace);
+        let at_boundary = i == 0
+            || text[..i]
+                .chars()
+                .next_back()
+                .is_some_and(char::is_whitespace);
 
         if let Some(c) = escaped_char(rest) {
             buf.push(c);
@@ -357,7 +385,10 @@ fn parse_inline(text: &str, marks: &[Mark]) -> Vec<Value> {
         }
         if let Some(link) = link_at(rest).filter(|_| !in_code && !in_link) {
             flush(&mut buf, &mut nodes);
-            nodes.extend(parse_inline(link.text, &with_mark(marks, Mark::Link(link.href))));
+            nodes.extend(parse_inline(
+                link.text,
+                &with_mark(marks, Mark::Link(link.href)),
+            ));
             i += link.len;
             continue;
         }
@@ -407,7 +438,9 @@ fn parse_inline(text: &str, marks: &[Mark]) -> Vec<Value> {
         });
         if let Some((delim, added, inner)) = found.filter(|_| !in_code) {
             flush(&mut buf, &mut nodes);
-            let inner_marks = added.iter().fold(marks.to_vec(), |ms, m| with_mark(&ms, m.clone()));
+            let inner_marks = added
+                .iter()
+                .fold(marks.to_vec(), |ms, m| with_mark(&ms, m.clone()));
             nodes.extend(parse_inline(inner, &inner_marks));
             i += 2 * delim.len() + inner.len();
             continue;
@@ -497,7 +530,11 @@ fn parse_list(lines: &[&str], i: &mut usize, indent: usize) -> Value {
     let first = item_line(lines[*i], indent).expect("the caller found an item");
     let (kind, start) = (first.kind, first.number);
     let mut items = Vec::new();
-    while let Some(item) = lines.get(*i).and_then(|l| item_line(l, indent)).filter(|item| item.kind == kind) {
+    while let Some(item) = lines
+        .get(*i)
+        .and_then(|l| item_line(l, indent))
+        .filter(|item| item.kind == kind)
+    {
         *i += 1;
         let mut content = Vec::new();
         let mut pending = vec![item.text];
@@ -571,7 +608,11 @@ fn parse_blocks(markdown: &str) -> Vec<Value> {
                 i += 1;
             }
             i += 1; // closing fence
-            let content = if code.is_empty() { vec![] } else { vec![mk_text(&code.join("\n"), &[])] };
+            let content = if code.is_empty() {
+                vec![]
+            } else {
+                vec![mk_text(&code.join("\n"), &[])]
+            };
             blocks.push(json!({ "type": "codeBlock", "attrs": { "language": language }, "content": content }));
             continue;
         }
@@ -582,8 +623,11 @@ fn parse_blocks(markdown: &str) -> Vec<Value> {
                 i += 1;
             }
             // A bare `>` line separates the quote's paragraphs.
-            let mut paragraphs: Vec<Value> =
-                quoted.split(|l| l.trim().is_empty()).filter(|p| !p.is_empty()).map(paragraph).collect();
+            let mut paragraphs: Vec<Value> = quoted
+                .split(|l| l.trim().is_empty())
+                .filter(|p| !p.is_empty())
+                .map(paragraph)
+                .collect();
             if paragraphs.is_empty() {
                 paragraphs.push(paragraph(&[]));
             }
@@ -639,7 +683,11 @@ fn drop_unresolved(node: &mut Value) {
         };
         if is_plain_text(&next) {
             if let Some(prev) = out.last_mut().filter(|p| is_plain_text(p)) {
-                let joined = format!("{}{}", prev["text"].as_str().unwrap_or(""), next["text"].as_str().unwrap_or(""));
+                let joined = format!(
+                    "{}{}",
+                    prev["text"].as_str().unwrap_or(""),
+                    next["text"].as_str().unwrap_or("")
+                );
                 prev["text"] = Value::String(joined);
                 continue;
             }
@@ -675,7 +723,11 @@ pub fn parse(markdown: &str) -> Parsed {
         let Some(attrs) = n.get_mut("attrs").and_then(Value::as_object_mut) else {
             return;
         };
-        let Some(raw) = attrs.get("_name").and_then(Value::as_str).filter(|s| !s.is_empty()) else {
+        let Some(raw) = attrs
+            .get("_name")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty())
+        else {
             return;
         };
         let target = split_structure_prefix(raw);
@@ -694,7 +746,10 @@ pub fn parse(markdown: &str) -> Parsed {
             return;
         };
         let reference = Reference {
-            structure_type: n["attrs"]["structureType"].as_str().unwrap_or("").to_string(),
+            structure_type: n["attrs"]["structureType"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
             name: name.to_string(),
         };
         if !references.iter().any(|r| r.key() == reference.key()) {
@@ -716,8 +771,14 @@ impl Parsed {
             let Some(Value::String(name)) = attrs.remove("_name").filter(|v| v != "") else {
                 return;
             };
-            let structure_type = attrs.get("structureType").and_then(Value::as_str).unwrap_or("");
-            let id = ids.get(&ref_key(structure_type, &name)).cloned().unwrap_or_default();
+            let structure_type = attrs
+                .get("structureType")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let id = ids
+                .get(&ref_key(structure_type, &name))
+                .cloned()
+                .unwrap_or_default();
             attrs.insert("id".into(), id.into());
         });
         drop_unresolved(&mut self.doc);
@@ -735,7 +796,10 @@ fn is_chip(n: &Value) -> bool {
 pub fn chip_ids(doc: &Value) -> Vec<String> {
     let mut ids: Vec<String> = Vec::new();
     walk(doc, &mut |n| {
-        if let Some(id) = n["attrs"]["id"].as_str().filter(|id| is_chip(n) && !id.is_empty()) {
+        if let Some(id) = n["attrs"]["id"]
+            .as_str()
+            .filter(|id| is_chip(n) && !id.is_empty())
+        {
             if !ids.iter().any(|seen| seen == id) {
                 ids.push(id.to_string());
             }
@@ -773,7 +837,12 @@ fn escape_text(text: &str, mut prev: Option<char>) -> String {
 /// The marks of `node` that markdown writes. Code is verbatim, so it is written
 /// alone; `inexpressible` reports what that drops.
 fn writable_marks(node: &Value) -> Vec<Mark> {
-    let marks: Vec<Mark> = node["marks"].as_array().into_iter().flatten().filter_map(Mark::from_json).collect();
+    let marks: Vec<Mark> = node["marks"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Mark::from_json)
+        .collect();
     if marks.contains(&Mark::Code) {
         vec![Mark::Code]
     } else {
@@ -783,7 +852,11 @@ fn writable_marks(node: &Value) -> Vec<Mark> {
 
 /// `inner` inside the delimiters of each emphasis in `marks`.
 fn wrap_emphasis(mut inner: String, marks: &[Mark]) -> String {
-    for (mark, delim) in [(Mark::Strike, "~~"), (Mark::Bold, "**"), (Mark::Italic, "*")] {
+    for (mark, delim) in [
+        (Mark::Strike, "~~"),
+        (Mark::Bold, "**"),
+        (Mark::Italic, "*"),
+    ] {
         if marks.contains(&mark) {
             inner = format!("{delim}{inner}{delim}");
         }
@@ -797,7 +870,10 @@ fn text_markdown(text: &str, marks: &[Mark], prev: Option<char>) -> String {
         return format!("`{text}`");
     }
     // Emphasis is read as a run of its own, which starts at a word boundary.
-    wrap_emphasis(escape_text(text, if marks.is_empty() { prev } else { None }), marks)
+    wrap_emphasis(
+        escape_text(text, if marks.is_empty() { prev } else { None }),
+        marks,
+    )
 }
 
 /// The href of a text node's writable link.
@@ -816,13 +892,30 @@ fn link_of(node: &Value) -> Option<String> {
 fn link_markdown(run: &[Value], href: &str) -> String {
     let marks: Vec<Vec<Mark>> = run
         .iter()
-        .map(|n| writable_marks(n).into_iter().filter(|m| !matches!(m, Mark::Link(_))).collect())
+        .map(|n| {
+            writable_marks(n)
+                .into_iter()
+                .filter(|m| !matches!(m, Mark::Link(_)))
+                .collect()
+        })
         .collect();
-    let shared: Vec<Mark> = marks[0].iter().filter(|m| marks.iter().all(|ms| ms.contains(m))).cloned().collect();
+    let shared: Vec<Mark> = marks[0]
+        .iter()
+        .filter(|m| marks.iter().all(|ms| ms.contains(m)))
+        .cloned()
+        .collect();
     let mut text = String::new();
     for (node, node_marks) in run.iter().zip(&marks) {
-        let own: Vec<Mark> = node_marks.iter().filter(|m| !shared.contains(m)).cloned().collect();
-        text += &text_markdown(node["text"].as_str().unwrap_or(""), &own, text.chars().next_back());
+        let own: Vec<Mark> = node_marks
+            .iter()
+            .filter(|m| !shared.contains(m))
+            .cloned()
+            .collect();
+        text += &text_markdown(
+            node["text"].as_str().unwrap_or(""),
+            &own,
+            text.chars().next_back(),
+        );
     }
     // An href reads `\X` as X; nothing else in it is syntax.
     wrap_emphasis(format!("[{text}]({})", href.replace('\\', "\\\\")), &shared)
@@ -857,20 +950,30 @@ fn inline_markdown(content: &Value, targets: &HashMap<String, ChipTarget>) -> St
     let Some(nodes) = content.as_array() else {
         return String::new();
     };
-    let nodes = &nodes[..nodes.len() - nodes.iter().rev().take_while(|n| n["type"] == "hardBreak").count()];
+    let nodes = &nodes[..nodes.len()
+        - nodes
+            .iter()
+            .rev()
+            .take_while(|n| n["type"] == "hardBreak")
+            .count()];
     let mut out = String::new();
     let mut i = 0;
     while i < nodes.len() {
         let n = &nodes[i];
         if let Some(href) = link_of(n) {
-            let run = nodes[i..].iter().take_while(|m| link_of(m).as_ref() == Some(&href)).count();
+            let run = nodes[i..]
+                .iter()
+                .take_while(|m| link_of(m).as_ref() == Some(&href))
+                .count();
             out += &link_markdown(&nodes[i..i + run], &href);
             i += run;
             continue;
         }
         let prev = out.chars().next_back();
         let md = match n["type"].as_str() {
-            Some("text") => text_markdown(n["text"].as_str().unwrap_or(""), &writable_marks(n), prev),
+            Some("text") => {
+                text_markdown(n["text"].as_str().unwrap_or(""), &writable_marks(n), prev)
+            }
             Some("mention" | "hashtag") => chip_markdown(n, targets, prev),
             Some("dateChip") => n["attrs"]["date"].as_str().unwrap_or("").to_string(),
             Some("hardBreak") => "\\\n".to_string(),
@@ -887,7 +990,13 @@ fn inline_markdown(content: &Value, targets: &HashMap<String, ChipTarget>) -> St
 fn paragraph_markdown(p: &Value, targets: &HashMap<String, ChipTarget>) -> String {
     inline_markdown(&p["content"], targets)
         .split('\n')
-        .map(|line| if starts_block(line) { format!("\\{line}") } else { line.to_string() })
+        .map(|line| {
+            if starts_block(line) {
+                format!("\\{line}")
+            } else {
+                line.to_string()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -924,7 +1033,10 @@ fn item_markdown(item: &Value, marker: &str, targets: &HashMap<String, ChipTarge
 /// `- [ ] ` / `- [x] `.
 fn list_markdown(list: &Value, targets: &HashMap<String, ChipTarget>) -> String {
     let start = list["attrs"]["start"].as_u64().unwrap_or(1);
-    let items = list["content"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let items = list["content"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
     items
         .iter()
         .enumerate()
@@ -943,12 +1055,24 @@ fn list_markdown(list: &Value, targets: &HashMap<String, ChipTarget>) -> String 
 
 /// Each paragraph's lines after `> `, the paragraphs separated by a bare `>`.
 fn blockquote_markdown(quote: &Value, targets: &HashMap<String, ChipTarget>) -> String {
-    let children = quote["content"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let children = quote["content"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
     children
         .iter()
         .map(|child| {
             let md = child_markdown(child, targets);
-            md.split('\n').map(|l| if l.is_empty() { ">".to_string() } else { format!("> {l}") }).collect::<Vec<_>>().join("\n")
+            md.split('\n')
+                .map(|l| {
+                    if l.is_empty() {
+                        ">".to_string()
+                    } else {
+                        format!("> {l}")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
         })
         .collect::<Vec<_>>()
         .join("\n>\n")
@@ -962,7 +1086,9 @@ fn placeholder(node_type: &str) -> String {
 /// `![alt](src "title")`, or `None` when the src can't sit in that syntax or
 /// is inline data (a pasted image), which is no use to read.
 fn image_markdown(attrs: &Value) -> Option<String> {
-    let src = attrs["src"].as_str().filter(|s| !s.is_empty() && !s.starts_with("data:"))?;
+    let src = attrs["src"]
+        .as_str()
+        .filter(|s| !s.is_empty() && !s.starts_with("data:"))?;
     if src.contains(|c: char| c.is_whitespace() || "()<>\"".contains(c)) {
         return None;
     }
@@ -977,7 +1103,9 @@ fn image_markdown(attrs: &Value) -> Option<String> {
     };
     let alt = escape(attrs["alt"].as_str().unwrap_or(""), ']');
     let title = attrs["title"].as_str().filter(|t| !t.is_empty());
-    let title = title.map(|t| format!(" \"{}\"", escape(t, '"'))).unwrap_or_default();
+    let title = title
+        .map(|t| format!(" \"{}\"", escape(t, '"')))
+        .unwrap_or_default();
     Some(format!("![{alt}]({src}{title})"))
 }
 
@@ -991,12 +1119,19 @@ fn image_is_expressible(attrs: &Value) -> bool {
 }
 
 fn is_list(n: &Value) -> bool {
-    matches!(n["type"].as_str(), Some("bulletList" | "orderedList" | "taskList"))
+    matches!(
+        n["type"].as_str(),
+        Some("bulletList" | "orderedList" | "taskList")
+    )
 }
 
 /// `noun` after "a" or "an".
 fn with_article(noun: &str) -> String {
-    let article = if noun.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" };
+    let article = if noun.starts_with(['a', 'e', 'i', 'o', 'u']) {
+        "an"
+    } else {
+        "a"
+    };
     format!("{article} {noun}")
 }
 
@@ -1009,11 +1144,17 @@ fn attr_fits(node_type: &str, key: &str, value: &Value) -> bool {
         ("orderedList", "start") => value.is_u64(),
         ("taskItem", "checked") => value.is_boolean(),
         ("codeBlock", "language") => {
-            value.is_null() || value.as_str().is_some_and(|l| !l.is_empty() && !l.contains(char::is_whitespace) && !l.contains('`'))
+            value.is_null()
+                || value.as_str().is_some_and(|l| {
+                    !l.is_empty() && !l.contains(char::is_whitespace) && !l.contains('`')
+                })
         }
         ("dateChip", "date") => value.as_str().is_some_and(|d| date_at(d) == Some(d)),
         // A chip is written from its target, whatever its stored label says.
-        ("mention" | "hashtag", "id" | "label" | "structureType" | "char" | "mentionSuggestionChar") => true,
+        (
+            "mention" | "hashtag",
+            "id" | "label" | "structureType" | "char" | "mentionSuggestionChar",
+        ) => true,
         // Checked by image_is_expressible.
         ("image", "src" | "alt" | "title" | "caption" | "width" | "alignment") => true,
         _ => value.is_null(),
@@ -1031,7 +1172,11 @@ fn inexpressible_marks(node: &Value) -> Option<String> {
     for mark in marks {
         let mark_type = mark["type"].as_str().unwrap_or("unknown");
         if Mark::from_json(mark).is_none() {
-            return Some(if mark_type == "link" { "a link".into() } else { format!("{mark_type} formatting") });
+            return Some(if mark_type == "link" {
+                "a link".into()
+            } else {
+                format!("{mark_type} formatting")
+            });
         }
     }
     let code = marks.iter().any(|m| m["type"] == "code");
@@ -1051,12 +1196,16 @@ fn inexpressible_marks(node: &Value) -> Option<String> {
 /// mark markdown can't write.
 pub fn inexpressible(block: &Value) -> Option<String> {
     let node_type = block["type"].as_str().unwrap_or("node");
-    let children = block["content"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let children = block["content"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default();
     let fits = match node_type {
         "image" => image_is_expressible(&block["attrs"]),
         "blockquote" => children.iter().all(|c| c["type"] == "paragraph"),
         "listItem" | "taskItem" => {
-            children.first().is_some_and(|c| c["type"] == "paragraph") && children.iter().skip(1).all(is_list)
+            children.first().is_some_and(|c| c["type"] == "paragraph")
+                && children.iter().skip(1).all(is_list)
         }
         "heading" => children.iter().all(|c| c["type"] != "hardBreak"),
         "codeBlock" => {
@@ -1077,8 +1226,22 @@ pub fn inexpressible(block: &Value) -> Option<String> {
 
 /// The nodes this converter writes and reads back.
 const KNOWN_NODES: [&str; 16] = [
-    "paragraph", "heading", "text", "mention", "hashtag", "dateChip", "hardBreak", "bulletList", "orderedList",
-    "listItem", "taskList", "taskItem", "blockquote", "codeBlock", "horizontalRule", "image",
+    "paragraph",
+    "heading",
+    "text",
+    "mention",
+    "hashtag",
+    "dateChip",
+    "hardBreak",
+    "bulletList",
+    "orderedList",
+    "listItem",
+    "taskList",
+    "taskItem",
+    "blockquote",
+    "codeBlock",
+    "horizontalRule",
+    "image",
 ];
 
 /// One top-level block as markdown, without a trailing newline. Empty for a
@@ -1089,8 +1252,15 @@ const KNOWN_NODES: [&str; 16] = [
 pub fn block_markdown(block: &Value, targets: &HashMap<String, ChipTarget>) -> String {
     match block["type"].as_str() {
         Some("heading") => {
-            let level = block["attrs"]["level"].as_u64().filter(|&l| l > 0).unwrap_or(1) as usize;
-            format!("{} {}", "#".repeat(level), inline_markdown(&block["content"], targets))
+            let level = block["attrs"]["level"]
+                .as_u64()
+                .filter(|&l| l > 0)
+                .unwrap_or(1) as usize;
+            format!(
+                "{} {}",
+                "#".repeat(level),
+                inline_markdown(&block["content"], targets)
+            )
         }
         Some("bulletList" | "orderedList" | "taskList") => list_markdown(block, targets),
         Some("blockquote") => blockquote_markdown(block, targets),
@@ -1132,7 +1302,10 @@ mod tests {
             .into_iter()
             .map(|id| {
                 let (structure_type, name) = id.split_once(':').unwrap();
-                let target = ChipTarget { structure_type: structure_type.into(), name: name.into() };
+                let target = ChipTarget {
+                    structure_type: structure_type.into(),
+                    name: name.into(),
+                };
                 (id, target)
             })
             .collect()
@@ -1174,7 +1347,9 @@ mod tests {
     }
 
     fn dates(md: &str) -> Vec<String> {
-        collect(&to_tt(md), |n| (n["type"] == "dateChip").then(|| n["attrs"]["date"].as_str().unwrap().into()))
+        collect(&to_tt(md), |n| {
+            (n["type"] == "dateChip").then(|| n["attrs"]["date"].as_str().unwrap().into())
+        })
     }
 
     #[test]
@@ -1251,7 +1426,10 @@ mod tests {
             text(" word", json!([link("https://example.com"), { "type": "italic" }])),
             { "type": "text", "text": "." },
         ]));
-        assert_eq!(to_md(&doc), "see [a **~~bold~~*** word*](https://example.com).");
+        assert_eq!(
+            to_md(&doc),
+            "see [a **~~bold~~*** word*](https://example.com)."
+        );
         assert_eq!(to_tt(&to_md(&doc)), doc);
 
         let plain = paragraph_doc(json!([{ "type": "text", "text": "see [x](y) and ~~z~~" }]));
@@ -1263,9 +1441,15 @@ mod tests {
     fn links_parse_to_the_editors_link_mark() {
         let marks = |md: &str| collect(&to_tt(md), |n| n.get("marks").map(Value::to_string));
         assert_eq!(marks("[a](u)"), [json!([link("u")]).to_string()]);
-        assert_eq!(marks("**[a](u)**"), [json!([link("u"), { "type": "bold" }]).to_string()]);
+        assert_eq!(
+            marks("**[a](u)**"),
+            [json!([link("u"), { "type": "bold" }]).to_string()]
+        );
         // The editor's code mark excludes every other.
-        assert_eq!(marks("**[`a`](u)**"), [json!([{ "type": "code" }]).to_string()]);
+        assert_eq!(
+            marks("**[`a`](u)**"),
+            [json!([{ "type": "code" }]).to_string()]
+        );
         // Not links: an empty text or href, a space in the href, an unbalanced paren.
         for md in ["[](u)", "[a]()", "[a](b c)", "[a](b(c)", "[a] (u)"] {
             assert_eq!(marks(md), Vec::<String>::new(), "{md}");
@@ -1279,15 +1463,40 @@ mod tests {
         let doc = to_tt("- [x] done\n  - [ ] sub\n- [ ] open");
         assert_eq!(doc["content"][0]["type"], "taskList");
         let first = &doc["content"][0]["content"][0];
-        assert_eq!((&first["type"], &first["attrs"]["checked"]), (&json!("taskItem"), &json!(true)));
+        assert_eq!(
+            (&first["type"], &first["attrs"]["checked"]),
+            (&json!("taskItem"), &json!(true))
+        );
         assert_eq!(first["content"][1]["content"][0]["attrs"]["checked"], false);
         assert_eq!(doc["content"][0]["content"].as_array().unwrap().len(), 2);
 
         let ordered = to_tt("1. a\n  - b");
-        assert_eq!(node_types(&ordered), ["doc", "orderedList", "listItem", "paragraph", "text", "bulletList", "listItem", "paragraph", "text"]);
+        assert_eq!(
+            node_types(&ordered),
+            [
+                "doc",
+                "orderedList",
+                "listItem",
+                "paragraph",
+                "text",
+                "bulletList",
+                "listItem",
+                "paragraph",
+                "text"
+            ]
+        );
         let broken = to_tt("a\\\nb");
-        assert_eq!(node_types(&broken), ["doc", "paragraph", "text", "hardBreak", "text"]);
-        assert_eq!(to_tt("> a\n>\n> b")["content"][0]["content"].as_array().unwrap().len(), 2);
+        assert_eq!(
+            node_types(&broken),
+            ["doc", "paragraph", "text", "hardBreak", "text"]
+        );
+        assert_eq!(
+            to_tt("> a\n>\n> b")["content"][0]["content"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]
@@ -1298,14 +1507,22 @@ mod tests {
         }
         let marked = to_tt("*a* **b** `c`");
         let marks = collect(&marked, |n| {
-            n["marks"].as_array().map(|ms| ms.iter().map(|m| m["type"].as_str().unwrap()).collect::<Vec<_>>().join(","))
+            n["marks"].as_array().map(|ms| {
+                ms.iter()
+                    .map(|m| m["type"].as_str().unwrap())
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
         });
         assert_eq!(marks, ["italic", "bold", "code"]);
     }
 
     #[test]
     fn underscores_are_not_emphasis() {
-        assert_eq!(to_md(&to_tt("the one_daily_note_per_day index")), "the one_daily_note_per_day index");
+        assert_eq!(
+            to_md(&to_tt("the one_daily_note_per_day index")),
+            "the one_daily_note_per_day index"
+        );
     }
 
     #[test]
@@ -1317,8 +1534,15 @@ mod tests {
         assert_eq!(dates("Due 2026-06-15, then"), ["2026-06-15"]);
         assert_eq!(dates("Due 2026-06-15 then"), ["2026-06-15"]);
         for bad in [
-            "2026-02-30", "2026-13-45", "2027-02-29", "2026-04-31", "2026-00-10", "2026-01-00", "2026-06-155",
-            "2026-06-15123", "12026-06-15",
+            "2026-02-30",
+            "2026-13-45",
+            "2027-02-29",
+            "2026-04-31",
+            "2026-00-10",
+            "2026-01-00",
+            "2026-06-155",
+            "2026-06-15123",
+            "12026-06-15",
         ] {
             let md = format!("Due {bad}.");
             assert!(dates(&md).is_empty(), "{bad} is not a date chip");
@@ -1329,11 +1553,20 @@ mod tests {
     #[test]
     fn structure_prefix_targets_only_registry_types() {
         let todo = &chips(&to_tt("[[Todo/Ship]]"))[0];
-        assert_eq!((&todo["structureType"], &todo["id"], &todo["label"]), (&json!("Todo"), &json!("Todo:Ship"), &json!("Ship")));
+        assert_eq!(
+            (&todo["structureType"], &todo["id"], &todo["label"]),
+            (&json!("Todo"), &json!("Todo:Ship"), &json!("Ship"))
+        );
         let foo = &chips(&to_tt("[[Foo/Bar]]"))[0];
-        assert_eq!((&foo["structureType"], &foo["id"]), (&json!("Note"), &json!("Note:Foo/Bar")));
+        assert_eq!(
+            (&foo["structureType"], &foo["id"]),
+            (&json!("Note"), &json!("Note:Foo/Bar"))
+        );
         let lower = &chips(&to_tt("[[todo/Ship]]"))[0];
-        assert_eq!(lower["id"], "Note:todo/Ship", "the prefix must match a structure type exactly");
+        assert_eq!(
+            lower["id"], "Note:todo/Ship",
+            "the prefix must match a structure type exactly"
+        );
     }
 
     #[test]
@@ -1354,22 +1587,44 @@ mod tests {
     fn chips_are_written_from_current_names() {
         let doc = to_tt("See [[Old Name]], [[Gone]] and #oldtag.");
         let targets = HashMap::from([
-            ("Note:Old Name".to_string(), ChipTarget { structure_type: "Note".into(), name: "New Name".into() }),
-            ("Tag:oldtag".to_string(), ChipTarget { structure_type: "Tag".into(), name: "newtag".into() }),
+            (
+                "Note:Old Name".to_string(),
+                ChipTarget {
+                    structure_type: "Note".into(),
+                    name: "New Name".into(),
+                },
+            ),
+            (
+                "Tag:oldtag".to_string(),
+                ChipTarget {
+                    structure_type: "Tag".into(),
+                    name: "newtag".into(),
+                },
+            ),
         ]);
-        assert_eq!(to_md_with(&doc, &targets), "See [[New Name]], Gone and #newtag.");
+        assert_eq!(
+            to_md_with(&doc, &targets),
+            "See [[New Name]], Gone and #newtag."
+        );
     }
 
     #[test]
     fn references_are_deduplicated_case_insensitively() {
         let parsed = parse("[[Attention]] and [[attention]] and [[Todo/Ship]]");
-        let keys: Vec<_> = parsed.references.iter().map(|r| (r.structure_type.as_str(), r.name.as_str())).collect();
+        let keys: Vec<_> = parsed
+            .references
+            .iter()
+            .map(|r| (r.structure_type.as_str(), r.name.as_str()))
+            .collect();
         assert_eq!(keys, [("Note", "Attention"), ("Todo", "Ship")]);
     }
 
     #[test]
     fn empty_markdown_is_one_empty_paragraph() {
-        assert_eq!(to_tt("  \n"), json!({ "type": "doc", "content": [{ "type": "paragraph" }] }));
+        assert_eq!(
+            to_tt("  \n"),
+            json!({ "type": "doc", "content": [{ "type": "paragraph" }] })
+        );
     }
 
     #[test]
@@ -1379,26 +1634,59 @@ mod tests {
             { "type": "table", "content": [] },
             { "type": "image", "attrs": { "src": "data:image/png;base64,AAAA" } },
         ]});
-        assert_eq!(to_md(&doc), "x\n\n<!-- calcifer:table -->\n\n<!-- calcifer:image -->");
+        assert_eq!(
+            to_md(&doc),
+            "x\n\n<!-- calcifer:table -->\n\n<!-- calcifer:image -->"
+        );
         // Reading a placeholder back writes nothing in its place.
-        assert_eq!(node_types(&to_tt(&to_md(&doc))), ["doc", "paragraph", "text"]);
+        assert_eq!(
+            node_types(&to_tt(&to_md(&doc))),
+            ["doc", "paragraph", "text"]
+        );
     }
 
     #[test]
     fn inexpressible_names_what_markdown_would_lose() {
         let image = |attrs: Value| json!({ "type": "image", "attrs": attrs });
-        assert_eq!(inexpressible(&image(json!({ "src": "a.png", "alt": "a", "alignment": "left" }))), None);
-        assert_eq!(inexpressible(&image(json!({ "src": "a.png", "width": "50%" }))).as_deref(), Some("an image"));
-        assert_eq!(inexpressible(&image(json!({ "src": "data:image/png;base64,AAAA" }))).as_deref(), Some("an image"));
-        assert_eq!(inexpressible(&image(json!({ "src": "a.png", "height": 40 }))).as_deref(), Some("an image's height"));
-        assert_eq!(inexpressible(&json!({ "type": "table" })).as_deref(), Some("a table"));
-        assert_eq!(inexpressible(&to_tt("Plain [[Link]] #tag 2026-06-13.")["content"][0]), None);
-        assert_eq!(inexpressible(&to_tt("- a\n  - [x] b\n- c\\\n  d")["content"][0]), None);
-        let quoted_list = json!({ "type": "blockquote", "content": [{ "type": "bulletList", "content": [] }] });
+        assert_eq!(
+            inexpressible(&image(
+                json!({ "src": "a.png", "alt": "a", "alignment": "left" })
+            )),
+            None
+        );
+        assert_eq!(
+            inexpressible(&image(json!({ "src": "a.png", "width": "50%" }))).as_deref(),
+            Some("an image")
+        );
+        assert_eq!(
+            inexpressible(&image(json!({ "src": "data:image/png;base64,AAAA" }))).as_deref(),
+            Some("an image")
+        );
+        assert_eq!(
+            inexpressible(&image(json!({ "src": "a.png", "height": 40 }))).as_deref(),
+            Some("an image's height")
+        );
+        assert_eq!(
+            inexpressible(&json!({ "type": "table" })).as_deref(),
+            Some("a table")
+        );
+        assert_eq!(
+            inexpressible(&to_tt("Plain [[Link]] #tag 2026-06-13.")["content"][0]),
+            None
+        );
+        assert_eq!(
+            inexpressible(&to_tt("- a\n  - [x] b\n- c\\\n  d")["content"][0]),
+            None
+        );
+        let quoted_list =
+            json!({ "type": "blockquote", "content": [{ "type": "bulletList", "content": [] }] });
         assert_eq!(inexpressible(&quoted_list).as_deref(), Some("a blockquote"));
         let para = json!({ "type": "paragraph", "content": [] });
         let two_paragraphs = json!({ "type": "bulletList", "content": [{ "type": "listItem", "content": [para, para] }] });
-        assert_eq!(inexpressible(&two_paragraphs).as_deref(), Some("a listItem"));
+        assert_eq!(
+            inexpressible(&two_paragraphs).as_deref(),
+            Some("a listItem")
+        );
     }
 
     #[test]
@@ -1407,22 +1695,48 @@ mod tests {
         let mut odd_link = link("u");
         odd_link["attrs"]["target"] = json!("_self");
         let cases = [
-            (marked(json!([{ "type": "underline" }])), "underline formatting"),
-            (marked(json!([{ "type": "highlight", "attrs": { "color": "#ff0" } }])), "highlight formatting"),
-            (marked(json!([{ "type": "textStyle", "attrs": { "color": "red", "fontFamily": null } }])), "textStyle formatting"),
-            (marked(json!([{ "type": "subscript" }])), "subscript formatting"),
-            (marked(json!([{ "type": "bold" }, { "type": "code" }])), "code combined with other formatting"),
+            (
+                marked(json!([{ "type": "underline" }])),
+                "underline formatting",
+            ),
+            (
+                marked(json!([{ "type": "highlight", "attrs": { "color": "#ff0" } }])),
+                "highlight formatting",
+            ),
+            (
+                marked(
+                    json!([{ "type": "textStyle", "attrs": { "color": "red", "fontFamily": null } }]),
+                ),
+                "textStyle formatting",
+            ),
+            (
+                marked(json!([{ "type": "subscript" }])),
+                "subscript formatting",
+            ),
+            (
+                marked(json!([{ "type": "bold" }, { "type": "code" }])),
+                "code combined with other formatting",
+            ),
             (marked(json!([odd_link])), "a link"),
             (marked(json!([link("a b")])), "a link"),
-            (json!({ "type": "paragraph", "content": [text("a`b", json!([{ "type": "code" }]))] }), "inline code containing a backtick"),
+            (
+                json!({ "type": "paragraph", "content": [text("a`b", json!([{ "type": "code" }]))] }),
+                "inline code containing a backtick",
+            ),
             (
                 json!({ "type": "paragraph", "content": [{
                     "type": "mention", "attrs": { "id": "Note:A", "label": "A" }, "marks": [{ "type": "bold" }],
                 }] }),
                 "formatting on a mention",
             ),
-            (json!({ "type": "heading", "attrs": { "level": 2, "textAlign": "center" } }), "a heading's textAlign"),
-            (json!({ "type": "orderedList", "attrs": { "start": 1, "type": "a" } }), "an orderedList's type"),
+            (
+                json!({ "type": "heading", "attrs": { "level": 2, "textAlign": "center" } }),
+                "a heading's textAlign",
+            ),
+            (
+                json!({ "type": "orderedList", "attrs": { "start": 1, "type": "a" } }),
+                "an orderedList's type",
+            ),
         ];
         for (block, want) in cases {
             assert_eq!(inexpressible(&block).as_deref(), Some(want), "{block}");
