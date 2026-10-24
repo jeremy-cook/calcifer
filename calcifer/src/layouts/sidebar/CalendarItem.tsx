@@ -6,11 +6,7 @@ const ROW_CLASS =
 
 export function CalendarItem() {
   return (
-    <Link
-      to="/calendar"
-      activeProps={{ className: 'bg-muted font-medium' }}
-      className={ROW_CLASS}
-    >
+    <Link to="/calendar" activeProps={{ className: 'bg-muted font-medium' }} className={ROW_CLASS}>
       <CalendarBlankIcon />
       <span>Calendar</span>
     </Link>

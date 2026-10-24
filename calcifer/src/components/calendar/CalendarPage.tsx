@@ -9,8 +9,7 @@ interface CalendarPageProps {
 
 export function CalendarPage({ iso }: CalendarPageProps) {
   const navigate = useNavigate()
-  const goTo = (next: string) =>
-    void navigate({ to: '/calendar', search: { date: next }, replace: true })
+  const goTo = (next: string) => void navigate({ to: '/calendar', search: { date: next }, replace: true })
 
   return (
     <div className="flex h-full flex-col">

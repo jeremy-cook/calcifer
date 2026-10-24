@@ -30,9 +30,7 @@ export const MentionMenu = forwardRef<SuggestionMenuHandle, MentionMenuProps>(({
         return true
       }
       const nextIdx =
-        event.key === 'ArrowDown'
-          ? (activeIndex + 1) % items.length
-          : (activeIndex - 1 + items.length) % items.length
+        event.key === 'ArrowDown' ? (activeIndex + 1) % items.length : (activeIndex - 1 + items.length) % items.length
       setValue(keys[nextIdx])
       return true
     },
@@ -41,24 +39,14 @@ export const MentionMenu = forwardRef<SuggestionMenuHandle, MentionMenuProps>(({
   const renderItem = (item: EntitySuggestionItem, index: number) => {
     if (item.isCreate) {
       return (
-        <Command.Item
-          key={keys[index]}
-          value={keys[index]}
-          className="slash-menu-item"
-          onSelect={() => command(item)}
-        >
+        <Command.Item key={keys[index]} value={keys[index]} className="slash-menu-item" onSelect={() => command(item)}>
           <PlusIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <span className="slash-menu-item-title">{item.createLabel ?? `Create "${item.label}"`}</span>
         </Command.Item>
       )
     }
     return (
-      <Command.Item
-        key={keys[index]}
-        value={keys[index]}
-        className="slash-menu-item"
-        onSelect={() => command(item)}
-      >
+      <Command.Item key={keys[index]} value={keys[index]} className="slash-menu-item" onSelect={() => command(item)}>
         <span className="size-2 shrink-0 rounded-full" style={{ background: item.color }} aria-hidden />
         <span className="slash-menu-item-title">{item.label}</span>
       </Command.Item>

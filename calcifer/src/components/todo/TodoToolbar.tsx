@@ -47,10 +47,7 @@ export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
         ))}
       </ToggleGroup>
 
-      <Select
-        value={filter.priority ?? NONE}
-        onValueChange={(v) => onChange({ priority: v === NONE ? undefined : v })}
-      >
+      <Select value={filter.priority ?? NONE} onValueChange={(v) => onChange({ priority: v === NONE ? undefined : v })}>
         <SelectTrigger size="sm" className="h-8">
           <SelectValue placeholder="Priority" />
         </SelectTrigger>
@@ -64,10 +61,7 @@ export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
         </SelectContent>
       </Select>
 
-      <Select
-        value={filter.tag ?? NONE}
-        onValueChange={(v) => onChange({ tag: v === NONE ? undefined : v })}
-      >
+      <Select value={filter.tag ?? NONE} onValueChange={(v) => onChange({ tag: v === NONE ? undefined : v })}>
         <SelectTrigger size="sm" className="h-8">
           <SelectValue placeholder="Tag" />
         </SelectTrigger>

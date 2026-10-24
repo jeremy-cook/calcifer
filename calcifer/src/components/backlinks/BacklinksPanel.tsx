@@ -1,15 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import {
-  CaretRightIcon,
-  ListBulletsIcon,
-  StackIcon,
-} from '@phosphor-icons/react'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '~/components/ui/collapsible'
+import { CaretRightIcon, ListBulletsIcon, StackIcon } from '@phosphor-icons/react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible'
 import { useBacklinks, type Backlink } from '~/model/backlinks'
 import { structurePresentation, useStructure } from '~/model/structures'
 import { cn } from '~/lib/utils'
@@ -107,9 +99,7 @@ interface FlatBacklinksProps {
 }
 
 function FlatBacklinks({ backlinks }: FlatBacklinksProps) {
-  const sorted = [...backlinks].sort(
-    (a, b) => b.mostRecentAt.getTime() - a.mostRecentAt.getTime(),
-  )
+  const sorted = [...backlinks].sort((a, b) => b.mostRecentAt.getTime() - a.mostRecentAt.getTime())
   return (
     <ul className="flex flex-col gap-0.5">
       {sorted.map((bl) => (
@@ -162,9 +152,7 @@ function BacklinkSection({ group }: BacklinkSectionProps) {
 
   return (
     <section className="flex flex-col gap-1">
-      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        {heading}
-      </h3>
+      <h3 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{heading}</h3>
       <ul className="flex flex-col gap-0.5">
         {group.items.map((bl) => (
           <BacklinkRow key={bl.entityId} backlink={bl} />
@@ -186,9 +174,7 @@ function BacklinkRow({ backlink }: BacklinkRowProps) {
       <Link
         to="/e/$id"
         params={{ id: backlink.entityId }}
-        className={cn(
-          'flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted',
-        )}
+        className={cn('flex items-center gap-2 rounded-md px-2 py-1 text-sm hover:bg-muted')}
       >
         <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
         <span className="truncate">{backlink.name}</span>

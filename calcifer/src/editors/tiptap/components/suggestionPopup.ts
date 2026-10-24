@@ -10,8 +10,7 @@ export interface SuggestionMenuHandle {
 
 function updatePosition(editor: Editor, element: HTMLElement) {
   const virtualElement = {
-    getBoundingClientRect: () =>
-      posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to),
+    getBoundingClientRect: () => posToDOMRect(editor.view, editor.state.selection.from, editor.state.selection.to),
   }
   void computePosition(virtualElement, element, {
     placement: 'bottom-start',

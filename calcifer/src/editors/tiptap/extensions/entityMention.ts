@@ -9,8 +9,7 @@ export const EntityMention = Mention.extend({
       structureType: {
         default: null,
         parseHTML: (el) => el.getAttribute('data-structure-type'),
-        renderHTML: (attrs) =>
-          attrs.structureType ? { 'data-structure-type': attrs.structureType } : {},
+        renderHTML: (attrs) => (attrs.structureType ? { 'data-structure-type': attrs.structureType } : {}),
       },
       char: {
         default: '@',
