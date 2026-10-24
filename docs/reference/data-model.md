@@ -16,7 +16,6 @@ message EntityRefList { repeated EntityRef refs = 1; }
 message RichTextRef   { string entity_id = 1; string property_id = 2; }  // a RichText's address
 
 message PropertyValue {
-  reserved 6; reserved "richtext";  // was RichTextRef richtext (I-22)
   oneof value {
     string text = 1;
     double number = 2;
@@ -29,7 +28,6 @@ message PropertyValue {
 
 // Output only; clients write through PutRichText.
 message RichText {
-  reserved 4; reserved "expected_updated_at";  // now on PutRichTextRequest
   RichTextRef ref = 1;
   string doc = 2;               // TipTap JSON; schema in richtext-doc.md
   google.protobuf.Timestamp updated_at = 3;
@@ -339,7 +337,6 @@ service EntityService {
 }
 
 message CreateEntityRequest {
-  reserved 1; reserved "entity";
   string structure_type = 2;
   optional string name = 3;                    // unset or blank: the server's default name
   map<string, PropertyValue> properties = 4;   // keyed by property id
