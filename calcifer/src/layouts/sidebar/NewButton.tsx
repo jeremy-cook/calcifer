@@ -8,7 +8,8 @@ import {
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
 import { useCreateEntity } from '~/model/store'
-import { structurePresentation, useStructures } from '~/model/structures'
+import { facetPresentation, structurePresentation, useStructures } from '~/model/structures'
+import { TODO_FACET } from '~/model/todos'
 
 const classnamesDropdownMenuTrigger = [
   'flex w-full items-center gap-2',
@@ -23,8 +24,10 @@ export function NewButton() {
   const createEntity = useCreateEntity()
   const creatable = useStructures().filter((s) => s.creatable)
 
-  const handleCreate = async (structureType: string) => {
-    const entity = await createEntity(structureType)
+  const TodoIcon = facetPresentation(TODO_FACET).icon
+
+  const handleCreate = async (structureType: string, facets?: string[]) => {
+    const entity = await createEntity(structureType, { facets })
     void navigate({ to: '/e/$id', params: { id: entity.id }, state: { justCreated: true } })
   }
 
@@ -45,6 +48,10 @@ export function NewButton() {
               </DropdownMenuItem>
             )
           })}
+          <DropdownMenuItem onSelect={() => void handleCreate('Note', [TODO_FACET])}>
+            <TodoIcon />
+            To-do
+          </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>

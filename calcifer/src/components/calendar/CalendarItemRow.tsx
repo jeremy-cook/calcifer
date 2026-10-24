@@ -2,23 +2,20 @@ import { Link } from '@tanstack/react-router'
 import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
 import type { CalendarItem } from '~/model/calendar'
-import type { Entity } from '~/model/store'
+import { hasFacet, type Entity } from '~/model/store'
 import { structurePresentation } from '~/model/structures'
-import { todoFields, useSetTodoStatus } from '~/model/todos'
+import { TODO_FACET, todoFields, useSetTodoStatus } from '~/model/todos'
 
 interface CalendarItemRowProps {
   item: CalendarItem
 }
 
-// The calendar decides how each object type looks on a day. Add a case here
-// when a structure deserves more than the generic icon + name row.
+// The calendar decides how each entity looks on a day. Facets come first, so a
+// to-do Note renders as a to-do. Branch here when a facet or structure deserves
+// more than the generic icon + name row.
 export function CalendarItemRow({ item }: CalendarItemRowProps) {
-  switch (item.entity.structureType) {
-    case 'Todo':
-      return <TodoItemRow entity={item.entity} />
-    default:
-      return <EntityItemRow entity={item.entity} />
-  }
+  if (hasFacet(item.entity, TODO_FACET)) return <TodoItemRow entity={item.entity} />
+  return <EntityItemRow entity={item.entity} />
 }
 
 interface TodoItemRowProps {

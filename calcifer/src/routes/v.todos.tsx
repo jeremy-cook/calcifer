@@ -16,8 +16,7 @@ import {
 } from '~/model/todos'
 import { getFacet } from '~/model/structures'
 
-// Static segment: this route takes precedence over /s/$structureType for Todo.
-export const Route = createFileRoute('/s/Todo')({
+export const Route = createFileRoute('/v/todos')({
   // Status/priority keys come from the registry, read per call (it has loaded
   // before the router renders), never captured at import.
   validateSearch: (search: Record<string, unknown>): TodoSearch => {

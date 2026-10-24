@@ -5,6 +5,7 @@ import { Badge } from '~/components/ui/badge'
 import { cn } from '~/lib/utils'
 import { formatLongDate } from '~/model/dates'
 import type { Entity } from '~/model/store'
+import { structurePresentation } from '~/model/structures'
 import { todoFields, useSetTodoStatus } from '~/model/todos'
 import { PriorityBadge } from './PriorityBadge'
 
@@ -28,6 +29,7 @@ function arePropsEqual(prev: TodoRowProps, next: TodoRowProps) {
 export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowProps) {
   const setTodoStatus = useSetTodoStatus()
   const { status, priority, due } = todoFields(entity)
+  const { icon: Icon, color } = structurePresentation(entity.structureType)
   const done = status === 'done'
   const overdue = !done && due !== undefined && due < today
 
@@ -38,6 +40,7 @@ export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowPro
   return (
     <li className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
       <Checkbox checked={done} onCheckedChange={handleCheckedChange} aria-label={`Mark "${entity.name}" done`} />
+      <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
       <Link
         to="/e/$id"
         params={{ id: entity.id }}

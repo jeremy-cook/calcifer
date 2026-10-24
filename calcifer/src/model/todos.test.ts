@@ -12,7 +12,7 @@ import { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { queryClient } from '~/model/api'
 import { structuresQuery } from '~/model/structures'
 import { entity } from '~/model/testing'
-import { DEFAULT_TODO_SORT, selectTodos, todoFields, type TodoFilter } from '~/model/todos'
+import { DEFAULT_TODO_SORT, parseTodoInput, selectTodos, todoFields, type TodoFilter } from '~/model/todos'
 
 vi.mock('~/model/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/model/api')>()),
@@ -148,5 +148,27 @@ describe('todoFields', () => {
   it('reads the todo.* values and tags', () => {
     const fields = todoFields(todo('a', { status: 'done', priority: 'low', due: TODAY, tags: ['t1'] }))
     expect(fields).toEqual({ status: 'done', priority: 'low', due: TODAY, tagIds: ['t1'] })
+  })
+})
+
+describe('parseTodoInput', () => {
+  it('moves hashtags into tags and strips them from the name', () => {
+    expect(parseTodoInput('Buy milk #errands')).toEqual({ name: 'Buy milk', tags: ['errands'] })
+  })
+
+  it('collapses the spaces a token in the middle leaves', () => {
+    expect(parseTodoInput('Call  #home mum  #urgent')).toEqual({ name: 'Call mum', tags: ['home', 'urgent'] })
+  })
+
+  it('keeps each tag once, in first-seen order', () => {
+    expect(parseTodoInput('#b x #a #b')).toEqual({ name: 'x', tags: ['b', 'a'] })
+  })
+
+  it('leaves a # inside a word and a bare # as text', () => {
+    expect(parseTodoInput('Learn C# # now')).toEqual({ name: 'Learn C# # now', tags: [] })
+  })
+
+  it('returns an empty name when the text is only tags', () => {
+    expect(parseTodoInput('#errands')).toEqual({ name: '', tags: ['errands'] })
   })
 })

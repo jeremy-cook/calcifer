@@ -1,6 +1,13 @@
 import { useCallback, useMemo } from 'react'
 import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { hasFacet, propertyValueOf, useEntitiesWithFacet, usePropertyWriters } from '~/model/store'
+import {
+  getOrCreateEntityForMention,
+  hasFacet,
+  propertyValueOf,
+  useCreateEntity,
+  useEntitiesWithFacet,
+  usePropertyWriters,
+} from '~/model/store'
 import { shiftIso, timestampMsOrZero, useToday } from '~/model/dates'
 import { getFacet, propertyDef, type FacetDef } from '~/model/structures'
 
@@ -110,7 +117,7 @@ export interface TodoSort {
 export const DEFAULT_TODO_FILTER: TodoFilter = { status: 'open' }
 export const DEFAULT_TODO_SORT: TodoSort = { by: 'due', dir: 'asc' }
 
-// Route-search shape shared by /s/Todo's validateSearch and TodoToolbar's onChange.
+// Route-search shape shared by /v/todos' validateSearch and TodoToolbar's onChange.
 export interface TodoSearch {
   status?: TodoFilter['status']
   priority?: TodoPriority
@@ -186,4 +193,45 @@ export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
   const entities = useEntitiesWithFacet(TODO_FACET)
   const today = useToday()
   return useMemo(() => selectTodos(entities, filter, sort, today), [entities, filter, sort, today])
+}
+
+export interface ParsedTodoInput {
+  name: string
+  // Tag names, without the '#', in first-seen order and deduplicated.
+  tags: string[]
+}
+
+// `#word` at the start or after whitespace; a '#' inside a word ("C#") stays text.
+const HASHTAG = /(^|\s)#([\p{L}\p{N}_-]+)/gu
+
+// Quick-add text: `#word` tokens become tags and leave the name, with the
+// remaining spaces collapsed. "Buy milk #errands" -> "Buy milk", ['errands'].
+export function parseTodoInput(text: string): ParsedTodoInput {
+  const tags: string[] = []
+  const name = text
+    .replace(HASHTAG, (_match, lead: string, tag: string) => {
+      if (!tags.includes(tag)) tags.push(tag)
+      return lead
+    })
+    .replace(/\s+/g, ' ')
+    .trim()
+  return { name, tags }
+}
+
+// Create a Note with the to-do facet from quick-add text, then resolve or
+// create each Tag by name and set the Note's `tags`.
+export function useQuickAddTodo() {
+  const createEntity = useCreateEntity()
+  const { setRelations } = usePropertyWriters()
+  return useCallback(
+    async (text: string) => {
+      const { name, tags } = parseTodoInput(text)
+      const note = await createEntity('Note', { name: name || undefined, facets: [TODO_FACET] })
+      if (tags.length === 0) return note
+      const targets = await Promise.all(tags.map((tag) => getOrCreateEntityForMention('Tag', tag)))
+      setRelations(note, 'tags', targets)
+      return note
+    },
+    [createEntity, setRelations],
+  )
 }

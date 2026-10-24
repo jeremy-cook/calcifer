@@ -1,16 +1,16 @@
 import { useState } from 'react'
 import { Input } from '~/components/ui/input'
-import { useCreateEntity } from '~/model/store'
+import { useQuickAddTodo } from '~/model/todos'
 
 export function TodoQuickAdd() {
   const [value, setValue] = useState('')
-  const createEntity = useCreateEntity()
+  const quickAddTodo = useQuickAddTodo()
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
-    const name = value.trim()
-    if (!name) return
-    void createEntity('Todo', { name })
+    const text = value.trim()
+    if (!text) return
+    void quickAddTodo(text)
     setValue('')
   }
 

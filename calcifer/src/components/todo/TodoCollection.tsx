@@ -15,7 +15,7 @@ export function TodoCollection({ filter, sort }: TodoCollectionProps) {
 
   const handleChange = (next: Partial<TodoSearch>) =>
     void navigate({
-      to: '/s/Todo',
+      to: '/v/todos',
       search: (prev: TodoSearch) => ({ ...prev, ...next }),
       replace: true,
     })
