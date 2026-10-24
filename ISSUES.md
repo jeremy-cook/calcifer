@@ -209,6 +209,24 @@ warnings.
 
 ---
 
+### I-71 · `get_note` queries backlinks on every read · low · confirmed
+
+**Where:** `server/src/mcp/tools.rs` (`get_note`, `backlink_sources`)
+
+**Problem:** `get_note` fills the frontmatter's `linked_from` list by calling
+`backlink_sources` on every read, including the reads an agent makes only to get the
+`version` and line numbers for `edit_note`. That's an extra `ListBacklinks` per read
+and extra tokens in every reply, for data `get_backlinks` already returns on request.
+Found 2026-10-24 while reviewing the MCP tool surface; confirmed by reading.
+
+**Fix:** Drop `linked_from` from the frontmatter, or replace it with a count, and leave
+the list to `get_backlinks`. Update the `get_note` tool description to match.
+
+**Done when:** `get_note` makes no `ListBacklinks` call (or only a count), and its tests
+and description agree.
+
+---
+
 ### I-72 · The agent can't see or change an existing note's tags · medium · confirmed
 
 **Where:** `server/src/mcp/tools.rs` (`get_note`, `append_to_note`, `edit_note`),
