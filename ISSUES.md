@@ -149,22 +149,9 @@ parser; have `link_notes` go through the serializer instead of formatting by han
 
 ---
 
-### I-66 · `cargo fmt --check` fails on main · low · confirmed
-
-**Where:** `server/src/main.rs`, `server/src/mcp/markdown.rs`, `server/src/mcp/mod.rs`,
-`server/src/mcp/tools.rs`, `server/src/security/local.rs`
-
-**Problem:** These files aren't rustfmt-clean at `d33e00f`, so `cargo fmt --check` fails
-for every change, whatever it touches. Found in the to-do facet plan's T02.
-
-**Fix:** Run `cargo fmt` in `server/` and commit it as its own change.
-
-**Done when:** `cd server && cargo fmt --check` passes on main.
-
----
-
 ## Resolved
 
+- **I-66 · `cargo fmt --check` fails on main.** Fixed 2026-10-23. `cargo fmt` over the five files; formatting only. `cargo fmt --check` passes on main.
 - **I-65 · Remounting the calendar's daily note section prunes the note on screen.** Fixed 2026-10-18. The prune moved to `useDailyNotePrune` (`model/dailyNotes.ts`): a section's unmount schedules it for the next macrotask, and a mount for the same day cancels it, so StrictMode's remount (or any remount that keeps the day) isn't leaving. It still re-reads the server's doc and waits for that doc's outstanding saves (I-35, I-39); that macrotask now replaces the one inside `deleteEntityIfRichTextEmpty`. Covered by `DailyNoteSection.test.tsx`, which renders the section under `<StrictMode>` (the remount test failed before the fix). Observed 2026-10-18 in dev against a scratch DB: opening `/calendar` in a fresh tab kept today's empty note (main's code deleted it in the same setup); an empty note was pruned on moving to another day and on navigating to To-dos; a note with text survived both; text typed and left at once (by a day change or a route change) was kept.
 - **I-40 · Entity write transactions that read first fail with `Internal` under a race.** Fixed 2026-09-29. Every server write transaction opens through `db::begin_write` (`BEGIN IMMEDIATE`): `rename_entity`, `set_entity_property`, `delete_entity`, `persist_new_entity`, `PutRichText` and the embed worker's chunk replace. A contending writer now waits on `busy_timeout` instead of failing at once. Covered by `racing_set_property_writes_both_succeed` (it failed with `Internal: database is locked` before the fix; passed 20 repeated runs after). Observed 2026-09-29: `test:tools` passed on the first run against a fresh scratch server, with no embed worker warnings; before the fix the same first run had failed.
 - **I-64 · pnpm ignores `@bufbuild/buf`'s build script.** Fixed 2026-09-29. `calcifer/pnpm-workspace.yaml` and `mcp-server/pnpm-workspace.yaml` list `@bufbuild/buf` and `esbuild` (and `msw` in `calcifer`) under `ignoredBuiltDependencies`: their scripts only link a binary the optional platform package already provides. A clean `pnpm install` in each package prints no warning, and `pnpm proto:gen` leaves the stubs unchanged. An existing `node_modules` keeps replaying the old warning (even with `--force`) until it's removed and reinstalled.

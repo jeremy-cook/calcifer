@@ -22,14 +22,13 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-66: `cargo fmt --check` fails | S | Every server change's checks fail until it's fixed. |
-| 2 | To-dos as a facet (below) | L | Server side built; frontend, Todo removal and MCP remain. |
-| 3 | I-34: relation edits resend the whole list | M | Live once the facet lands: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
-| 4 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
-| 5 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
-| 6 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
-| 7 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
-| 8 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | To-dos as a facet (below) | L | Server side built; frontend, Todo removal and MCP remain. |
+| 2 | I-34: relation edits resend the whole list | M | Live once the facet lands: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
+| 3 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
+| 4 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
+| 5 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
+| 6 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
+| 7 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ### To-dos as a facet · size: L · in progress
 
