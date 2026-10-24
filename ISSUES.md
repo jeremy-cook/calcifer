@@ -209,6 +209,51 @@ warnings.
 
 ---
 
+### I-72 · The agent can't see or change an existing note's tags · medium · confirmed
+
+**Where:** `server/src/mcp/tools.rs` (`get_note`, `append_to_note`, `edit_note`),
+`server/src/mcp/mod.rs` (tool definitions)
+
+**Problem:** Since ADR 11, a note is tagged by its `tags` property; a body `#tag` only
+references the Tag. `create_note` is the only tool that writes `tags`, so an agent can't
+tag or untag a note that already exists. Appending `#ml` adds a reference, not a tag.
+`get_note`'s frontmatter doesn't show `tags` either, so the agent can't tell what a note
+is tagged with, and a `get_note` copied into `create_note` drops its tags. Found
+2026-10-24 reviewing T07 (294d877); confirmed by reading.
+
+**Fix:** Add `tags` (the tag names) to `get_note`'s frontmatter, and have `create_note`
+read it there when no `tags` argument is given. Give the agent a way to change tags: a
+`tags` argument on `append_to_note`, or a `tag_note` tool with add and remove lists.
+Pick one shape and say it in the descriptions. The add/remove form lines up with
+I-34's single-target relation edits; if I-34 lands first, build on it.
+
+**Done when:** `get_note` shows a note's tags, the agent can add and remove a tag on an
+existing note, the round-trip test (`get_note_copied_into_create_note_links_the_same_targets`)
+covers tags, and the descriptions match.
+
+---
+
+### I-73 · `create_note`'s tags aren't written in the note's transaction · low · confirmed
+
+**Where:** `server/src/mcp/tools.rs` (`create_note`, `resolve_tags`, `set_tags`)
+
+**Problem:** `create_note` resolves (creating) each `tags` Tag before it creates the
+Note, then writes the body and sets `tags` as separate calls. If the Note create loses
+a race (`!res.created`), the new Tags are left behind, untagged and unreferenced. If
+`SetEntityProperty` fails after the body is saved, the note exists without its tags and
+the call reports an error. A body `#tag` has the same first half already. Found in T07.
+
+**Fix:** Pass the Tag refs in `CreateEntityRequest.properties` and create the Note with
+`CreateEntity`, which writes the name and initial properties in one transaction,
+instead of `ResolveEntity` then `SetEntityProperty`. Keep the name-exists check.
+
+**Deferred:** Calcifer is a single-user local app, so both failures are very unlikely. Revisit if it's ever seen.
+
+**Done when:** a `create_note` with `tags` writes the note and its `tags` in one
+transaction, and its tests still pass.
+
+---
+
 ## Resolved
 
 - **I-70 · MCP text and tests still assume a `Todo` structure.** Fixed 2026-10-24 (294d877). `LINK_SYNTAX` gives `[[DailyNote/June 13, 2026]]` as its example and the markdown converter's module doc `[[Tag/ship]]`; `list_structures_shows_facets` asserts the todo facet's `todo.status (select: open|done, default open)` line. `grep -rn Todo server/src/mcp` matches nothing.

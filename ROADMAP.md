@@ -23,11 +23,12 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 | # | Item | Effort | Notes |
 |---|---|---|---|
 | 1 | I-34: relation edits resend the whole list | M | Live now: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
-| 2 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
-| 3 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
-| 4 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. Direct relationships (below) remove the `link_notes` half. |
-| 5 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
-| 6 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 2 | I-72: the agent can't see or change a note's tags | S–M | A gap since ADR 11: only `create_note` writes `tags`. Shares the add/remove shape with I-34, so do it with I-34 or right after. |
+| 3 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
+| 4 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
+| 5 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. Direct relationships (below) remove the `link_notes` half. |
+| 6 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 7 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ### Connection status · size: M
 
