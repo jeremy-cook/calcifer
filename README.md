@@ -40,8 +40,9 @@ scripts/calcifer build    # build only
 scripts/calcifer dev      # debug backend + Vite hot reload (UI on http://localhost:5173)
 ```
 
-The first run creates and migrates `server/calcifer.db`. Until it exists, the build checks
-`sqlx::query!` SQL against the committed query cache in `server/.sqlx/`. Settings, all optional:
+The first run creates and migrates `server/calcifer.db`. The build always checks
+`sqlx::query!` SQL against the committed cache in `server/.sqlx/` (`server/.cargo/config.toml`
+sets `SQLX_OFFLINE`). Settings, all optional:
 `CALCIFER_ADDR` (default `127.0.0.1:8080`), `CALCIFER_MCP_ADDR` (default `127.0.0.1:8081`), `CALCIFER_UI_DIR` (default `../calcifer/dist`, relative
 to `server/`), `DATABASE_URL` (default `sqlite://./calcifer.db`). Without a UI build the
 service still runs, API and MCP only.
@@ -84,10 +85,11 @@ Rust regen is automatic on `cargo build` (tonic-build).
   `export PATH="/Users/bebop/.nvm/versions/node/v24.12.0/bin:$PATH"`.
 - **Server (Rust):** services in `server/src/services/*.rs`, registered in
   `server/src/main.rs`. Migrations in `server/migrations/` (timestamp-prefixed).
-  `sqlx::query!` checks SQL at compile time against the live `server/calcifer.db`
-  (apply new migrations before/at build; the binary also runs `migrate!` on boot), or
-  against the committed cache in `server/.sqlx/` when there's no database. After changing a
-  query or the schema, run `cargo sqlx prepare` in `server/` and commit `.sqlx/`.
+  `sqlx::query!` checks SQL at compile time against the committed cache in `server/.sqlx/`,
+  never the live database; the binary runs `migrate!` on boot. After changing a query or
+  the schema, refresh the cache against a scratch database built from `server/migrations/`
+  with `SQLX_OFFLINE=false DATABASE_URL=sqlite://<scratch> cargo sqlx prepare -- --all-targets`,
+  and commit `.sqlx/`.
   `server/src/tiptap/` reads TipTap JSON; `server/src/links/` writes the link graph. Timestamps via
   `ts_from_millis`.
 - **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen both TS consumers

@@ -43,39 +43,11 @@ if [ "$(node_major)" -lt 18 ]; then
   [ -n "$newest_node" ] && export PATH="$newest_node:$PATH"
 fi
 
-# `sqlx::query!` checks SQL against the live database at compile time, and the
-# server resolves it relative to its own directory.
+# The server resolves a relative database path against its own directory.
 export DATABASE_URL="${DATABASE_URL:-sqlite://./calcifer.db}"
 
 die() { echo "calcifer: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || die "$1 is not installed"; }
-
-# The file a `sqlite://<path>` DATABASE_URL names, resolved relative to server/;
-# nothing for any other URL.
-database_file() {
-  case "$DATABASE_URL" in
-    sqlite://*) ;;
-    *) return ;;
-  esac
-  local path="${DATABASE_URL#sqlite://}"
-  path="${path%%\?*}"
-  case "$path" in
-    /*) echo "$path" ;;
-    *) echo "$server/$path" ;;
-  esac
-}
-
-ensure_database() {
-  local file
-  file="$(database_file)"
-  if [ -z "$file" ] || [ -f "$file" ]; then
-    return
-  fi
-  # A fresh checkout has no database for sqlx to check queries against, so the
-  # build reads the committed query cache (server/.sqlx). The server creates
-  # and migrates the database when it starts.
-  export SQLX_OFFLINE=true
-}
 
 ensure_ui_deps() {
   [ -d "$ui/node_modules" ] || (cd "$ui" && pnpm install --frozen-lockfile)
@@ -98,14 +70,12 @@ build_ui() {
 
 build_server() {
   need cargo
-  ensure_database
   (cd "$server" && cargo build --release)
 }
 
 start() {
   ui_is_stale && build_ui
   need cargo
-  ensure_database
   cd "$server"
   local ui_addr="${CALCIFER_ADDR:-127.0.0.1:8080}" mcp_addr="${CALCIFER_MCP_ADDR:-127.0.0.1:8081}"
   echo "calcifer: UI http://${ui_addr}  MCP http://${mcp_addr}/mcp"
@@ -115,7 +85,6 @@ start() {
 dev() {
   need cargo
   need pnpm
-  ensure_database
   ensure_ui_deps
   # Each half gets its own process group (job control), so stopping the group
   # also stops the server cargo runs and the Vite pnpm runs. Job control stops

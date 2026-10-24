@@ -1,0 +1,5 @@
+# sqlx checks query! SQL against the committed cache in .sqlx/, never a database.
+# An explicit SQLX_OFFLINE=false in the environment wins (cargo [env] doesn't
+# override a set variable), which is how the cache is refreshed.
+[env]
+SQLX_OFFLINE = "true"
