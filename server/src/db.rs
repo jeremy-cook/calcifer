@@ -21,7 +21,14 @@ pub(crate) fn register_sqlite_vec() {
         // callback shape is the documented registration path for sqlite-vec; both
         // come from the C ABI and are stable for the process lifetime.
         unsafe {
-            libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute(
+            libsqlite3_sys::sqlite3_auto_extension(Some(std::mem::transmute::<
+                *const (),
+                unsafe extern "C" fn(
+                    *mut libsqlite3_sys::sqlite3,
+                    *mut *mut std::ffi::c_char,
+                    *const libsqlite3_sys::sqlite3_api_routines,
+                ) -> std::ffi::c_int,
+            >(
                 sqlite_vec::sqlite3_vec_init as *const (),
             )));
         }

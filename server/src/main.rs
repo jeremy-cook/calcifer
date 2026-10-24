@@ -1,3 +1,8 @@
+#![allow(
+    clippy::result_large_err,
+    reason = "tonic::Status is the error type of every handler and helper"
+)]
+
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;

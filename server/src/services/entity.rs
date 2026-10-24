@@ -1968,7 +1968,7 @@ mod tests {
         let stored = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(stored, renamed);
         assert_eq!(fts_name(&pool, &entity.id).await, "After");
-        assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+        assert_eq!(upserted_ids(&mut rx), std::slice::from_ref(&entity.id));
     }
 
     #[tokio::test]
@@ -3244,7 +3244,7 @@ mod tests {
         );
         // No stored value for its rich-text `content` (I-22).
         assert!(!entity.properties.contains_key("content"));
-        assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+        assert_eq!(upserted_ids(&mut rx), std::slice::from_ref(&entity.id));
 
         // Again, with the structure named: the same note, nothing published.
         let again = resolve(&svc, "DailyNote", by_date("2026-06-13"), true)
@@ -3313,7 +3313,7 @@ mod tests {
         let entity = first.entity.expect("entity");
         assert_eq!(entity.structure_type, "Note");
         assert_eq!(entity.name, "Water plants");
-        assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
+        assert_eq!(upserted_ids(&mut rx), std::slice::from_ref(&entity.id));
 
         // Case-insensitive, and scoped to the structure.
         let again = resolve(&svc, "Note", by_name("WATER PLANTS"), true)
