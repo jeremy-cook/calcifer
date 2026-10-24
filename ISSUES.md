@@ -19,7 +19,7 @@ running app. Nothing below has been reproduced yet.
 
 ### I-34 · Relation edits resend the whole list · low · confirmed
 
-**Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:32-40`, `calcifer/src/routes/e.$id.tsx:246-252`
+**Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:25-31`, `calcifer/src/routes/e.$id.tsx:259-270`
 
 **Problem:** Adding or removing a tag sends the full relations list through
 `SetProperty`. If the browser and the agent tag something at the same time, one change is
