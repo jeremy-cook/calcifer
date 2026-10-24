@@ -9,11 +9,14 @@ import { replica } from '~/model/replica'
 import {
   getEntity,
   propertyValueOf,
+  relationsValue,
+  useAddRelationTarget,
   useAllEntities,
   useEntitiesByIds,
   useEntitiesOfType,
   useEntitiesWithFacet,
   useEntity,
+  useRemoveRelationTarget,
   useRenameEntity,
   useSetProperty,
 } from '~/model/store'
@@ -22,7 +25,12 @@ import { entity, watch } from '~/model/testing'
 
 vi.mock('~/model/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/model/api')>()),
-  entityClient: { renameEntity: vi.fn(), setEntityProperty: vi.fn() },
+  entityClient: {
+    renameEntity: vi.fn(),
+    setEntityProperty: vi.fn(),
+    addRelationTarget: vi.fn(),
+    removeRelationTarget: vi.fn(),
+  },
   richTextClient: {},
   structureClient: {},
 }))
@@ -53,6 +61,17 @@ function withText(e: Entity, propertyId: string, text: string): Entity {
 function textOf(id: string, propertyId: string): string | null {
   const value = propertyValueOf(getEntity(id)!, propertyId)
   return value?.case === 'text' ? value.value : null
+}
+
+function withTags(e: Entity, ...ids: string[]): Entity {
+  const tags = relationsValue(ids.map((id) => ({ id, structureType: 'Tag' })))
+  return create(EntitySchema, { ...e, properties: { ...e.properties, tags } })
+}
+
+// The ids in the entity's `tags` property, in order; `null` when it has no such property.
+function tagIdsOf(id: string): string[] | null {
+  const value = propertyValueOf(getEntity(id)!, 'tags')
+  return value?.case === 'relations' ? value.value.refs.map((ref) => ref.id) : null
 }
 
 // A promise the test settles by hand.
@@ -206,5 +225,89 @@ describe('useSetProperty', () => {
     await act(async () => set.reject(new Error('set failed')))
 
     await vi.waitFor(() => expect(textOf('a', 'title')).toBeNull())
+  })
+})
+
+describe('relation target writers', () => {
+  it('adds one target optimistically and sends only that target', async () => {
+    applyWatchEvent(watch.snapshot(withTags(entity('a'), 'a-tag')))
+    const add = deferred<never>()
+    vi.mocked(entityClient.addRelationTarget).mockReturnValue(add.promise)
+    const { result } = renderHook(() => useAddRelationTarget(), { wrapper })
+
+    act(() => result.current(getEntity('a')!, 'tags', { id: 'b-tag', structureType: 'Tag' }))
+
+    await vi.waitFor(() => expect(tagIdsOf('a')).toEqual(['a-tag', 'b-tag']))
+    expect(entityClient.addRelationTarget).toHaveBeenCalledOnce()
+    expect(vi.mocked(entityClient.addRelationTarget).mock.calls[0][0]).toEqual({
+      entityId: 'a',
+      propertyId: 'tags',
+      targetId: 'b-tag',
+    })
+  })
+
+  it('on a failed add removes only that target, keeping a concurrent add', async () => {
+    applyWatchEvent(watch.snapshot(withTags(entity('a'), 'a-tag')))
+    const add = deferred<never>()
+    vi.mocked(entityClient.addRelationTarget).mockReturnValue(add.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useAddRelationTarget({ onError }), { wrapper })
+
+    act(() => result.current(getEntity('a')!, 'tags', { id: 'b-tag', structureType: 'Tag' }))
+    await vi.waitFor(() => expect(tagIdsOf('a')).toEqual(['a-tag', 'b-tag']))
+    act(() => replica.patch('a', (e) => withTags(e, 'a-tag', 'b-tag', 'c-tag')))
+    await act(async () => add.reject(new Error('add failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(tagIdsOf('a')).toEqual(['a-tag', 'c-tag'])
+  })
+
+  it('on a failed remove restores the target', async () => {
+    applyWatchEvent(watch.snapshot(withTags(entity('a'), 'a-tag', 'b-tag')))
+    const remove = deferred<never>()
+    vi.mocked(entityClient.removeRelationTarget).mockReturnValue(remove.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useRemoveRelationTarget({ onError }), { wrapper })
+
+    act(() => result.current(getEntity('a')!, 'tags', 'a-tag'))
+    await vi.waitFor(() => expect(tagIdsOf('a')).toEqual(['b-tag']))
+    expect(vi.mocked(entityClient.removeRelationTarget).mock.calls[0][0]).toEqual({
+      entityId: 'a',
+      propertyId: 'tags',
+      targetId: 'a-tag',
+    })
+    await act(async () => remove.reject(new Error('remove failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(tagIdsOf('a')?.toSorted()).toEqual(['a-tag', 'b-tag'])
+  })
+
+  it('removing the last target clears the property optimistically', async () => {
+    applyWatchEvent(watch.snapshot(withTags(entity('a'), 'a-tag')))
+    const remove = deferred<never>()
+    vi.mocked(entityClient.removeRelationTarget).mockReturnValue(remove.promise)
+    const { result } = renderHook(() => useRemoveRelationTarget(), { wrapper })
+
+    act(() => result.current(getEntity('a')!, 'tags', 'a-tag'))
+
+    await vi.waitFor(() => expect(tagIdsOf('a')).toBeNull())
+    expect(Object.hasOwn(getEntity('a')!.properties, 'tags')).toBe(false)
+  })
+
+  it('adding a target that is already present changes nothing on error', async () => {
+    applyWatchEvent(watch.snapshot(withTags(entity('a'), 'a-tag')))
+    const add = deferred<never>()
+    vi.mocked(entityClient.addRelationTarget).mockReturnValue(add.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useAddRelationTarget({ onError }), { wrapper })
+
+    const before = getEntity('a')
+    act(() => result.current(getEntity('a')!, 'tags', { id: 'a-tag', structureType: 'Tag' }))
+    await vi.waitFor(() => expect(entityClient.addRelationTarget).toHaveBeenCalledOnce())
+    expect(getEntity('a')).toBe(before)
+    await act(async () => add.reject(new Error('add failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(tagIdsOf('a')).toEqual(['a-tag'])
   })
 })

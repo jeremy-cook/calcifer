@@ -12,23 +12,23 @@ export interface EntityRelationsFieldProps {
   // Empty: any structure.
   targetStructure: string
   refs: readonly EntityRef[]
-  onChange: (refs: RelationTarget[]) => void
+  onAdd: (target: RelationTarget) => void
+  onRemove: (targetId: string) => void
 }
 
-export function EntityRelationsField({ selfId, label, targetStructure, refs, onChange }: EntityRelationsFieldProps) {
+export function EntityRelationsField({
+  selfId,
+  label,
+  targetStructure,
+  refs,
+  onAdd,
+  onRemove,
+}: EntityRelationsFieldProps) {
   const entities = useEntitiesByIds(refs.map((ref) => ref.id))
 
   const resolvedRefs = refs
     .map((ref, i) => ({ ref, entity: entities[i] }))
     .filter((r): r is { ref: EntityRef; entity: NonNullable<typeof r.entity> } => r.entity !== undefined)
-
-  const removeRef = (id: string) => {
-    onChange(refs.filter((r) => r.id !== id))
-  }
-
-  const addRef = (target: RelationTarget) => {
-    onChange([...refs, target])
-  }
 
   const excludeIds = [selfId, ...refs.map((r) => r.id)]
 
@@ -41,7 +41,7 @@ export function EntityRelationsField({ selfId, label, targetStructure, refs, onC
             {entity.name}
             <button
               type="button"
-              onClick={() => removeRef(ref.id)}
+              onClick={() => onRemove(ref.id)}
               aria-label={`Remove ${entity.name}`}
               className="rounded-full hover:text-destructive"
             >
@@ -49,7 +49,7 @@ export function EntityRelationsField({ selfId, label, targetStructure, refs, onC
             </button>
           </Badge>
         ))}
-        <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={addRef}>
+        <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onAdd}>
           <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs font-normal text-muted-foreground">
             <PlusIcon className="size-3" />
             Add

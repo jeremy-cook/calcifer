@@ -9,6 +9,7 @@ import {
   EntitySchema,
   PropertyValueSchema,
   type Entity,
+  type EntityRef,
   type RichTextRef,
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
@@ -242,6 +243,85 @@ export interface RelationTarget {
   structureType: string
 }
 
+interface AddRelationTargetVars {
+  entity: Entity
+  propertyId: string
+  target: RelationTarget
+}
+
+// Add one target to a `relations` property through EntityService.AddRelationTarget,
+// which sends only that target, so it can't drop a target another writer added
+// meanwhile (I-34). Optimistic, on the entity as currently cached. On error only
+// this target is removed again, and only if the optimistic step added it, so a
+// concurrent edit to another target survives. On success the server's entity
+// replaces the cached one.
+export function useAddRelationTarget({ onError }: UseSetPropertyOptions = {}) {
+  // Latest callback without re-creating the mutation on every render.
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
+  const { mutate } = useMutation({
+    mutationFn: async ({ entity, propertyId, target }: AddRelationTargetVars) =>
+      requireEntity(await entityClient.addRelationTarget({ entityId: entity.id, propertyId, targetId: target.id })),
+    onMutate: ({ entity, propertyId, target }) => {
+      const cached = getEntity(entity.id)
+      const added = cached !== undefined && withTargetAdded(cached, propertyId, target) !== cached
+      replica.patch(entity.id, (e) => withTargetAdded(e, propertyId, target))
+      return { added }
+    },
+    onSuccess: (entity) => replica.upsert(entity),
+    onError: (err, { entity, propertyId, target }, ctx) => {
+      if (ctx?.added) replica.patch(entity.id, (e) => withTargetRemoved(e, propertyId, target.id))
+      onErrorRef.current?.(err, entity)
+    },
+  })
+  return useCallback(
+    (entity: Entity, propertyId: string, target: RelationTarget) => mutate({ entity, propertyId, target }),
+    [mutate],
+  )
+}
+
+interface RemoveRelationTargetVars {
+  entity: Entity
+  propertyId: string
+  targetId: string
+}
+
+// Remove one target from a `relations` property through
+// EntityService.RemoveRelationTarget, the counterpart of useAddRelationTarget.
+// Optimistic, and removing the last target clears the property. On error only
+// this target is added back, and only if the optimistic step removed it. On
+// success the server's entity replaces the cached one.
+export function useRemoveRelationTarget({ onError }: UseSetPropertyOptions = {}) {
+  // Latest callback without re-creating the mutation on every render.
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
+  const { mutate } = useMutation({
+    mutationFn: async ({ entity, propertyId, targetId }: RemoveRelationTargetVars) =>
+      requireEntity(await entityClient.removeRelationTarget({ entityId: entity.id, propertyId, targetId })),
+    onMutate: ({ entity, propertyId, targetId }) => {
+      const cached = getEntity(entity.id)
+      // `undefined`: the target wasn't there, so there is nothing to restore.
+      const removed = cached && relationRefsOf(cached, propertyId).find((ref) => ref.id === targetId)
+      replica.patch(entity.id, (e) => withTargetRemoved(e, propertyId, targetId))
+      return { removed }
+    },
+    onSuccess: (entity) => replica.upsert(entity),
+    onError: (err, { entity, propertyId }, ctx) => {
+      const removed = ctx?.removed
+      if (removed) replica.patch(entity.id, (e) => withTargetAdded(e, propertyId, removed))
+      onErrorRef.current?.(err, entity)
+    },
+  })
+  return useCallback(
+    (entity: Entity, propertyId: string, targetId: string) => mutate({ entity, propertyId, targetId }),
+    [mutate],
+  )
+}
+
 export interface PropertyWriters {
   // `null` clears the text.
   setText: (entity: Entity, propertyId: string, text: string | null) => void
@@ -252,13 +332,17 @@ export interface PropertyWriters {
   setSelect: (entity: Entity, propertyId: string, key: string) => void
   // `null` clears the relation.
   setRelation: (entity: Entity, propertyId: string, target: RelationTarget | null) => void
-  // An empty list clears the property.
-  setRelations: (entity: Entity, propertyId: string, targets: readonly RelationTarget[]) => void
+  // Append one target; already present is a no-op.
+  addRelationTarget: (entity: Entity, propertyId: string, target: RelationTarget) => void
+  // Remove one target; absent is a no-op.
+  removeRelationTarget: (entity: Entity, propertyId: string, targetId: string) => void
 }
 
 // Typed writes on top of useSetProperty, so callers never build a PropertyValue.
 export function usePropertyWriters(options: UseSetPropertyOptions = {}): PropertyWriters {
   const setProperty = useSetProperty(options)
+  const addRelationTarget = useAddRelationTarget(options)
+  const removeRelationTarget = useRemoveRelationTarget(options)
   return useMemo(
     () => ({
       setText: (entity, propertyId, text) =>
@@ -279,10 +363,10 @@ export function usePropertyWriters(options: UseSetPropertyOptions = {}): Propert
                 value: createMessage(EntityRefSchema, { id: target.id, structureType: target.structureType }),
               },
         ),
-      setRelations: (entity, propertyId, targets) =>
-        setProperty(entity, propertyId, targets.length === 0 ? null : relationsValue(targets).value),
+      addRelationTarget,
+      removeRelationTarget,
     }),
-    [setProperty],
+    [setProperty, addRelationTarget, removeRelationTarget],
   )
 }
 
@@ -298,7 +382,7 @@ export function relationsValue(targets: readonly RelationTarget[]): PropertyValu
   })
 }
 
-// --- Pure edit builder (useSetProperty()'s optimistic apply) ---
+// --- Pure edit builders (the optimistic apply of useSetProperty() and the relation target writers) ---
 
 // `null` removes the property. The server still clears links for declared
 // relation properties that are absent (SetEntityProperty also for ad-hoc ones), so
@@ -308,6 +392,29 @@ function withProperty(entity: Entity, propertyId: string, value: PropertyValue['
   if (value === null) delete properties[propertyId]
   else properties[propertyId] = createMessage(PropertyValueSchema, { value })
   return createMessage(EntitySchema, { ...entity, properties })
+}
+
+// A relations property's refs on `entity`. An absent property, or one that isn't
+// `relations`, reads as an empty list.
+function relationRefsOf(entity: Entity, propertyId: string): readonly EntityRef[] {
+  const value = propertyValueOf(entity, propertyId)
+  return value?.case === 'relations' ? value.value.refs : []
+}
+
+// Appends `target` to a relations property. Already present returns `entity` itself.
+function withTargetAdded(entity: Entity, propertyId: string, target: RelationTarget): Entity {
+  const refs = relationRefsOf(entity, propertyId)
+  if (refs.some((ref) => ref.id === target.id)) return entity
+  return withProperty(entity, propertyId, relationsValue([...refs, target]).value)
+}
+
+// Drops `targetId` from a relations property, deleting the property when the list
+// empties. Not present returns `entity` itself.
+function withTargetRemoved(entity: Entity, propertyId: string, targetId: string): Entity {
+  const refs = relationRefsOf(entity, propertyId)
+  if (!refs.some((ref) => ref.id === targetId)) return entity
+  const rest = refs.filter((ref) => ref.id !== targetId)
+  return withProperty(entity, propertyId, rest.length === 0 ? null : relationsValue(rest).value)
 }
 
 // --- Imperative (non-hook) helpers: delete, the editor mention flow, cleanup ---

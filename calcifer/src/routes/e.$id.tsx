@@ -204,7 +204,8 @@ interface EntityPropertiesProps {
 }
 
 function EntityProperties({ entity }: EntityPropertiesProps) {
-  const { setText, setNumber, setDate, setSelect, setRelation, setRelations } = usePropertyWriters()
+  const { setText, setNumber, setDate, setSelect, setRelation, addRelationTarget, removeRelationTarget } =
+    usePropertyWriters()
   const structure = useStructure(entity.structureType)
   const facets = useFacets().filter((f) => hasFacet(entity, f.id))
 
@@ -286,7 +287,8 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
             label={def.label || def.id}
             targetStructure={def.targetStructure}
             refs={refs}
-            onChange={(nextRefs) => setRelations(entity, def.id, nextRefs)}
+            onAdd={(target) => addRelationTarget(entity, def.id, target)}
+            onRemove={(targetId) => removeRelationTarget(entity, def.id, targetId)}
           />
         )
       }
