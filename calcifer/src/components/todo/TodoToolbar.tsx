@@ -3,9 +3,10 @@ import { ToggleGroup, ToggleGroupItem } from '~/components/ui/toggle-group'
 import { Toggle } from '~/components/ui/toggle'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { useEntitiesOfType } from '~/model/store'
-import { useStructure } from '~/model/structures'
+import { useFacet } from '~/model/structures'
 import {
   TODO_DUE_FILTER_OPTIONS,
+  TODO_FACET,
   TODO_SORT_OPTIONS,
   todoPriorityOptions,
   todoStatusFilterOptions,
@@ -23,7 +24,7 @@ export interface TodoToolbarProps {
 const NONE = '__none__'
 
 export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
-  const todo = useStructure('Todo')
+  const todo = useFacet(TODO_FACET)
   const tags = useEntitiesOfType('Tag')
   const statusFilterOptions = todoStatusFilterOptions(todo)
   const priorityOptions = todoPriorityOptions(todo)

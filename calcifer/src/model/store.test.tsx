@@ -12,6 +12,7 @@ import {
   useAllEntities,
   useEntitiesByIds,
   useEntitiesOfType,
+  useEntitiesWithFacet,
   useEntity,
   useRenameEntity,
   useSetProperty,
@@ -119,6 +120,26 @@ describe('useEntitiesOfType', () => {
     act(() => applyWatchEvent(watch.upserted(tag('t2'))))
     expect(renders).toBe(2)
     expect(result.current.map((e) => e.id)).toEqual(['t1', 't2'])
+  })
+})
+
+describe('useEntitiesWithFacet', () => {
+  it('re-renders only when an entity with that facet changes', () => {
+    const todo = (id: string, name = id, updatedAtMs = 1_000) =>
+      create(EntitySchema, { ...entity(id, name, updatedAtMs), facets: ['todo'] })
+    applyWatchEvent(watch.snapshot(todo('t1'), entity('a')))
+    let renders = 0
+    const { result } = renderHook(() => {
+      renders++
+      return useEntitiesWithFacet('todo')
+    })
+    act(() => applyWatchEvent(watch.upserted(entity('a', 'edited', 2_000))))
+    expect(renders).toBe(1)
+    act(() => applyWatchEvent(watch.upserted(todo('t1', 'edited', 2_000))))
+    expect(renders).toBe(2)
+    act(() => applyWatchEvent(watch.upserted(todo('a', 'attached', 3_000))))
+    expect(renders).toBe(3)
+    expect(result.current.map((e) => e.id)).toEqual(['t1', 'a'])
   })
 })
 

@@ -4,6 +4,7 @@ import {
   DEFAULT_TODO_FILTER,
   DEFAULT_TODO_SORT,
   TODO_DUE_FILTER_OPTIONS,
+  TODO_FACET,
   TODO_SORT_DIR_OPTIONS,
   TODO_SORT_OPTIONS,
   isOptionKey,
@@ -13,14 +14,14 @@ import {
   type TodoSearch,
   type TodoSort,
 } from '~/model/todos'
-import { getStructure } from '~/model/structures'
+import { getFacet } from '~/model/structures'
 
 // Static segment: this route takes precedence over /s/$structureType for Todo.
 export const Route = createFileRoute('/s/Todo')({
   // Status/priority keys come from the registry, read per call (it has loaded
   // before the router renders), never captured at import.
   validateSearch: (search: Record<string, unknown>): TodoSearch => {
-    const todo = getStructure('Todo')
+    const todo = getFacet(TODO_FACET)
     return {
       status: isOptionKey(todoStatusFilterOptions(todo), search.status) ? search.status : undefined,
       priority: isOptionKey(todoPriorityOptions(todo), search.priority) ? search.priority : undefined,

@@ -5,7 +5,8 @@ import { act, render } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { create } from '@bufbuild/protobuf'
 import { EntitySchema, PropertyValueSchema, RichTextSchema } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { PropertyKind, StructureDefSchema } from '@calcifer/proto/calcifer/v1/structures_pb'
+import { ListStructuresResponseSchema } from '@calcifer/proto/calcifer/v1/services_pb'
+import { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
 import { entityClient, queryClient, richTextClient } from '~/model/api'
 import { replica } from '~/model/replica'
 import { structuresQuery } from '~/model/structures'
@@ -51,12 +52,12 @@ async function settle() {
 beforeEach(() => {
   replica.reset()
   queryClient.clear()
-  queryClient.setQueryData(structuresQuery.queryKey, [
-    create(StructureDefSchema, {
-      type: 'DailyNote',
-      properties: [{ id: 'content', kind: PropertyKind.RICHTEXT }],
+  queryClient.setQueryData(
+    structuresQuery.queryKey,
+    create(ListStructuresResponseSchema, {
+      structures: [{ type: 'DailyNote', properties: [{ id: 'content', kind: PropertyKind.RICHTEXT }] }],
     }),
-  ])
+  )
   vi.mocked(entityClient.deleteEntity).mockResolvedValue({} as never)
   vi.mocked(richTextClient.getRichText).mockImplementation(
     async ({ entityId, propertyId }) =>

@@ -1,10 +1,11 @@
 import { useCallback, useMemo } from 'react'
 import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
-import { propertyValueOf, useEntitiesOfType, usePropertyWriters } from '~/model/store'
+import { hasFacet, propertyValueOf, useEntitiesWithFacet, usePropertyWriters } from '~/model/store'
 import { shiftIso, timestampMsOrZero, useToday } from '~/model/dates'
-import { getStructure, propertyDef, type StructureDef } from '~/model/structures'
+import { getFacet, propertyDef, type FacetDef } from '~/model/structures'
 
-// Option keys, labels and defaults come from the fetched registry. Keys the UI
+// A to-do is any entity with the `todo` facet; its values live under the facet's
+// namespaced ids. Option keys, labels and defaults come from the fetched registry. Keys the UI
 // branches on (status 'done'/'open', priority 'none') are behaviour, not schema,
 // and stay literal where they're used.
 export type TodoStatus = string
@@ -15,13 +16,18 @@ export interface OptionItem {
   label: string
 }
 
-function todoStatusOptions(todo: StructureDef | undefined): readonly OptionItem[] {
-  return propertyDef(todo, 'status')?.options ?? []
+export const TODO_FACET = 'todo'
+export const TODO_STATUS = 'todo.status'
+export const TODO_PRIORITY = 'todo.priority'
+export const TODO_DUE = 'todo.due'
+
+function todoStatusOptions(todo: FacetDef | undefined): readonly OptionItem[] {
+  return propertyDef(todo, TODO_STATUS)?.options ?? []
 }
 
 // In rank order, low -> high.
-export function todoPriorityOptions(todo: StructureDef | undefined): readonly OptionItem[] {
-  return propertyDef(todo, 'priority')?.options ?? []
+export function todoPriorityOptions(todo: FacetDef | undefined): readonly OptionItem[] {
+  return propertyDef(todo, TODO_PRIORITY)?.options ?? []
 }
 
 export interface TodoFields {
@@ -36,7 +42,7 @@ export function isOptionKey<K extends string>(options: readonly { key: K }[], v:
 }
 
 // A select value that isn't a declared option reads as the declared default.
-function selectValue(entity: Entity, todo: StructureDef | undefined, id: string): string {
+function selectValue(entity: Entity, todo: FacetDef | undefined, id: string): string {
   const def = propertyDef(todo, id)
   const value = propertyValueOf(entity, id)
   return value?.case === 'select' && def && isOptionKey(def.options, value.value)
@@ -46,14 +52,15 @@ function selectValue(entity: Entity, todo: StructureDef | undefined, id: string)
 
 export function todoFields(entity: Entity): TodoFields {
   const valueOf = (id: string) => propertyValueOf(entity, id)
-  const todo = getStructure('Todo')
+  const todo = getFacet(TODO_FACET)
 
-  const status = selectValue(entity, todo, 'status')
-  const priority = selectValue(entity, todo, 'priority')
+  const status = selectValue(entity, todo, TODO_STATUS)
+  const priority = selectValue(entity, todo, TODO_PRIORITY)
 
-  const dueVal = valueOf('due')
+  const dueVal = valueOf(TODO_DUE)
   const due = dueVal?.case === 'date' ? dueVal.value : undefined
 
+  // Tags are a structure property, not part of the facet.
   const tagsVal = valueOf('tags')
   const tagIds = tagsVal?.case === 'relations' ? tagsVal.value.refs.map((r) => r.id) : []
 
@@ -62,7 +69,7 @@ export function todoFields(entity: Entity): TodoFields {
 
 // Filter/sort choices, defined once: route search validation, the toolbar and
 // the TodoFilter/TodoSort types all derive from these.
-export function todoStatusFilterOptions(todo: StructureDef | undefined): readonly OptionItem[] {
+export function todoStatusFilterOptions(todo: FacetDef | undefined): readonly OptionItem[] {
   return [...todoStatusOptions(todo), { key: 'all', label: 'All' }]
 }
 
@@ -153,7 +160,7 @@ function compareTodos(a: Entity, b: Entity, sort: TodoSort, priorityOrder: reado
 
 export function selectTodos(entities: Entity[], filter: TodoFilter, sort: TodoSort, todayIsoValue: string): Entity[] {
   const matches = entities.filter((e) => {
-    if (e.structureType !== 'Todo') return false
+    if (!hasFacet(e, TODO_FACET)) return false
     const fields = todoFields(e)
     if (filter.status !== 'all' && fields.status !== filter.status) return false
     if (filter.priority !== undefined && fields.priority !== filter.priority) return false
@@ -161,22 +168,22 @@ export function selectTodos(entities: Entity[], filter: TodoFilter, sort: TodoSo
     if (filter.due !== undefined && !matchesDue(fields.due, filter.due, todayIsoValue)) return false
     return true
   })
-  const priorityOrder = todoPriorityOptions(getStructure('Todo')).map((o) => o.key)
+  const priorityOrder = todoPriorityOptions(getFacet(TODO_FACET)).map((o) => o.key)
   return matches.sort((a, b) => compareTodos(a, b, sort, priorityOrder))
 }
 
 export function todoDue(entity: Entity): string | undefined {
-  if (entity.structureType !== 'Todo') return undefined
+  if (!hasFacet(entity, TODO_FACET)) return undefined
   return todoFields(entity).due
 }
 
 export function useSetTodoStatus() {
   const { setSelect } = usePropertyWriters()
-  return useCallback((entity: Entity, status: TodoStatus) => setSelect(entity, 'status', status), [setSelect])
+  return useCallback((entity: Entity, status: TodoStatus) => setSelect(entity, TODO_STATUS, status), [setSelect])
 }
 
 export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
-  const entities = useEntitiesOfType('Todo')
+  const entities = useEntitiesWithFacet(TODO_FACET)
   const today = useToday()
   return useMemo(() => selectTodos(entities, filter, sort, today), [entities, filter, sort, today])
 }

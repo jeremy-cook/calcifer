@@ -41,6 +41,12 @@ export function useEntitiesOfType(structureType: string): Entity[] {
   return useReplica(useShallow((s) => s.all.filter((e) => e.structureType === structureType)))
 }
 
+// The entities with `facet` attached, in replica order. Re-renders only when one
+// of them changes.
+export function useEntitiesWithFacet(facet: string): Entity[] {
+  return useReplica(useShallow((s) => s.all.filter((e) => hasFacet(e, facet))))
+}
+
 // Each id's entity, undefined where the replica doesn't hold it. Re-renders only
 // when one of them changes.
 export function useEntitiesByIds(ids: readonly string[]): (Entity | undefined)[] {
@@ -71,20 +77,54 @@ export function useEntity(id: string): EntityLookup {
 
 // --- Mutations / actions ---
 
-interface CreateEntityVars {
-  structureType: string
+export interface CreateEntityOptions {
   name?: string
+  // Facet ids to attach on create, with their select defaults.
+  facets?: string[]
+}
+
+interface CreateEntityVars extends CreateEntityOptions {
+  structureType: string
 }
 
 // Create by intent: the server mints the id and builds the defaults, including
 // the default name when `name` is omitted. Resolves to the saved entity.
 export function useCreateEntity() {
   const { mutateAsync } = useMutation({
-    mutationFn: async ({ structureType, name }: CreateEntityVars) =>
-      requireEntity(await entityClient.createEntity({ structureType, name })),
+    mutationFn: async ({ structureType, name, facets }: CreateEntityVars) =>
+      requireEntity(await entityClient.createEntity({ structureType, name, facets })),
     onSuccess: (entity) => replica.upsert(entity),
   })
-  return useCallback((structureType: string, name?: string) => mutateAsync({ structureType, name }), [mutateAsync])
+  return useCallback(
+    (structureType: string, options: CreateEntityOptions = {}) => mutateAsync({ structureType, ...options }),
+    [mutateAsync],
+  )
+}
+
+interface FacetVars {
+  entityId: string
+  facet: string
+}
+
+// Attach a facet through EntityService.AttachFacet. The server writes its select
+// defaults; the returned entity replaces the cached one.
+export function useAttachFacet() {
+  const { mutateAsync } = useMutation({
+    mutationFn: async ({ entityId, facet }: FacetVars) =>
+      requireEntity(await entityClient.attachFacet({ entityId, facet })),
+    onSuccess: (entity) => replica.upsert(entity),
+  })
+  return useCallback((entityId: string, facet: string) => mutateAsync({ entityId, facet }), [mutateAsync])
+}
+
+// Detach a facet through EntityService.DetachFacet, which deletes its values.
+export function useDetachFacet() {
+  const { mutateAsync } = useMutation({
+    mutationFn: async ({ entityId, facet }: FacetVars) =>
+      requireEntity(await entityClient.detachFacet({ entityId, facet })),
+    onSuccess: (entity) => replica.upsert(entity),
+  })
+  return useCallback((entityId: string, facet: string) => mutateAsync({ entityId, facet }), [mutateAsync])
 }
 
 // Server-authoritative get-or-create through EntityService.ResolveEntity, so the
@@ -324,6 +364,10 @@ export function listByStructure(entities: Entity[], structureType: string): Enti
     })
   }
   return matches.sort((a, b) => timestampMsOrZero(b.updatedAt) - timestampMsOrZero(a.updatedAt))
+}
+
+export function hasFacet(entity: Entity, id: string): boolean {
+  return entity.facets.includes(id)
 }
 
 export function dailyNoteDate(entity: Entity): string | undefined {

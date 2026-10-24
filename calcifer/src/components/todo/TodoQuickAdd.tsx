@@ -10,7 +10,7 @@ export function TodoQuickAdd() {
     if (e.key !== 'Enter') return
     const name = value.trim()
     if (!name) return
-    void createEntity('Todo', name)
+    void createEntity('Todo', { name })
     setValue('')
   }
 
