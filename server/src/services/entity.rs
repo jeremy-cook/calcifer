@@ -1091,7 +1091,7 @@ fn new_entity(
 }
 
 /// The name of a new entity created without one: `Untitled <StructureDef.name>`,
-/// e.g. "Untitled To-do". Structures missing from the registry use their type.
+/// e.g. "Untitled Note". Structures missing from the registry use their type.
 fn default_name(structure_type: &str) -> String {
     let name = structures::structure(structure_type).map_or(structure_type, |s| s.name);
     format!("Untitled {name}")
