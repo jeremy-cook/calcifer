@@ -599,24 +599,24 @@ mod tests {
     #[tokio::test]
     async fn get_note_copied_into_create_note_links_the_same_targets() {
         let f = fixture().await;
-        f.create("Todo", "Ship").await;
+        f.create("Tag", "ship").await;
         f.k.create_daily_note("2026-06-13").await.unwrap();
         f.k.create_note("RT Note", "").await.unwrap();
         f.k.create_note("RT Alias", "").await.unwrap();
-        let md = "Uses [[RT Note]] and [[RT Alias|the alias]]. #rt\n\n- do [[Todo/Ship]] on [[DailyNote/June 13, 2026]]";
+        let md = "Uses [[RT Note]] and [[RT Alias|the alias]]. #rt\n\n- do [[Tag/ship]] on [[DailyNote/June 13, 2026]]";
         f.k.create_note("Round Trip", md).await.unwrap();
         let id = f.note_id("Round Trip").await;
         let links_before = f.link_targets(&id).await;
         assert_eq!(links_before.len(), 5, "{links_before:?}");
         assert!(
-            links_before.iter().any(|l| l.starts_with("Todo:"))
+            links_before.iter().any(|l| l.starts_with("Tag:"))
                 && links_before.iter().any(|l| l.starts_with("DailyNote:"))
         );
 
         let count = f.entity_count().await;
         let note = f.k.get_note("Round Trip").await.unwrap();
         assert!(
-            note.contains("[[Todo/Ship]]") && note.contains("[[DailyNote/June 13, 2026]]"),
+            note.contains("[[Tag/ship]]") && note.contains("[[DailyNote/June 13, 2026]]"),
             "{note}"
         );
         assert!(
@@ -670,7 +670,7 @@ mod tests {
         let f = fixture().await;
         f.k.create_note("Existing", "Body.").await.unwrap();
         let before = f.entity_count().await;
-        let md = "See [[Attenton]], [[Todo/Ship]] and [[DailyNote/February 1, 1901]].";
+        let md = "See [[Attenton]] and [[DailyNote/February 1, 1901]].";
         for failure in [
             err(f.k.create_note("New", md).await),
             err(f.k.append_to_note("Existing", md).await),
@@ -687,11 +687,11 @@ mod tests {
                 .await),
         ] {
             assert!(
-                failure.contains("Nothing was written: 3 link(s)"),
+                failure.contains("Nothing was written: 2 link(s)"),
                 "{failure}"
             );
             assert!(
-                failure.contains("[[Attenton]], [[Todo/Ship]], [[DailyNote/February 1, 1901]]"),
+                failure.contains("[[Attenton]], [[DailyNote/February 1, 1901]]"),
                 "{failure}"
             );
         }
@@ -1062,10 +1062,9 @@ mod tests {
         let f = fixture().await;
         let listed = f.k.list_structures().unwrap();
         assert!(
-            listed.contains("- Note: ") && listed.contains("- Todo: "),
+            listed.contains("- Note: ") && listed.contains("- DailyNote: "),
             "{listed}"
         );
-        assert!(listed.contains("priority (select: "), "{listed}");
         assert!(listed.contains("(relations -> Tag)"), "{listed}");
     }
 

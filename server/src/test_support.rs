@@ -80,9 +80,10 @@ pub(crate) fn note(name: &str) -> CreateEntityRequest {
     create_request("Note", name)
 }
 
-/// A Create request for a Todo named `name`; the server adds the select defaults.
+/// A Create request for a Note named `name` with the `todo` facet; the server
+/// adds the facet's select defaults.
 pub(crate) fn todo(name: &str) -> CreateEntityRequest {
-    create_request("Todo", name)
+    with_facets(note(name), &["todo"])
 }
 
 /// A Create request for a Tag named `name`.

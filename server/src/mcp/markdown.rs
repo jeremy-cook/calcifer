@@ -734,7 +734,7 @@ pub fn parse(markdown: &str) -> Parsed {
         let aliased = attrs.remove("_aliased") == Some(Value::Bool(true));
         attrs.insert("structureType".into(), target.structure_type.into());
         attrs.insert("_name".into(), target.name.clone().into());
-        // An unaliased [[Todo/Ship]] is labelled "Ship", not the prefixed text.
+        // An unaliased [[Tag/ship]] is labelled "ship", not the prefixed text.
         if !aliased {
             attrs.insert("label".into(), target.name.into());
         }
@@ -1362,8 +1362,8 @@ mod tests {
             "> quoted [[Link]]",
             "```rust\nlet x = 1;\n```",
             "Search by *meaning*, not keywords, via **mean pooling** and `cosine similarity`.",
-            "Ship [[Todo/Ship It]] by [[DailyNote/June 13, 2026]]; see [[Tag/ml]].",
-            "A note named [[Note/Todo/Ship]] and one named [[Foo/Bar]].",
+            "Ship by [[DailyNote/June 13, 2026]]; see [[Tag/ml]].",
+            "A note named [[Note/Tag/ml]] and one named [[Foo/Bar]].",
             "Above.\n\n---\n\nBelow.",
             "![a diagram](https://example.com/d.png)\n\n![](/local.png \"The \\\"title\\\"\")\n\n![a \\] bracket](x.png)",
             // Plain text that would read as syntax.
@@ -1552,19 +1552,19 @@ mod tests {
 
     #[test]
     fn structure_prefix_targets_only_registry_types() {
-        let todo = &chips(&to_tt("[[Todo/Ship]]"))[0];
+        let tag = &chips(&to_tt("[[Tag/ship]]"))[0];
         assert_eq!(
-            (&todo["structureType"], &todo["id"], &todo["label"]),
-            (&json!("Todo"), &json!("Todo:Ship"), &json!("Ship"))
+            (&tag["structureType"], &tag["id"], &tag["label"]),
+            (&json!("Tag"), &json!("Tag:ship"), &json!("ship"))
         );
         let foo = &chips(&to_tt("[[Foo/Bar]]"))[0];
         assert_eq!(
             (&foo["structureType"], &foo["id"]),
             (&json!("Note"), &json!("Note:Foo/Bar"))
         );
-        let lower = &chips(&to_tt("[[todo/Ship]]"))[0];
+        let lower = &chips(&to_tt("[[tag/ship]]"))[0];
         assert_eq!(
-            lower["id"], "Note:todo/Ship",
+            lower["id"], "Note:tag/ship",
             "the prefix must match a structure type exactly"
         );
     }
@@ -1610,13 +1610,13 @@ mod tests {
 
     #[test]
     fn references_are_deduplicated_case_insensitively() {
-        let parsed = parse("[[Attention]] and [[attention]] and [[Todo/Ship]]");
+        let parsed = parse("[[Attention]] and [[attention]] and [[Tag/ship]]");
         let keys: Vec<_> = parsed
             .references
             .iter()
             .map(|r| (r.structure_type.as_str(), r.name.as_str()))
             .collect();
-        assert_eq!(keys, [("Note", "Attention"), ("Todo", "Ship")]);
+        assert_eq!(keys, [("Note", "Attention"), ("Tag", "ship")]);
     }
 
     #[test]

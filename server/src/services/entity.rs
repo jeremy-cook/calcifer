@@ -1880,17 +1880,20 @@ mod tests {
         let svc = entity_service(pool.clone());
         let mut rx = svc.hub.subscribe();
 
-        let first = create(&svc, untitled("Todo")).await;
-        let second = create(&svc, untitled("Todo")).await;
+        let first = create(&svc, with_facets(untitled("Note"), &["todo"])).await;
+        let second = create(&svc, with_facets(untitled("Note"), &["todo"])).await;
 
         assert!(uuid::Uuid::parse_str(&first.id).is_ok(), "{}", first.id);
         assert_ne!(first.id, second.id);
-        assert_eq!(first.structure_type, "Todo");
-        // Todo names aren't unique, so the default may repeat.
-        assert_eq!(first.name, "Untitled To-do");
-        assert_eq!(second.name, "Untitled To-do");
-        assert_eq!(select_value(&first, "status").as_deref(), Some("open"));
-        assert_eq!(select_value(&first, "priority").as_deref(), Some("none"));
+        assert_eq!(first.structure_type, "Note");
+        // Note names aren't unique, so the default may repeat.
+        assert_eq!(first.name, "Untitled Note");
+        assert_eq!(second.name, "Untitled Note");
+        assert_eq!(select_value(&first, "todo.status").as_deref(), Some("open"));
+        assert_eq!(
+            select_value(&first, "todo.priority").as_deref(),
+            Some("none")
+        );
         // No stored value for the rich-text `content` (I-22), here or in the DB.
         assert!(!first.properties.contains_key("content"));
         assert!(stored_property_ids(&pool, &first.id)
@@ -1901,18 +1904,21 @@ mod tests {
         assert!(first.links.is_empty());
         assert!(first.referenced_dates.is_empty());
         assert_eq!(millis(first.created_at), millis(first.updated_at));
-        assert_eq!(fts_name(&pool, &first.id).await, "Untitled To-do");
+        assert_eq!(fts_name(&pool, &first.id).await, "Untitled Note");
         assert_eq!(upserted_ids(&mut rx), [first.id.clone(), second.id.clone()]);
 
         // A given name is trimmed, and given properties win over the defaults.
         let named = create(
             &svc,
-            with_select(todo("  Water plants "), "priority", "high"),
+            with_select(todo("  Water plants "), "todo.priority", "high"),
         )
         .await;
         assert_eq!(named.name, "Water plants");
-        assert_eq!(select_value(&named, "priority").as_deref(), Some("high"));
-        assert_eq!(select_value(&named, "status").as_deref(), Some("open"));
+        assert_eq!(
+            select_value(&named, "todo.priority").as_deref(),
+            Some("high")
+        );
+        assert_eq!(select_value(&named, "todo.status").as_deref(), Some("open"));
 
         // A blank name is no name.
         let blank = create(&svc, note("  ")).await;
@@ -1942,7 +1948,7 @@ mod tests {
         let entity = create(
             &svc,
             with_relations(
-                with_select(todo("Before"), "priority", "high"),
+                with_select(todo("Before"), "todo.priority", "high"),
                 "tags",
                 &[(&urgent.id, "Tag")],
             ),
@@ -1954,7 +1960,7 @@ mod tests {
 
         assert_eq!(renamed.name, "After");
         // No write can change an entity's type (I-3).
-        assert_eq!(renamed.structure_type, "Todo");
+        assert_eq!(renamed.structure_type, "Note");
         assert_eq!(renamed.properties, entity.properties);
         assert_eq!(renamed.links, entity.links);
         assert_eq!(renamed.created_at, entity.created_at);
@@ -2204,7 +2210,7 @@ mod tests {
         let svc = entity_service(memory_pool().await);
         let snapshot = create(&svc, todo("Water plants")).await;
 
-        set_property(&svc, &snapshot.id, "status", select("done"))
+        set_property(&svc, &snapshot.id, "todo.status", select("done"))
             .await
             .expect("agent sets status");
         rename(&svc, &snapshot.id, "Water the plants")
@@ -2213,7 +2219,10 @@ mod tests {
 
         let stored = svc.load_entity(&snapshot.id).await.expect("load");
         assert_eq!(stored.name, "Water the plants");
-        assert_eq!(select_value(&stored, "status").as_deref(), Some("done"));
+        assert_eq!(
+            select_value(&stored, "todo.status").as_deref(),
+            Some("done")
+        );
     }
 
     fn select_value(entity: &Entity, property_id: &str) -> Option<String> {
@@ -2263,7 +2272,7 @@ mod tests {
 
         let err = try_create(
             &svc,
-            with_select(todo("Water plants"), "priority", "urgent"),
+            with_select(todo("Water plants"), "todo.priority", "urgent"),
         )
         .await
         .expect_err("unknown priority should be rejected");
@@ -2286,7 +2295,7 @@ mod tests {
         // A declared select holding some other kind of value.
         let mistyped = with_value(
             todo("Mistyped"),
-            "status",
+            "todo.status",
             property_value::Value::Text("open".to_string()),
         );
         let err = try_create(&svc, mistyped)
@@ -2486,7 +2495,7 @@ mod tests {
         }
     }
 
-    /// A Todo tagged with `tags`, created a few milliseconds in the past so a
+    /// A to-do tagged with `tags`, created a few milliseconds in the past so a
     /// later bump of `updated_at` is visible.
     async fn tagged_todo(svc: &EntityService, tags: &[&Entity]) -> Entity {
         let refs: Vec<(&str, &str)> = tags.iter().map(|t| (t.id.as_str(), "Tag")).collect();
@@ -2652,16 +2661,22 @@ mod tests {
         let svc = entity_service(memory_pool().await);
         let snapshot = create(&svc, todo("Water plants")).await;
 
-        set_property(&svc, &snapshot.id, "status", select("done"))
+        set_property(&svc, &snapshot.id, "todo.status", select("done"))
             .await
             .expect("writer A");
-        set_property(&svc, &snapshot.id, "priority", select("high"))
+        set_property(&svc, &snapshot.id, "todo.priority", select("high"))
             .await
             .expect("writer B");
 
         let stored = svc.load_entity(&snapshot.id).await.expect("load");
-        assert_eq!(select_value(&stored, "status").as_deref(), Some("done"));
-        assert_eq!(select_value(&stored, "priority").as_deref(), Some("high"));
+        assert_eq!(
+            select_value(&stored, "todo.status").as_deref(),
+            Some("done")
+        );
+        assert_eq!(
+            select_value(&stored, "todo.priority").as_deref(),
+            Some("high")
+        );
     }
 
     // I-40: two writers race on one entity. Each reads before it writes, so a
@@ -2676,15 +2691,21 @@ mod tests {
 
         for (status, priority) in [("done", "high"), ("open", "low"), ("done", "medium")] {
             let (a, b) = tokio::join!(
-                set_property(&svc, &entity.id, "status", select(status)),
-                set_property(&svc, &entity.id, "priority", select(priority)),
+                set_property(&svc, &entity.id, "todo.status", select(status)),
+                set_property(&svc, &entity.id, "todo.priority", select(priority)),
             );
             a.expect("status write");
             b.expect("priority write");
 
             let stored = svc.load_entity(&entity.id).await.expect("load");
-            assert_eq!(select_value(&stored, "status").as_deref(), Some(status));
-            assert_eq!(select_value(&stored, "priority").as_deref(), Some(priority));
+            assert_eq!(
+                select_value(&stored, "todo.status").as_deref(),
+                Some(status)
+            );
+            assert_eq!(
+                select_value(&stored, "todo.priority").as_deref(),
+                Some(priority)
+            );
         }
         scratch.pool.close().await;
     }
@@ -2694,14 +2715,14 @@ mod tests {
         let svc = entity_service(memory_pool().await);
         let entity = create(&svc, todo("Water plants")).await;
 
-        let err = set_property(&svc, &entity.id, "status", select("banana"))
+        let err = set_property(&svc, &entity.id, "todo.status", select("banana"))
             .await
             .expect_err("unknown status should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
         assert!(err.message().contains("banana"), "{}", err.message());
 
         // A select on a property not declared as one is rejected too.
-        let err = set_property(&svc, &entity.id, "due", select("open"))
+        let err = set_property(&svc, &entity.id, "todo.due", select("open"))
             .await
             .expect_err("select on a non-select property should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
@@ -2719,7 +2740,7 @@ mod tests {
         let entity = create(&svc, todo("Water plants")).await;
 
         // A `date` value on a select, through SetProperty and Create.
-        let err = set_property(&svc, &entity.id, "status", date("2026-06-13"))
+        let err = set_property(&svc, &entity.id, "todo.status", date("2026-06-13"))
             .await
             .expect_err("date on a select");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
@@ -2727,7 +2748,7 @@ mod tests {
             &svc,
             with_value(
                 todo("Dated"),
-                "priority",
+                "todo.priority",
                 property_value::Value::Date("2026-06-13".to_string()),
             ),
         )
@@ -2739,7 +2760,7 @@ mod tests {
         let err = set_property(
             &svc,
             &entity.id,
-            "due",
+            "todo.due",
             Some(property_value::Value::Text("tomorrow".to_string())),
         )
         .await
@@ -2753,7 +2774,7 @@ mod tests {
 
         // The matching kinds are accepted: a date on `due`, and anything on an
         // undeclared id.
-        set_property(&svc, &entity.id, "due", date("2026-06-13"))
+        set_property(&svc, &entity.id, "todo.due", date("2026-06-13"))
             .await
             .expect("date on due");
         set_property(
@@ -2879,19 +2900,22 @@ mod tests {
         );
 
         // A value with no case clears too.
-        set_property(&svc, &entity.id, "status", None)
+        set_property(&svc, &entity.id, "todo.status", None)
             .await
             .expect("clear status");
         let stored = svc.load_entity(&entity.id).await.expect("load");
-        assert_eq!(select_value(&stored, "status"), None);
-        assert_eq!(select_value(&stored, "priority").as_deref(), Some("none"));
+        assert_eq!(select_value(&stored, "todo.status"), None);
+        assert_eq!(
+            select_value(&stored, "todo.priority").as_deref(),
+            Some("none")
+        );
     }
 
     #[tokio::test]
     async fn set_property_missing_entity_is_not_found() {
         let svc = entity_service(memory_pool().await);
 
-        let err = set_property(&svc, "no-such-entity", "status", select("done"))
+        let err = set_property(&svc, "no-such-entity", "todo.status", select("done"))
             .await
             .expect_err("missing entity");
 
@@ -2947,20 +2971,26 @@ mod tests {
     #[test]
     fn new_entity_builds_defaults_and_lets_the_caller_win() {
         let entity = new_entity(
-            "Todo",
+            "Note",
             Some("Water plants"),
             HashMap::from([(
-                "priority".to_string(),
+                "todo.priority".to_string(),
                 PropertyValue {
                     value: Some(property_value::Value::Select("high".to_string())),
                 },
             )]),
-            &[],
+            &[structures::facet("todo").expect("todo facet")],
         );
 
         assert_eq!(entity.name, "Water plants");
-        assert_eq!(select_value(&entity, "status").as_deref(), Some("open"));
-        assert_eq!(select_value(&entity, "priority").as_deref(), Some("high"));
+        assert_eq!(
+            select_value(&entity, "todo.status").as_deref(),
+            Some("open")
+        );
+        assert_eq!(
+            select_value(&entity, "todo.priority").as_deref(),
+            Some("high")
+        );
         // The defaults (status, priority) with the caller's priority laid over.
         assert_eq!(entity.properties.len(), 2);
         // Rich-text properties get no value (I-22).
@@ -3019,7 +3049,7 @@ mod tests {
         assert_eq!(day.name, "June 13, 2026");
     }
 
-    // I-52: a date value is a real day in canonical form, declared (Todo.due,
+    // I-52: a date value is a real day in canonical form, declared (todo.due,
     // DailyNote.date) or ad hoc (a Note's `when`), on Create and SetProperty.
     #[tokio::test]
     async fn date_values_must_be_iso_days() {
@@ -3029,7 +3059,7 @@ mod tests {
         let memo = create(&svc, note("Memo")).await;
         let day = daily_note(&svc, "2026-06-13").await;
         let targets = [
-            (&task, "due", todo("T")),
+            (&task, "todo.due", todo("T")),
             (&memo, "when", note("M")),
             (&day, "date", note("D")),
         ];
@@ -3056,7 +3086,7 @@ mod tests {
         );
 
         let good = property_value::Value::Date("2026-02-03".to_string());
-        try_create(&svc, with_value(todo("T"), "due", good.clone()))
+        try_create(&svc, with_value(todo("T"), "todo.due", good.clone()))
             .await
             .expect("declared date on create");
         try_create(&svc, with_value(note("M"), "when", good.clone()))
@@ -3276,29 +3306,28 @@ mod tests {
         let svc = entity_service(memory_pool().await);
         let mut rx = svc.hub.subscribe();
 
-        let first = resolve(&svc, "Todo", by_name("  Water plants "), true)
+        let first = resolve(&svc, "Note", by_name("  Water plants "), true)
             .await
             .expect("create");
         assert!(first.created);
         let entity = first.entity.expect("entity");
-        assert_eq!(entity.structure_type, "Todo");
+        assert_eq!(entity.structure_type, "Note");
         assert_eq!(entity.name, "Water plants");
-        assert_eq!(select_value(&entity, "status").as_deref(), Some("open"));
         assert_eq!(upserted_ids(&mut rx), [entity.id.clone()]);
 
         // Case-insensitive, and scoped to the structure.
-        let again = resolve(&svc, "Todo", by_name("WATER PLANTS"), true)
+        let again = resolve(&svc, "Note", by_name("WATER PLANTS"), true)
             .await
             .expect("get");
         assert!(!again.created);
         assert_eq!(again.entity.expect("entity").id, entity.id);
         assert!(upserted_ids(&mut rx).is_empty());
 
-        let note = resolve(&svc, "Note", by_name("Water plants"), true)
+        let tag = resolve(&svc, "Tag", by_name("Water plants"), true)
             .await
-            .expect("a Note of the same name");
-        assert!(note.created);
-        assert_ne!(note.entity.expect("entity").id, entity.id);
+            .expect("a Tag of the same name");
+        assert!(tag.created);
+        assert_ne!(tag.entity.expect("entity").id, entity.id);
     }
 
     // I-24, D2: with two same-named Notes, the oldest wins, then the lower id.
@@ -3505,13 +3534,7 @@ mod tests {
         )
         .await;
 
-        for filter in [
-            None,
-            Some("Note"),
-            Some("Todo"),
-            Some("Tag"),
-            Some("DailyNote"),
-        ] {
+        for filter in [None, Some("Note"), Some("Tag"), Some("DailyNote")] {
             let mut expected = Vec::new();
             for id in listed_ids(&pool, filter).await {
                 expected.push(load_entity(&pool, &id).await.expect("load"));
@@ -3559,7 +3582,7 @@ mod tests {
         for name in ["C", "A", "B", "D"] {
             ids.push(create(&svc, note(name)).await.id);
         }
-        let newest = create(&svc, todo("Newest")).await;
+        let newest = create(&svc, tag("Newest")).await;
         sqlx::query("UPDATE entities SET updated_at = 1000 WHERE id != ?")
             .bind(&newest.id)
             .execute(&pool)

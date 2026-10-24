@@ -190,40 +190,6 @@ pub const STRUCTURES: &[StructureDef] = &[
         }],
         facets: &[],
     },
-    StructureDef {
-        type_: "Todo",
-        name: "To-do",
-        plural: "To-dos",
-        description:
-            "an actionable item with status, priority, due date, and tags (reference with [[Todo/Name]])",
-        properties: &[
-            select(
-                "status",
-                "Status",
-                &[option("open", "Open"), option("done", "Done")],
-                "open",
-            ),
-            select(
-                "priority",
-                "Priority",
-                &[
-                    option("none", "None"),
-                    option("low", "Low"),
-                    option("medium", "Medium"),
-                    option("high", "High"),
-                ],
-                "none",
-            ),
-            prop("due", PropertyKind::Date, "Due"),
-            relations("tags", "Tags", "Tag"),
-            prop("content", PropertyKind::Richtext, ""),
-        ],
-        creatable: true,
-        mentionable: true,
-        name_editable: true,
-        keys: &[],
-        facets: &[],
-    },
 ];
 
 /// Every facet, in the order clients list them.
@@ -426,33 +392,28 @@ mod tests {
         assert_eq!(richtext_properties("Note"), ["content"]);
         assert!(richtext_properties("Tag").is_empty());
         assert_eq!(richtext_properties("DailyNote"), ["content"]);
-        assert_eq!(richtext_properties("Todo"), ["content"]);
         assert!(richtext_properties("Nope").is_empty());
 
         assert!(select_defaults("Note").is_empty());
         assert!(select_defaults("Tag").is_empty());
         assert!(select_defaults("DailyNote").is_empty());
-        assert_eq!(
-            select_defaults("Todo"),
-            [("status", "open"), ("priority", "none")]
-        );
         assert!(select_defaults("Nope").is_empty());
 
         assert_eq!(relation_properties("Note"), ["tags"]);
         assert!(relation_properties("Tag").is_empty());
         assert!(relation_properties("DailyNote").is_empty());
-        assert_eq!(relation_properties("Todo"), ["tags"]);
         assert!(relation_properties("Nope").is_empty());
     }
 
     #[test]
     fn property_def_looks_up_by_structure_and_id() {
-        let priority = property("Todo", "priority").expect("Todo.priority");
-        assert_eq!(priority.kind, PropertyKind::Select);
-        assert_eq!(priority.default_option, Some("none"));
-        let tags = property("Todo", "tags").expect("Todo.tags");
+        let date = property("DailyNote", "date").expect("DailyNote.date");
+        assert_eq!(date.kind, PropertyKind::Date);
+        let tags = property("Note", "tags").expect("Note.tags");
         assert_eq!(tags.target_structure, Some("Tag"));
-        assert!(property("Todo", "nope").is_none());
+        assert!(property("Note", "nope").is_none());
+        // Facet properties aren't the structure's own.
+        assert!(property("Note", "todo.priority").is_none());
         assert!(property("Nope", "content").is_none());
     }
 

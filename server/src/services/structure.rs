@@ -28,11 +28,8 @@ impl StructureServiceTrait for StructureService {
 mod tests {
     use super::*;
     use crate::proto::entity_service_server::EntityService as _;
-    use crate::proto::{
-        property_value, resolve_entity_request, PropertyDef, PropertyKind, ResolveEntityRequest,
-        StructureDef,
-    };
-    use crate::test_support::{entity_service, memory_pool};
+    use crate::proto::{property_value, PropertyDef, PropertyKind, StructureDef};
+    use crate::test_support::{entity_service, memory_pool, todo};
 
     async fn list_response() -> ListStructuresResponse {
         StructureService
@@ -80,7 +77,7 @@ mod tests {
     async fn list_returns_every_structure_in_table_order() {
         let structures = list().await;
         let types: Vec<&str> = structures.iter().map(|s| s.r#type.as_str()).collect();
-        assert_eq!(types, ["Note", "Tag", "DailyNote", "Todo"]);
+        assert_eq!(types, ["Note", "Tag", "DailyNote"]);
 
         let tag = &structures[1];
         assert!(!tag.mentionable && tag.unique_names && tag.creatable);
@@ -90,48 +87,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn list_carries_todo_selects_and_relation_target() {
+    async fn list_carries_note_tags_relation_target() {
         let structures = list().await;
-        let todo = structures
+        let note = structures
             .iter()
-            .find(|s| s.r#type == "Todo")
-            .expect("Todo");
-        assert_eq!(
-            (todo.name.as_str(), todo.plural.as_str()),
-            ("To-do", "To-dos")
-        );
+            .find(|s| s.r#type == "Note")
+            .expect("Note");
 
-        let ids: Vec<&str> = todo.properties.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, ["status", "priority", "due", "tags", "content"]);
+        let ids: Vec<&str> = note.properties.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["tags", "content"]);
 
-        let status = &todo.properties[0];
-        assert_eq!(status.kind(), PropertyKind::Select);
-        assert_eq!(status.label, "Status");
-        assert_contains_in_order(
-            &options(&todo.properties, "status"),
-            &[("open", "Open"), ("done", "Done")],
-        );
-        assert_eq!(status.default_option, "open");
-
-        let priority = &todo.properties[1];
-        assert_eq!(priority.kind(), PropertyKind::Select);
-        // Option order is rank order for the to-do priority sort.
-        assert_contains_in_order(
-            &options(&todo.properties, "priority"),
-            &[
-                ("none", "None"),
-                ("low", "Low"),
-                ("medium", "Medium"),
-                ("high", "High"),
-            ],
-        );
-        assert_eq!(priority.default_option, "none");
-
-        let tags = &todo.properties[3];
+        let tags = &note.properties[0];
         assert_eq!(tags.kind(), PropertyKind::Relations);
+        assert_eq!(tags.label, "Tags");
         assert_eq!(tags.target_structure, "Tag");
 
-        let content = &todo.properties[4];
+        let content = &note.properties[1];
         assert_eq!(content.kind(), PropertyKind::Richtext);
         assert!(content.options.is_empty() && content.default_option.is_empty());
     }
@@ -231,31 +202,26 @@ mod tests {
         }
     }
 
-    // The get-or-create path builds new entities from the same table, so a
-    // server-minted Todo carries exactly the defaults List advertises.
+    // Attaching on create reads the same table, so a new to-do carries exactly
+    // the defaults List advertises for the facet.
     #[tokio::test]
-    async fn resolved_todo_carries_listed_select_defaults() {
+    async fn created_todo_carries_listed_facet_defaults() {
         let svc = entity_service(memory_pool().await);
         let entity = svc
-            .resolve_entity(Request::new(ResolveEntityRequest {
-                structure_type: "Todo".to_string(),
-                key: Some(resolve_entity_request::Key::Name(
-                    "Water plants".to_string(),
-                )),
-                create_if_missing: true,
-            }))
+            .create_entity(Request::new(todo("Water plants")))
             .await
-            .expect("resolve")
+            .expect("create")
             .into_inner()
             .entity
             .expect("entity");
 
-        let structures = list().await;
-        let todo = structures
+        let response = list_response().await;
+        let facet = response
+            .facets
             .iter()
-            .find(|s| s.r#type == "Todo")
-            .expect("Todo");
-        for def in todo
+            .find(|f| f.id == "todo")
+            .expect("todo facet");
+        for def in facet
             .properties
             .iter()
             .filter(|p| !p.default_option.is_empty())
