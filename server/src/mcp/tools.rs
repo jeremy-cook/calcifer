@@ -14,14 +14,15 @@ use crate::proto::entity_service_server::EntityService as EntityServiceTrait;
 use crate::proto::rich_text_service_server::RichTextService as RichTextServiceTrait;
 use crate::proto::search_service_server::SearchService as SearchServiceTrait;
 use crate::proto::{
-    resolve_entity_request, Entity, GetEntityRequest, GetRichTextRequest, ListBacklinksRequest,
-    MatchRange, PutRichTextRequest, ResolveEntityRequest, ResolveEntityResponse, SearchMode,
-    SearchRequest,
+    property_value, resolve_entity_request, Entity, EntityRef, EntityRefList, GetEntityRequest,
+    GetRichTextRequest, ListBacklinksRequest, MatchRange, PropertyValue, PutRichTextRequest,
+    ResolveEntityRequest, ResolveEntityResponse, SearchMode, SearchRequest,
+    SetEntityPropertyRequest,
 };
 use crate::services::entity::{ts_from_millis, EntityService};
 use crate::services::richtext::RichTextService;
 use crate::services::search::SearchService;
-use crate::structures::{self, PropertyDef, PropertyKind, STRUCTURES};
+use crate::structures::{self, PropertyDef, PropertyKind, FACETS, STRUCTURES};
 
 /// What a failed tool call tells the agent.
 #[derive(Debug)]
@@ -436,8 +437,9 @@ impl Knowledge {
     /// overwrite: edit_note and append_to_note are how a note's body changes.
     /// Links are checked before the note is created, so a failed call leaves
     /// nothing behind; the note's links to itself are the one target allowed to
-    /// be missing.
-    pub async fn create_note(&self, name: &str, markdown: &str) -> ToolResult {
+    /// be missing. Each of `tags` is resolved, or created, as a Tag and set as
+    /// the note's `tags` property; a body #tag only references its Tag.
+    pub async fn create_note(&self, name: &str, markdown: &str, tags: &[String]) -> ToolResult {
         let exists = || {
             ToolError(format!(
                 "A note named \"{name}\" already exists; nothing was written. Use get_note, then edit_note or append_to_note to change it."
@@ -460,6 +462,7 @@ impl Knowledge {
         if !missing.is_empty() {
             return Err(unknown_targets(&missing));
         }
+        let tag_ids = self.resolve_tags(tags).await?;
 
         let res = self.resolve_name("Note", name, true).await?;
         // Someone else made it between the check above and now.
@@ -469,11 +472,18 @@ impl Knowledge {
         let id = res.entity.map(|e| e.id).unwrap_or_default();
         ids.insert(own_key, id.clone());
         // Unconditional: the note was created just above, so it has no body to lose.
-        self.put_doc(&doc_ref("Note", &id)?, &parsed.resolve(&ids), None)
-            .await?;
+        let body = doc_ref("Note", &id)?;
+        self.put_doc(&body, &parsed.resolve(&ids), None).await?;
+        if !tag_ids.is_empty() {
+            self.set_tags(&id, tag_ids).await?;
+        }
         let ent = self.entity(&id).await?;
-        let linked = ent
+        let wikilinks: Vec<_> = ent
             .links
+            .iter()
+            .filter(|l| l.source_property_id == body.property_id)
+            .collect();
+        let linked = wikilinks
             .iter()
             .map(|l| l.target.as_ref().map_or("", |t| t.structure_type.as_str()))
             .collect::<Vec<_>>();
@@ -483,11 +493,43 @@ impl Knowledge {
             linked.join(", ")
         };
         Ok(format!(
-            "Saved note \"{}\" ({id}). Wikilinks: {} [{linked}]; dates: {}.",
+            "Saved note \"{}\" ({id}). Wikilinks: {} [{linked}]; dates: {}; tags: {}.",
             ent.name,
-            ent.links.len(),
-            ent.referenced_dates.len()
+            wikilinks.len(),
+            ent.referenced_dates.len(),
+            ent.links.len() - wikilinks.len()
         ))
+    }
+
+    /// Each tag name's Tag id, created when missing, without repeats.
+    async fn resolve_tags(&self, tags: &[String]) -> Result<Vec<String>, ToolError> {
+        let found = try_join_all(tags.iter().map(|t| self.resolve_name("Tag", t, true))).await?;
+        let mut ids: Vec<String> = Vec::new();
+        for id in found.into_iter().filter_map(|res| res.entity.map(|e| e.id)) {
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        Ok(ids)
+    }
+
+    async fn set_tags(&self, entity_id: &str, tag_ids: Vec<String>) -> Result<(), Status> {
+        let refs = tag_ids
+            .into_iter()
+            .map(|id| EntityRef {
+                id,
+                structure_type: "Tag".into(),
+            })
+            .collect();
+        let req = SetEntityPropertyRequest {
+            entity_id: entity_id.to_string(),
+            property_id: "tags".into(),
+            value: Some(PropertyValue {
+                value: Some(property_value::Value::Relations(EntityRefList { refs })),
+            }),
+        };
+        self.entity.set_entity_property(Request::new(req)).await?;
+        Ok(())
     }
 
     /// The id of the existing note called `name`. Writing to a note that isn't
@@ -794,13 +836,32 @@ impl Knowledge {
         let lines: Vec<String> = STRUCTURES
             .iter()
             .map(|s| {
-                let line = format!("- {}: {}", s.type_, s.description);
-                if s.properties.is_empty() {
-                    return line;
+                let mut line = format!("- {}: {}", s.type_, s.description);
+                if !s.properties.is_empty() {
+                    let props: Vec<String> = s.properties.iter().map(describe_property).collect();
+                    line += &format!("\n  properties: {}", props.join(", "));
                 }
-                let props: Vec<String> = s.properties.iter().map(describe_property).collect();
-                format!("{line}\n  properties: {}", props.join(", "))
+                if !s.facets.is_empty() {
+                    line += &format!("\n  facets: {}", s.facets.join(", "));
+                }
+                line
             })
+            .chain(FACETS.iter().map(|f| {
+                let props: Vec<String> = f.properties.iter().map(describe_property).collect();
+                let accepted: Vec<&str> = STRUCTURES
+                    .iter()
+                    .filter(|s| s.facets.contains(&f.id))
+                    .map(|s| s.type_)
+                    .collect();
+                format!(
+                    "- facet {} ({}): {}\n  properties: {}\n  accepted by: {}",
+                    f.id,
+                    f.name,
+                    f.description,
+                    props.join(", "),
+                    accepted.join(", ")
+                )
+            }))
             .collect();
         Ok(lines.join("\n"))
     }

@@ -6,7 +6,7 @@
 //!
 //! [[Name]] and [[Name|label]] mention a Note; [[Structure/Name]] mentions
 //! another structure when Structure is exactly a registry type (e.g.
-//! [[Todo/Ship]]). Emphasis (`**bold**`, `*italic*`), `~~strike~~`, inline
+//! [[Tag/ship]]). Emphasis (`**bold**`, `*italic*`), `~~strike~~`, inline
 //! `code` and `[text](href)` links become ProseMirror marks. `_` is deliberately
 //! not emphasis, so snake_case survives. `\X` is a literal X (for punctuation or
 //! a digit), and text that would read as syntax is written escaped, so markdown
