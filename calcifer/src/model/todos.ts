@@ -4,6 +4,7 @@ import {
   getOrCreateEntityForMention,
   hasFacet,
   propertyValueOf,
+  relationsValue,
   useCreateEntity,
   useEntitiesWithFacet,
   usePropertyWriters,
@@ -196,15 +197,19 @@ export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
 }
 
 export interface ParsedTodoInput {
+  // Empty when the text was only tags; quick-add refuses that.
   name: string
   // Tag names, without the '#', in first-seen order and deduplicated.
   tags: string[]
 }
 
-// `#word` at the start or after whitespace; a '#' inside a word ("C#") stays text.
-const HASHTAG = /(^|\s)#([\p{L}\p{N}_-]+)/gu
+// `#tag` at the start or after whitespace, running to whitespace or the end. A
+// tag is letters and digits, with single dots between them (`#v1.2`). A token
+// with anything else in it (`#foo-bar`, `#errands,`) stays in the name, as does
+// a '#' inside a word ("C#").
+const HASHTAG = /(^|\s)#([\p{L}\p{N}]+(?:\.[\p{L}\p{N}]+)*)(?=\s|$)/gu
 
-// Quick-add text: `#word` tokens become tags and leave the name, with the
+// Quick-add text: `#tag` tokens become tags and leave the name, with the
 // remaining spaces collapsed. "Buy milk #errands" -> "Buy milk", ['errands'].
 export function parseTodoInput(text: string): ParsedTodoInput {
   const tags: string[] = []
@@ -218,20 +223,16 @@ export function parseTodoInput(text: string): ParsedTodoInput {
   return { name, tags }
 }
 
-// Create a Note with the to-do facet from quick-add text, then resolve or
-// create each Tag by name and set the Note's `tags`.
+// Create a to-do Note from parsed quick-add text. Tags are resolved (or created)
+// first and set in the same CreateEntity, so a failure creates nothing.
 export function useQuickAddTodo() {
   const createEntity = useCreateEntity()
-  const { setRelations } = usePropertyWriters()
   return useCallback(
-    async (text: string) => {
-      const { name, tags } = parseTodoInput(text)
-      const note = await createEntity('Note', { name: name || undefined, facets: [TODO_FACET] })
-      if (tags.length === 0) return note
+    async ({ name, tags }: ParsedTodoInput) => {
       const targets = await Promise.all(tags.map((tag) => getOrCreateEntityForMention('Tag', tag)))
-      setRelations(note, 'tags', targets)
-      return note
+      const properties = targets.length > 0 ? { tags: relationsValue(targets) } : undefined
+      return createEntity('Note', { name, facets: [TODO_FACET], properties })
     },
-    [createEntity, setRelations],
+    [createEntity],
   )
 }

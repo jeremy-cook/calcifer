@@ -168,6 +168,17 @@ describe('parseTodoInput', () => {
     expect(parseTodoInput('Learn C# # now')).toEqual({ name: 'Learn C# # now', tags: [] })
   })
 
+  it('takes letters, digits and single dots between them', () => {
+    expect(parseTodoInput('Ship #v1.2 #Café #2026')).toEqual({ name: 'Ship', tags: ['v1.2', 'Café', '2026'] })
+  })
+
+  it('leaves a token with any other character in the name', () => {
+    expect(parseTodoInput('a #foo-bar #foo_bar #errands, #v1. #a..b')).toEqual({
+      name: 'a #foo-bar #foo_bar #errands, #v1. #a..b',
+      tags: [],
+    })
+  })
+
   it('returns an empty name when the text is only tags', () => {
     expect(parseTodoInput('#errands')).toEqual({ name: '', tags: ['errands'] })
   })

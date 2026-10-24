@@ -81,6 +81,8 @@ export interface CreateEntityOptions {
   name?: string
   // Facet ids to attach on create, with their select defaults.
   facets?: string[]
+  // Initial values, laid over the defaults. Values on a facet's ids need that facet in `facets`.
+  properties?: Record<string, PropertyValue>
 }
 
 interface CreateEntityVars extends CreateEntityOptions {
@@ -91,8 +93,8 @@ interface CreateEntityVars extends CreateEntityOptions {
 // the default name when `name` is omitted. Resolves to the saved entity.
 export function useCreateEntity() {
   const { mutateAsync } = useMutation({
-    mutationFn: async ({ structureType, name, facets }: CreateEntityVars) =>
-      requireEntity(await entityClient.createEntity({ structureType, name, facets })),
+    mutationFn: async ({ structureType, name, facets, properties }: CreateEntityVars) =>
+      requireEntity(await entityClient.createEntity({ structureType, name, facets, properties })),
     onSuccess: (entity) => replica.upsert(entity),
   })
   return useCallback(
@@ -278,21 +280,22 @@ export function usePropertyWriters(options: UseSetPropertyOptions = {}): Propert
               },
         ),
       setRelations: (entity, propertyId, targets) =>
-        setProperty(
-          entity,
-          propertyId,
-          targets.length === 0
-            ? null
-            : {
-                case: 'relations',
-                value: createMessage(EntityRefListSchema, {
-                  refs: targets.map(({ id, structureType }) => ({ id, structureType })),
-                }),
-              },
-        ),
+        setProperty(entity, propertyId, targets.length === 0 ? null : relationsValue(targets).value),
     }),
     [setProperty],
   )
+}
+
+// A relations property value, for a write or useCreateEntity's `properties`.
+export function relationsValue(targets: readonly RelationTarget[]): PropertyValue {
+  return createMessage(PropertyValueSchema, {
+    value: {
+      case: 'relations',
+      value: createMessage(EntityRefListSchema, {
+        refs: targets.map(({ id, structureType }) => ({ id, structureType })),
+      }),
+    },
+  })
 }
 
 // --- Pure edit builder (useSetProperty()'s optimistic apply) ---
