@@ -143,6 +143,16 @@ the acceptance suite, and I-61's escaping cases belong in it.
   keyboard-driven action surface.
 - **User-facing search** — FTS5 and hybrid retrieval exist but aren't surfaced in the UI
   at all. Revisit after the chat panel; it may make a dedicated search view redundant.
+- **One tag-name rule** — tag names are letters and digits with single dots between
+  them (`v1.2`); no `_` or `-`. Quick-add follows this, but the agent's markdown
+  (`TAG` in `server/src/mcp/markdown.rs`, documented in `docs/reference/richtext-doc.md`)
+  still takes `_` and `-`, and nothing validates a Tag name on create (the editor's `#`
+  menu, the relation picker, `ResolveEntity`). Enforce it on the server and match it in
+  the editor and the docs.
+- **Single-line to-do entry** — let quick-add set more than name and tags in one line,
+  taking inspiration from Taskwarrior's `task add` syntax (attributes such as
+  `due:fri` and `priority:H` mixed into the description). Decide the token grammar,
+  how a name containing a token stays literal, and whether the agent shares the parser.
 - **Tags on DailyNote** — ADR 11 gives only Note the `tags` property; adding it to
   DailyNote is a one-line registry edit once there's a reason.
 - **Editor gaps** — none blocking: emoji picker, math/KaTeX, table of contents,
