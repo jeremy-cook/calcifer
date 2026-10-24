@@ -142,8 +142,6 @@ message GetEntityResponse     { Entity entity = 1; }
 message ListEntitiesRequest   { string structure_type = 1; }
 message ListEntitiesResponse  { repeated Entity entities = 1; }
 message CreateEntityRequest {
-  reserved 1;
-  reserved "entity";
   string structure_type = 2;
   // Unset or empty: the server's default name. Ignored for a DailyNote, whose
   // name is always derived from its `date`.

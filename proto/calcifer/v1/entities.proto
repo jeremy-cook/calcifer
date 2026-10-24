@@ -23,8 +23,6 @@ message EntityRefList {
 // A rich-text property has no PropertyValue: its document is addressed by
 // (entity id, declared property id) through RichTextService (ADR 8, I-22).
 message PropertyValue {
-  reserved 6;
-  reserved "richtext";
   oneof value {
     string text = 1;
     double number = 2;
@@ -49,8 +47,6 @@ message RichTextRef {
 
 // Output only: clients write through RichTextService.PutRichText.
 message RichText {
-  reserved 4;
-  reserved "expected_updated_at";   // now PutRichTextRequest.expected_updated_at
   RichTextRef ref = 1;
   // TipTap (ProseMirror) JSON, or "" for a document never saved. The server
   // parses it on PutRichText: mention, hashtag and dateChip nodes become
