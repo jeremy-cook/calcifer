@@ -12,13 +12,15 @@ use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_links, sync_relation_property};
 use crate::proto::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
-    resolve_entity_request, watch_entities_response, AttachFacetRequest, AttachFacetResponse,
-    Backlink, CreateEntityRequest, CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse,
-    DetachFacetRequest, DetachFacetResponse, Entity, EntityRef, EntitySnapshot, GetEntityRequest,
-    GetEntityResponse, LinkRef, ListBacklinksRequest, ListBacklinksResponse, ListEntitiesRequest,
-    ListEntitiesResponse, PropertyValue, RenameEntityRequest, RenameEntityResponse,
-    ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
-    SetEntityPropertyResponse, WatchEntitiesRequest, WatchEntitiesResponse,
+    resolve_entity_request, watch_entities_response, AddRelationTargetRequest,
+    AddRelationTargetResponse, AttachFacetRequest, AttachFacetResponse, Backlink,
+    CreateEntityRequest, CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse,
+    DetachFacetRequest, DetachFacetResponse, Entity, EntityRef, EntityRefList, EntitySnapshot,
+    GetEntityRequest, GetEntityResponse, LinkRef, ListBacklinksRequest, ListBacklinksResponse,
+    ListEntitiesRequest, ListEntitiesResponse, PropertyValue, RemoveRelationTargetRequest,
+    RemoveRelationTargetResponse, RenameEntityRequest, RenameEntityResponse, ResolveEntityRequest,
+    ResolveEntityResponse, SetEntityPropertyRequest, SetEntityPropertyResponse,
+    WatchEntitiesRequest, WatchEntitiesResponse,
 };
 use crate::structures::{self, fold_name, FacetDef, KeyDef, KeySource, PropertyKind};
 use crate::watch::WatchHub;
@@ -294,6 +296,169 @@ impl EntityService {
         }
         Ok(())
     }
+
+    /// The shared body of AddRelationTarget and RemoveRelationTarget: change one
+    /// target of a `relations` property in one transaction, keeping the links
+    /// derived from the property in step. A no-op (target already there, or
+    /// already absent) writes nothing and publishes nothing. Remove never checks
+    /// the target's existence or structure, so a stale ref can always go.
+    async fn edit_relation_target(
+        &self,
+        op: RelationTargetOp,
+        entity_id: &str,
+        property_id: &str,
+        target_id: &str,
+    ) -> Result<Entity, Status> {
+        for (field, value) in [
+            ("entity_id", entity_id),
+            ("property_id", property_id),
+            ("target_id", target_id),
+        ] {
+            if value.is_empty() {
+                return Err(Status::invalid_argument(format!("{field} is required")));
+            }
+        }
+        let now = chrono::Utc::now().timestamp_millis();
+
+        let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
+        let (structure_type, facets) = structure_and_facets(&mut tx, entity_id).await?;
+        let facets: Vec<&str> = facets.iter().map(String::as_str).collect();
+
+        if let Some(facet) = structures::facet_of_property(property_id) {
+            if !facets.contains(&facet.id) {
+                return Err(Status::failed_precondition(format!(
+                    "attach the {} facet before editing {property_id}",
+                    facet.id
+                )));
+            }
+        }
+        let def = structures::property_for(&structure_type, &facets, property_id)
+            .filter(|def| def.kind == PropertyKind::Relations)
+            .ok_or_else(|| {
+                Status::invalid_argument(format!(
+                    "{structure_type}.{property_id} is not a relations property"
+                ))
+            })?;
+
+        // The ref an Add appends, carrying the target's real type.
+        let added = match op {
+            RelationTargetOp::Add => {
+                let target_type = sqlx::query_scalar!(
+                    "SELECT structure_type FROM entities WHERE id = ?",
+                    target_id
+                )
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(AppError::from)?
+                .ok_or_else(|| Status::not_found(format!("entity {target_id}")))?;
+                if let Some(expected) = def.target_structure {
+                    if target_type != expected {
+                        return Err(Status::invalid_argument(format!(
+                            "{structure_type}.{property_id} must reference a {expected}; \
+                             {target_id} is a {target_type}"
+                        )));
+                    }
+                }
+                Some(EntityRef {
+                    id: target_id.to_string(),
+                    structure_type: target_type,
+                })
+            }
+            RelationTargetOp::Remove => None,
+        };
+
+        // A missing row, or a value that isn't a `relations` list, is an empty list.
+        let stored = sqlx::query_scalar!(
+            "SELECT value_blob FROM properties WHERE entity_id = ? AND property_id = ?",
+            entity_id,
+            property_id
+        )
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AppError::from)?
+        .map(|blob| <PropertyValue as prost::Message>::decode(&*blob))
+        .transpose()
+        .map_err(AppError::from)?;
+        let mut refs = match stored.and_then(|v| v.value) {
+            Some(property_value::Value::Relations(list)) => list.refs,
+            _ => Vec::new(),
+        };
+
+        let present = refs.iter().any(|r| r.id == target_id);
+        let changes = match op {
+            RelationTargetOp::Add => !present,
+            RelationTargetOp::Remove => present,
+        };
+        if !changes {
+            drop(tx);
+            return self.load_entity(entity_id).await.map_err(Status::from);
+        }
+        match added {
+            Some(added) => refs.push(added),
+            None => refs.retain(|r| r.id != target_id),
+        }
+
+        // Emptying the list clears the property, as SetEntityProperty's clear does.
+        let value = (!refs.is_empty()).then_some(PropertyValue {
+            value: Some(property_value::Value::Relations(EntityRefList { refs })),
+        });
+        match &value {
+            Some(value) => {
+                let blob = prost::Message::encode_to_vec(value);
+                sqlx::query!(
+                    "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
+                     ON CONFLICT (entity_id, property_id) DO UPDATE SET value_blob = excluded.value_blob",
+                    entity_id,
+                    property_id,
+                    blob,
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+            }
+            None => {
+                sqlx::query!(
+                    "DELETE FROM properties WHERE entity_id = ? AND property_id = ?",
+                    entity_id,
+                    property_id
+                )
+                .execute(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+            }
+        }
+        sync_relation_property(
+            &mut tx,
+            entity_id,
+            &structure_type,
+            property_id,
+            value.as_ref().and_then(|v| v.value.as_ref()),
+            now,
+        )
+        .await
+        .map_err(Status::from)?;
+        sqlx::query!(
+            "UPDATE entities SET updated_at = ? WHERE id = ?",
+            now,
+            entity_id,
+        )
+        .execute(&mut *tx)
+        .await
+        .map_err(AppError::from)?;
+        tx.commit().await.map_err(AppError::from)?;
+
+        let saved = self.load_entity(entity_id).await.map_err(Status::from)?;
+        self.hub
+            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        Ok(saved)
+    }
+}
+
+/// Which way `EntityService::edit_relation_target` changes a `relations` property.
+#[derive(Clone, Copy)]
+enum RelationTargetOp {
+    Add,
+    Remove,
 }
 
 /// Remove `deleted_id` from other entities' `relation` and `relations` values
@@ -1645,6 +1810,51 @@ impl EntityServiceTrait for EntityService {
         }))
     }
 
+    // Add one target to a `relations` property in one transaction, so writers
+    // adding different targets don't overwrite each other's (I-34). Already
+    // present is a no-op with no write and no event.
+    async fn add_relation_target(
+        &self,
+        req: Request<AddRelationTargetRequest>,
+    ) -> Result<Response<AddRelationTargetResponse>, Status> {
+        let AddRelationTargetRequest {
+            entity_id,
+            property_id,
+            target_id,
+        } = req.into_inner();
+        let entity = self
+            .edit_relation_target(RelationTargetOp::Add, &entity_id, &property_id, &target_id)
+            .await?;
+        Ok(Response::new(AddRelationTargetResponse {
+            entity: Some(entity),
+        }))
+    }
+
+    // Remove one target from a `relations` property, and its link, in one
+    // transaction. The last target going deletes the property row. Not present is
+    // a no-op with no write and no event.
+    async fn remove_relation_target(
+        &self,
+        req: Request<RemoveRelationTargetRequest>,
+    ) -> Result<Response<RemoveRelationTargetResponse>, Status> {
+        let RemoveRelationTargetRequest {
+            entity_id,
+            property_id,
+            target_id,
+        } = req.into_inner();
+        let entity = self
+            .edit_relation_target(
+                RelationTargetOp::Remove,
+                &entity_id,
+                &property_id,
+                &target_id,
+            )
+            .await?;
+        Ok(Response::new(RemoveRelationTargetResponse {
+            entity: Some(entity),
+        }))
+    }
+
     async fn resolve_entity(
         &self,
         req: Request<ResolveEntityRequest>,
@@ -1827,7 +2037,7 @@ fn watch_stream(
 mod tests {
     use super::*;
     use crate::proto::rich_text_service_server::RichTextService as _;
-    use crate::proto::{EntityRefList, PutRichTextRequest};
+    use crate::proto::PutRichTextRequest;
     use crate::test_support::{
         entity_service, memory_pool, note, richtext_service, tag, todo, with_facets, ScratchDb,
     };
@@ -4172,6 +4382,266 @@ mod tests {
         let again = attach(&svc, &ship.id, "todo").await.expect("attach");
 
         assert_eq!(select_value(&again, "todo.status").as_deref(), Some("open"));
+    }
+
+    async fn add_target(
+        svc: &EntityService,
+        entity_id: &str,
+        property_id: &str,
+        target_id: &str,
+    ) -> Result<Entity, Status> {
+        svc.add_relation_target(Request::new(AddRelationTargetRequest {
+            entity_id: entity_id.to_string(),
+            property_id: property_id.to_string(),
+            target_id: target_id.to_string(),
+        }))
+        .await
+        .map(|r| r.into_inner().entity.expect("entity"))
+    }
+
+    async fn remove_target(
+        svc: &EntityService,
+        entity_id: &str,
+        property_id: &str,
+        target_id: &str,
+    ) -> Result<Entity, Status> {
+        svc.remove_relation_target(Request::new(RemoveRelationTargetRequest {
+            entity_id: entity_id.to_string(),
+            property_id: property_id.to_string(),
+            target_id: target_id.to_string(),
+        }))
+        .await
+        .map(|r| r.into_inner().entity.expect("entity"))
+    }
+
+    /// The (id, structure_type) refs of a `relations` property, in stored order.
+    fn relation_refs(entity: &Entity, property_id: &str) -> Vec<(String, String)> {
+        match entity
+            .properties
+            .get(property_id)
+            .and_then(|v| v.value.as_ref())
+        {
+            Some(property_value::Value::Relations(list)) => list
+                .refs
+                .iter()
+                .map(|r| (r.id.clone(), r.structure_type.clone()))
+                .collect(),
+            None => vec![],
+            other => panic!("expected relations, got {other:?}"),
+        }
+    }
+
+    /// `(entity.id, "Tag")` pairs for `tags`, the shape `relation_refs` and
+    /// `link_targets` return.
+    fn tag_refs(tags: &[&Entity]) -> Vec<(String, String)> {
+        tags.iter()
+            .map(|t| (t.id.clone(), "Tag".to_string()))
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn add_relation_target_appends_links_and_publishes() {
+        let svc = entity_service(memory_pool().await);
+        let a = create(&svc, tag("a")).await;
+        let b = create(&svc, tag("b")).await;
+        let entity = tagged_todo(&svc, &[&a]).await;
+        let mut rx = svc.hub.subscribe();
+
+        let updated = add_target(&svc, &entity.id, "tags", &b.id)
+            .await
+            .expect("add");
+
+        assert_eq!(relation_refs(&updated, "tags"), tag_refs(&[&a, &b]));
+        let mut linked = tag_refs(&[&a, &b]);
+        linked.sort();
+        assert_eq!(link_targets(&updated, "tags"), linked);
+        assert!(millis(updated.updated_at) > millis(entity.updated_at));
+        assert_eq!(svc.load_entity(&entity.id).await.expect("load"), updated);
+        assert_eq!(only_upsert(&mut rx), updated);
+    }
+
+    #[tokio::test]
+    async fn add_relation_target_twice_is_a_no_op() {
+        let svc = entity_service(memory_pool().await);
+        let a = create(&svc, tag("a")).await;
+        let entity = tagged_todo(&svc, &[&a]).await;
+        let mut rx = svc.hub.subscribe();
+
+        let same = add_target(&svc, &entity.id, "tags", &a.id)
+            .await
+            .expect("add again");
+
+        assert_eq!(same, entity);
+        assert_eq!(millis(same.updated_at), millis(entity.updated_at));
+        assert!(rx.try_recv().is_err(), "no event");
+    }
+
+    // I-34's done-when at the RPC level: two writers add different targets to the
+    // same starting list, and neither add undoes the other.
+    #[tokio::test]
+    async fn two_adds_of_different_targets_both_survive() {
+        let svc = entity_service(memory_pool().await);
+        let seed = create(&svc, tag("seed")).await;
+        let a = create(&svc, tag("a")).await;
+        let b = create(&svc, tag("b")).await;
+        let entity = tagged_todo(&svc, &[&seed]).await;
+
+        add_target(&svc, &entity.id, "tags", &a.id)
+            .await
+            .expect("add a");
+        add_target(&svc, &entity.id, "tags", &b.id)
+            .await
+            .expect("add b");
+
+        let stored = svc.load_entity(&entity.id).await.expect("load");
+        assert_eq!(relation_refs(&stored, "tags"), tag_refs(&[&seed, &a, &b]));
+        assert_eq!(link_targets(&stored, "tags").len(), 3);
+    }
+
+    #[tokio::test]
+    async fn add_relation_target_checks_entity_property_and_target() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let a = create(&svc, tag("a")).await;
+        let other = create(&svc, note("Not a tag")).await;
+        let entity = create(&svc, note("Ship")).await;
+
+        let missing = add_target(&svc, "missing", "tags", &a.id)
+            .await
+            .expect_err("unknown entity");
+        assert_eq!(missing.code(), tonic::Code::NotFound);
+
+        for (entity_id, property_id, target_id) in [
+            ("", "tags", a.id.as_str()),
+            (entity.id.as_str(), "", a.id.as_str()),
+            (entity.id.as_str(), "tags", ""),
+        ] {
+            let err = add_target(&svc, entity_id, property_id, target_id)
+                .await
+                .expect_err("empty id");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        }
+
+        // Undeclared, or declared but not a `relations` property.
+        for property_id in ["foo", "content"] {
+            let err = add_target(&svc, &entity.id, property_id, &a.id)
+                .await
+                .expect_err("not a relations property");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+            assert!(
+                err.message().contains("is not a relations property"),
+                "{}",
+                err.message()
+            );
+        }
+        let with_todo = create(&svc, with_facets(note("Todo"), &["todo"])).await;
+        let status = add_target(&svc, &with_todo.id, "todo.status", &a.id)
+            .await
+            .expect_err("a select");
+        assert_eq!(status.code(), tonic::Code::InvalidArgument);
+
+        let unknown = add_target(&svc, &entity.id, "tags", "missing")
+            .await
+            .expect_err("unknown target");
+        assert_eq!(unknown.code(), tonic::Code::NotFound);
+
+        let wrong = add_target(&svc, &entity.id, "tags", &other.id)
+            .await
+            .expect_err("a Note isn't a Tag");
+        assert_eq!(wrong.code(), tonic::Code::InvalidArgument);
+        assert!(
+            wrong.message().contains("must reference a Tag"),
+            "{}",
+            wrong.message()
+        );
+
+        assert!(stored_property_ids(&pool, &entity.id).await.is_empty());
+        assert_eq!(svc.load_entity(&entity.id).await.expect("load"), entity);
+    }
+
+    #[tokio::test]
+    async fn relation_target_on_unattached_facet_property_is_failed_precondition() {
+        let svc = entity_service(memory_pool().await);
+        let a = create(&svc, tag("a")).await;
+        let ship = create(&svc, note("Ship")).await;
+        let mut rx = svc.hub.subscribe();
+
+        let add = add_target(&svc, &ship.id, "todo.status", &a.id)
+            .await
+            .expect_err("todo isn't attached");
+        let remove = remove_target(&svc, &ship.id, "todo.status", &a.id)
+            .await
+            .expect_err("todo isn't attached");
+
+        for err in [add, remove] {
+            assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+            assert!(
+                err.message()
+                    .contains("attach the todo facet before editing todo.status"),
+                "{}",
+                err.message()
+            );
+        }
+        assert!(rx.try_recv().is_err(), "no event");
+    }
+
+    #[tokio::test]
+    async fn remove_relation_target_drops_the_ref_and_its_link() {
+        let svc = entity_service(memory_pool().await);
+        let a = create(&svc, tag("a")).await;
+        let b = create(&svc, tag("b")).await;
+        let entity = tagged_todo(&svc, &[&a, &b]).await;
+        let mut rx = svc.hub.subscribe();
+
+        let updated = remove_target(&svc, &entity.id, "tags", &a.id)
+            .await
+            .expect("remove");
+
+        assert_eq!(relation_refs(&updated, "tags"), tag_refs(&[&b]));
+        assert_eq!(link_targets(&updated, "tags"), tag_refs(&[&b]));
+        assert!(millis(updated.updated_at) > millis(entity.updated_at));
+        assert_eq!(svc.load_entity(&entity.id).await.expect("load"), updated);
+        assert_eq!(only_upsert(&mut rx), updated);
+    }
+
+    #[tokio::test]
+    async fn remove_last_relation_target_clears_the_property() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let a = create(&svc, tag("a")).await;
+        let entity = tagged_todo(&svc, &[&a]).await;
+
+        let updated = remove_target(&svc, &entity.id, "tags", &a.id)
+            .await
+            .expect("remove");
+
+        assert!(!updated.properties.contains_key("tags"));
+        assert!(link_targets(&updated, "tags").is_empty());
+        assert!(!stored_property_ids(&pool, &entity.id)
+            .await
+            .contains(&"tags".to_string()));
+    }
+
+    #[tokio::test]
+    async fn remove_relation_target_absent_is_a_no_op() {
+        let svc = entity_service(memory_pool().await);
+        let a = create(&svc, tag("a")).await;
+        let b = create(&svc, tag("b")).await;
+        let entity = tagged_todo(&svc, &[&a]).await;
+        let untagged = create(&svc, note("Untagged")).await;
+        let mut rx = svc.hub.subscribe();
+
+        // A real tag the note doesn't have, an id that doesn't exist, and a
+        // note with no `tags` value at all.
+        let missing = "missing".to_string();
+        for (before, target_id) in [(&entity, &b.id), (&entity, &missing), (&untagged, &a.id)] {
+            let same = remove_target(&svc, &before.id, "tags", target_id)
+                .await
+                .expect("remove absent");
+            assert_eq!(&same, before);
+        }
+
+        assert!(rx.try_recv().is_err(), "no event");
     }
 
     #[tokio::test]
