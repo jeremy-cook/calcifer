@@ -133,10 +133,9 @@ published last.
 **Where:** `server/src/mcp/tools.rs` (`link_notes`), `server/src/mcp/markdown.rs` (`mention_markdown`)
 
 **Problem:** `link_notes` writes `[[{to}]]` raw, and `get_note` writes a Note's name
-unescaped. A name containing `|` or `]]` is misparsed, and a name like `Todo/X` passed
-to `link_notes` targets a Todo (the serializer already writes such a Note as
-`[[Note/Todo/X]]`). Any structure prefix does the same (`Tag/X`), so the bug outlives
-the Todo structure (ADR 11). Found in T28.
+unescaped. A name containing `|` or `]]` is misparsed, and a name like `Tag/X` passed
+to `link_notes` targets a Tag (the serializer already writes such a Note as
+`[[Note/Tag/X]]`). Any registry prefix does the same (`DailyNote/X`). Found in T28.
 
 **Fix:** Define an escape for `|` and `]]` in names and use it in both writers and the
 parser; have `link_notes` go through the serializer instead of formatting by hand.
@@ -210,28 +209,9 @@ warnings.
 
 ---
 
-### I-70 · MCP text and tests still assume a `Todo` structure · low · confirmed
-
-**Where:** `server/src/mcp/mod.rs:27` (`LINK_SYNTAX`), `server/src/mcp/markdown.rs:9`
-(module doc), `server/src/mcp/mod.rs` (`list_structures_describes_the_registry`)
-
-**Problem:** The Todo structure is gone (T06), but `LINK_SYNTAX` still gives the agent
-`[[Todo/Ship]]` as an example, and so does the module doc for the markdown converter.
-`list_structures_describes_the_registry` lost its `(select: …)` assertion, since no
-structure declares a select now, so nothing checks how `list_structures` describes a
-select. T07 rewrites `LINK_SYNTAX` and adds facets to `list_structures`. The module doc
-isn't in its scope.
-
-**Fix:** In T07, also change the module doc example to `[[DailyNote/June 13, 2026]]` or
-`[[Tag/ml]]`, and assert the todo facet's `todo.status (select: …)` line in the
-`list_structures` test.
-
-**Done when:** `grep -rn Todo server/src/mcp` matches nothing, and the `list_structures` test checks a select property.
-
----
-
 ## Resolved
 
+- **I-70 · MCP text and tests still assume a `Todo` structure.** Fixed 2026-10-24 (294d877). `LINK_SYNTAX` gives `[[DailyNote/June 13, 2026]]` as its example and the markdown converter's module doc `[[Tag/ship]]`; `list_structures_shows_facets` asserts the todo facet's `todo.status (select: open|done, default open)` line. `grep -rn Todo server/src/mcp` matches nothing.
 - **I-66 · `cargo fmt --check` fails on main.** Fixed 2026-10-23. `cargo fmt` over the five files; formatting only. `cargo fmt --check` passes on main.
 - **I-65 · Remounting the calendar's daily note section prunes the note on screen.** Fixed 2026-10-18. The prune moved to `useDailyNotePrune` (`model/dailyNotes.ts`): a section's unmount schedules it for the next macrotask, and a mount for the same day cancels it, so StrictMode's remount (or any remount that keeps the day) isn't leaving. It still re-reads the server's doc and waits for that doc's outstanding saves (I-35, I-39); that macrotask now replaces the one inside `deleteEntityIfRichTextEmpty`. Covered by `DailyNoteSection.test.tsx`, which renders the section under `<StrictMode>` (the remount test failed before the fix). Observed 2026-10-18 in dev against a scratch DB: opening `/calendar` in a fresh tab kept today's empty note (main's code deleted it in the same setup); an empty note was pruned on moving to another day and on navigating to To-dos; a note with text survived both; text typed and left at once (by a day change or a route change) was kept.
 - **I-40 · Entity write transactions that read first fail with `Internal` under a race.** Fixed 2026-09-29. Every server write transaction opens through `db::begin_write` (`BEGIN IMMEDIATE`): `rename_entity`, `set_entity_property`, `delete_entity`, `persist_new_entity`, `PutRichText` and the embed worker's chunk replace. A contending writer now waits on `busy_timeout` instead of failing at once. Covered by `racing_set_property_writes_both_succeed` (it failed with `Internal: database is locked` before the fix; passed 20 repeated runs after). Observed 2026-09-29: `test:tools` passed on the first run against a fresh scratch server, with no embed worker warnings; before the fix the same first run had failed.
