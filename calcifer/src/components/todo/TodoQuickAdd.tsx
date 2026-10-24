@@ -12,8 +12,8 @@ export function TodoQuickAdd() {
 
   const submit = async (text: string) => {
     const parsed = parseTodoInput(text)
-    if (!parsed.name) {
-      setError('Add a name before the tags.')
+    if (!parsed.ok) {
+      setError(parsed.error)
       return
     }
     setPending(true)

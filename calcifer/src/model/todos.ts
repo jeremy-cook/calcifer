@@ -197,30 +197,37 @@ export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
 }
 
 export interface ParsedTodoInput {
-  // Empty when the text was only tags; quick-add refuses that.
   name: string
   // Tag names, without the '#', in first-seen order and deduplicated.
   tags: string[]
 }
 
-// `#tag` at the start or after whitespace, running to whitespace or the end. A
-// tag is letters and digits, with single dots between them (`#v1.2`). A token
-// with anything else in it (`#foo-bar`, `#errands,`) stays in the name, as does
-// a '#' inside a word ("C#").
-const HASHTAG = /(^|\s)#([\p{L}\p{N}]+(?:\.[\p{L}\p{N}]+)*)(?=\s|$)/gu
+export type TodoInputResult = ({ ok: true } & ParsedTodoInput) | { ok: false; error: string }
 
-// Quick-add text: `#tag` tokens become tags and leave the name, with the
-// remaining spaces collapsed. "Buy milk #errands" -> "Buy milk", ['errands'].
-export function parseTodoInput(text: string): ParsedTodoInput {
+// A tag is letters and digits, with single dots between them (`v1.2`).
+const TAG = /^#([\p{L}\p{N}]+(?:\.[\p{L}\p{N}]+)*)$/u
+
+// Quick-add text is `<name> #tag #tag…`: the name runs up to the first word
+// starting with '#', and every word from there on must be a valid tag. Anything
+// else refuses the whole line, so nothing is created from text it misread.
+// "Buy milk #errands" -> "Buy milk", ['errands'].
+export function parseTodoInput(text: string): TodoInputResult {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  const firstTag = words.findIndex((w) => w.startsWith('#'))
+  const nameWords = firstTag === -1 ? words : words.slice(0, firstTag)
+  const tagWords = firstTag === -1 ? [] : words.slice(firstTag)
+
+  if (nameWords.length === 0) return { ok: false, error: 'Add a name before the tags.' }
+
   const tags: string[] = []
-  const name = text
-    .replace(HASHTAG, (_match, lead: string, tag: string) => {
-      if (!tags.includes(tag)) tags.push(tag)
-      return lead
-    })
-    .replace(/\s+/g, ' ')
-    .trim()
-  return { name, tags }
+  for (const word of tagWords) {
+    if (!word.startsWith('#')) return { ok: false, error: `Tags go last: "${word}" comes after a tag.` }
+    const tag = TAG.exec(word)?.[1]
+    if (!tag) return { ok: false, error: `"${word}" isn't a valid tag: use letters, digits and dots.` }
+    if (!tags.includes(tag)) tags.push(tag)
+  }
+
+  return { ok: true, name: nameWords.join(' '), tags }
 }
 
 // Create a to-do Note from parsed quick-add text. Tags are resolved (or created)

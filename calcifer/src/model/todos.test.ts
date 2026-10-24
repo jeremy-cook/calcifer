@@ -152,34 +152,34 @@ describe('todoFields', () => {
 })
 
 describe('parseTodoInput', () => {
-  it('moves hashtags into tags and strips them from the name', () => {
-    expect(parseTodoInput('Buy milk #errands')).toEqual({ name: 'Buy milk', tags: ['errands'] })
+  it('reads the name, then the tags', () => {
+    expect(parseTodoInput('Buy milk #errands')).toEqual({ ok: true, name: 'Buy milk', tags: ['errands'] })
   })
 
-  it('collapses the spaces a token in the middle leaves', () => {
-    expect(parseTodoInput('Call  #home mum  #urgent')).toEqual({ name: 'Call mum', tags: ['home', 'urgent'] })
+  it('takes a line with no tags as all name, with spaces collapsed', () => {
+    expect(parseTodoInput('  Learn  C#  ')).toEqual({ ok: true, name: 'Learn C#', tags: [] })
   })
 
-  it('keeps each tag once, in first-seen order', () => {
-    expect(parseTodoInput('#b x #a #b')).toEqual({ name: 'x', tags: ['b', 'a'] })
-  })
-
-  it('leaves a # inside a word and a bare # as text', () => {
-    expect(parseTodoInput('Learn C# # now')).toEqual({ name: 'Learn C# # now', tags: [] })
-  })
-
-  it('takes letters, digits and single dots between them', () => {
-    expect(parseTodoInput('Ship #v1.2 #Café #2026')).toEqual({ name: 'Ship', tags: ['v1.2', 'Café', '2026'] })
-  })
-
-  it('leaves a token with any other character in the name', () => {
-    expect(parseTodoInput('a #foo-bar #foo_bar #errands, #v1. #a..b')).toEqual({
-      name: 'a #foo-bar #foo_bar #errands, #v1. #a..b',
-      tags: [],
+  it('takes letters, digits and single dots in a tag, and keeps each tag once', () => {
+    expect(parseTodoInput('Ship #v1.2 #Café #2026 #v1.2')).toEqual({
+      ok: true,
+      name: 'Ship',
+      tags: ['v1.2', 'Café', '2026'],
     })
   })
 
-  it('returns an empty name when the text is only tags', () => {
-    expect(parseTodoInput('#errands')).toEqual({ name: '', tags: ['errands'] })
+  it('refuses a line with no name', () => {
+    expect(parseTodoInput('#errands')).toEqual({ ok: false, error: 'Add a name before the tags.' })
+  })
+
+  it('refuses a word after the tags', () => {
+    expect(parseTodoInput('Call #home mum')).toEqual({ ok: false, error: 'Tags go last: "mum" comes after a tag.' })
+  })
+
+  it.each(['#foo-bar', '#foo_bar', '#errands,', '#v1.', '#a..b', '#'])('refuses the tag %s', (tag) => {
+    expect(parseTodoInput(`Fix it ${tag}`)).toEqual({
+      ok: false,
+      error: `"${tag}" isn't a valid tag: use letters, digits and dots.`,
+    })
   })
 })

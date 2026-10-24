@@ -149,10 +149,11 @@ the acceptance suite, and I-61's escaping cases belong in it.
   still takes `_` and `-`, and nothing validates a Tag name on create (the editor's `#`
   menu, the relation picker, `ResolveEntity`). Enforce it on the server and match it in
   the editor and the docs.
-- **Single-line to-do entry** — let quick-add set more than name and tags in one line,
-  taking inspiration from Taskwarrior's `task add` syntax (attributes such as
-  `due:fri` and `priority:H` mixed into the description). Decide the token grammar,
-  how a name containing a token stays literal, and whether the agent shares the parser.
+- **Single-line to-do entry** — quick-add reads `<name> <properties> #tags`, in that
+  order, and refuses the whole line if anything is invalid; today it takes the name and
+  tags. Add the properties, taking inspiration from Taskwarrior's `task add` (`due:fri`,
+  `priority:H`, named dates like `eow`). Decide how a property token is told apart from
+  the end of the name, and whether the agent shares the parser.
 - **Tags on DailyNote** — ADR 11 gives only Note the `tags` property; adding it to
   DailyNote is a one-line registry edit once there's a reason.
 - **Editor gaps** — none blocking: emoji picker, math/KaTeX, table of contents,
