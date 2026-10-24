@@ -702,10 +702,10 @@ impl Knowledge {
         ))
     }
 
-    /// The note as markdown under a frontmatter block (name, version,
-    /// linked_from). Values are JSON, which is valid YAML, so a name with a colon
-    /// or a quote can't break the block. `version` is what edit_note checks its
-    /// line numbers against.
+    /// The note as markdown under a frontmatter block (name, version). Values
+    /// are JSON, which is valid YAML, so a name with a colon or a quote can't
+    /// break the block. `version` is what edit_note checks its line numbers
+    /// against.
     pub async fn get_note(&self, name: &str) -> ToolResult {
         let found = match self.resolve_name("Note", name, false).await {
             Ok(res) => res.entity.unwrap_or_default(),
@@ -718,17 +718,10 @@ impl Knowledge {
         };
         let (doc, updated_at) = self.get_doc(&doc_ref("Note", &found.id)?).await?;
         let (body, _) = self.render_body(&doc).await?;
-        let linked_from: Vec<String> = self
-            .backlink_sources(&found.id)
-            .await?
-            .into_iter()
-            .map(|s| s.name)
-            .collect();
         Ok(format!(
-            "---\nname: {}\nversion: {}\nlinked_from: {}\n---\n{body}",
+            "---\nname: {}\nversion: {}\n---\n{body}",
             json!(found.name),
             timestamp_ms(&updated_at),
-            json!(linked_from),
         ))
     }
 

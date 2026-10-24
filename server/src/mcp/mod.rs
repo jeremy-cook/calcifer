@@ -293,7 +293,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "get_note",
-            format!("Read a note by name. The result is YAML frontmatter (name, version, linked_from: the notes that link to it) followed by the note's markdown body. Links are written with each target's current name: {LINK_SYNTAX} create_note ignores the frontmatter, so the result can be copied into a new note."),
+            format!("Read a note by name. The result is YAML frontmatter (name, version) followed by the note's markdown body. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note ignores the frontmatter, so the result can be copied into a new note."),
             json!({ "name": string }),
             &["name"],
         ),
@@ -638,7 +638,16 @@ mod tests {
             note.starts_with("---\nname: \"Round Trip\"\nversion: "),
             "{note}"
         );
-        assert!(note.contains("\nlinked_from: []\n---\n"), "{note}");
+        let frontmatter = note
+            .strip_prefix("---\n")
+            .and_then(|rest| rest.split_once("\n---\n"))
+            .map(|(front, _)| front)
+            .unwrap();
+        let lines: Vec<&str> = frontmatter.lines().collect();
+        assert!(
+            lines.len() == 2 && lines[0].starts_with("name: ") && lines[1].starts_with("version: "),
+            "{note}"
+        );
 
         // The whole result, frontmatter included, goes into a new note.
         f.k.create_note("Round Trip Copy", &note, &[])
@@ -657,6 +666,30 @@ mod tests {
             count + 1,
             "only the copy itself is created"
         );
+    }
+
+    #[tokio::test]
+    async fn get_note_frontmatter_has_only_name_and_version() {
+        let f = fixture().await;
+        f.k.create_note("Target", "Body.", &[]).await.unwrap();
+        f.k.create_note("Source", "Points at [[Target]].", &[])
+            .await
+            .unwrap();
+
+        let note = f.k.get_note("Target").await.unwrap();
+        let frontmatter = note
+            .strip_prefix("---\n")
+            .and_then(|rest| rest.split_once("\n---\n"))
+            .map(|(front, _)| front)
+            .unwrap();
+        let keys: Vec<&str> = frontmatter
+            .lines()
+            .map(|l| l.split_once(':').unwrap().0)
+            .collect();
+        assert_eq!(keys, ["name", "version"], "{note}");
+
+        let backlinks = f.k.get_backlinks("Target").await.unwrap();
+        assert!(backlinks.contains("Source"), "{backlinks}");
     }
 
     #[tokio::test]
