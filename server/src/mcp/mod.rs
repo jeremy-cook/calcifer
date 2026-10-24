@@ -24,7 +24,7 @@ pub use tools::Knowledge;
 use tools::ToolError;
 
 /// How note markdown refers to other entities; shared by the tools that read or write it.
-const LINK_SYNTAX: &str = "[[Name]] links an existing note; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); it doesn't tag the note. Pass `tags` to tag it. A link to anything that doesn't exist fails the call and writes nothing, so create the target first. These become real graph links automatically.";
+const LINK_SYNTAX: &str = "[[Name]] links an existing note; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); it doesn't tag the note. Pass `tags` to create_note, or use tag_entity, to tag it. A link to anything that doesn't exist fails the call and writes nothing, so create the target first. These become real graph links automatically.";
 
 /// Newest first. A client's version is echoed back when we speak it.
 const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -189,7 +189,16 @@ struct CreateNoteArgs {
     name: String,
     markdown: String,
     #[serde(default)]
-    tags: Vec<String>,
+    tags: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct TagArgs {
+    name: String,
+    #[serde(default)]
+    add: Vec<String>,
+    #[serde(default)]
+    remove: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -243,11 +252,15 @@ async fn dispatch(
         }
         "create_note" => {
             let a: CreateNoteArgs = parse_args(name, args)?;
-            k.create_note(&a.name, &a.markdown, &a.tags).await
+            k.create_note(&a.name, &a.markdown, a.tags.as_deref()).await
         }
         "append_to_note" => {
             let a: NoteArgs = parse_args(name, args)?;
             k.append_to_note(&a.name, &a.markdown).await
+        }
+        "tag_entity" => {
+            let a: TagArgs = parse_args(name, args)?;
+            k.tag_entity(&a.name, &a.add, &a.remove).await
         }
         "link_notes" => {
             let a: LinkArgs = parse_args(name, args)?;
@@ -293,7 +306,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "get_note",
-            format!("Read a note by name. The result is YAML frontmatter (name, version) followed by the note's markdown body. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note ignores the frontmatter, so the result can be copied into a new note."),
+            format!("Read a note by name. The result is YAML frontmatter (name, version, tags) followed by the note's markdown body. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note reads the frontmatter's tags when given no `tags` argument, so the result can be copied into a new note."),
             json!({ "name": string }),
             &["name"],
         ),
@@ -317,7 +330,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "create_note",
-            format!("Create a new note. Fails if a note with that name already exists; change an existing note with edit_note or append_to_note. In the markdown body, {LINK_SYNTAX} `tags` lists tag names to tag the note with; each Tag is created if missing. Search first to avoid duplicates. Copying get_note output into a new note drops its <!-- calcifer:<type> --> placeholder blocks and any formatting markdown can't express."),
+            format!("Create a new note. Fails if a note with that name already exists; change an existing note with edit_note or append_to_note. In the markdown body, {LINK_SYNTAX} `tags` lists tag names to tag the note with; each Tag is created if missing. Without a `tags` argument, a `tags:` line in leading frontmatter (as get_note writes it) is used. Search first to avoid duplicates. Copying get_note output into a new note drops its <!-- calcifer:<type> --> placeholder blocks and any formatting markdown can't express."),
             json!({ "name": string, "markdown": string, "tags": { "type": "array", "items": string } }),
             &["name", "markdown"],
         ),
@@ -326,6 +339,16 @@ fn tool_definitions() -> Vec<Value> {
             format!("Append markdown to an existing note, growing it across turns. Fails if there is no note with that name; use create_note to make one. In the appended text, {LINK_SYNTAX}"),
             json!({ "name": string, "markdown": string }),
             &["name", "markdown"],
+        ),
+        tool(
+            "tag_entity",
+            "Add or remove tags on an existing note (only notes have tags). `add` lists tag names to tag it with, each Tag created if missing; `remove` lists tag names to untag, and a tag the note doesn't have is ignored. Give at least one. Returns the note's tags afterwards. A #tag in a note's body only references the Tag; this is how a note is tagged.".into(),
+            json!({
+                "name": string,
+                "add": { "type": "array", "items": string },
+                "remove": { "type": "array", "items": string },
+            }),
+            &["name"],
         ),
         tool(
             "link_notes",
@@ -371,8 +394,8 @@ mod tests {
     use crate::embed::EmbedHandle;
     use crate::proto::entity_service_server::EntityService as _;
     use crate::proto::{
-        resolve_entity_request, CreateEntityRequest, ListEntitiesRequest, RenameEntityRequest,
-        ResolveEntityRequest,
+        resolve_entity_request, AddRelationTargetRequest, CreateEntityRequest, ListEntitiesRequest,
+        RenameEntityRequest, ResolveEntityRequest,
     };
     use crate::services::search::SearchService;
     use crate::test_support::{entity_service, memory_pool, richtext_service};
@@ -477,15 +500,15 @@ mod tests {
     #[tokio::test]
     async fn a_note_with_a_link_and_a_tag_derives_two_links_and_backlinks() {
         let f = fixture().await;
-        f.k.create_note("Attention", "", &[]).await.unwrap();
-        f.k.create_note("Positional Encoding", "", &[])
+        f.k.create_note("Attention", "", None).await.unwrap();
+        f.k.create_note("Positional Encoding", "", None)
             .await
             .unwrap();
         let saved =
             f.k.create_note(
                 "Transformers",
                 "An architecture built on [[Attention]]. #ml",
-                &[],
+                None,
             )
             .await
             .unwrap();
@@ -530,7 +553,7 @@ mod tests {
     #[tokio::test]
     async fn search_finds_notes_by_prefix() {
         let f = fixture().await;
-        f.k.create_note("Transformers", "An architecture.", &[])
+        f.k.create_note("Transformers", "An architecture.", None)
             .await
             .unwrap();
         let found =
@@ -564,7 +587,7 @@ mod tests {
     #[tokio::test]
     async fn daily_notes_are_one_per_day() {
         let f = fixture().await;
-        f.k.create_note("Transformers", "x", &[]).await.unwrap();
+        f.k.create_note("Transformers", "x", None).await.unwrap();
         let created = f.k.create_daily_note("2026-06-13").await.unwrap();
         assert!(
             created.contains("\"June 13, 2026\"") && created.ends_with("for 2026-06-13 created."),
@@ -590,8 +613,8 @@ mod tests {
     #[tokio::test]
     async fn get_note_writes_chips_from_the_targets_current_names() {
         let f = fixture().await;
-        f.k.create_note("Old Name", "", &[]).await.unwrap();
-        f.k.create_note("Source", "Points at [[Old Name]].", &[])
+        f.k.create_note("Old Name", "", None).await.unwrap();
+        f.k.create_note("Source", "Points at [[Old Name]].", None)
             .await
             .unwrap();
         let id = f.note_id("Old Name").await;
@@ -612,13 +635,17 @@ mod tests {
         let f = fixture().await;
         f.create("Tag", "ship").await;
         f.k.create_daily_note("2026-06-13").await.unwrap();
-        f.k.create_note("RT Note", "", &[]).await.unwrap();
-        f.k.create_note("RT Alias", "", &[]).await.unwrap();
+        f.k.create_note("RT Note", "", None).await.unwrap();
+        f.k.create_note("RT Alias", "", None).await.unwrap();
         let md = "Uses [[RT Note]] and [[RT Alias|the alias]]. #rt\n\n- do [[Tag/ship]] on [[DailyNote/June 13, 2026]]";
-        f.k.create_note("Round Trip", md, &[]).await.unwrap();
+        let tags = ["rt-a".to_string(), "rt-b".to_string()];
+        f.k.create_note("Round Trip", md, Some(&tags))
+            .await
+            .unwrap();
         let id = f.note_id("Round Trip").await;
         let links_before = f.link_targets(&id).await;
-        assert_eq!(links_before.len(), 5, "{links_before:?}");
+        // Five from the body, two from `tags`.
+        assert_eq!(links_before.len(), 7, "{links_before:?}");
         assert!(
             links_before.iter().any(|l| l.starts_with("Tag:"))
                 && links_before.iter().any(|l| l.starts_with("DailyNote:"))
@@ -645,12 +672,15 @@ mod tests {
             .unwrap();
         let lines: Vec<&str> = frontmatter.lines().collect();
         assert!(
-            lines.len() == 2 && lines[0].starts_with("name: ") && lines[1].starts_with("version: "),
+            lines.len() == 3
+                && lines[0].starts_with("name: ")
+                && lines[1].starts_with("version: ")
+                && lines[2] == "tags: [\"rt-a\",\"rt-b\"]",
             "{note}"
         );
 
         // The whole result, frontmatter included, goes into a new note.
-        f.k.create_note("Round Trip Copy", &note, &[])
+        f.k.create_note("Round Trip Copy", &note, None)
             .await
             .unwrap();
         assert_eq!(
@@ -661,6 +691,13 @@ mod tests {
             f.link_targets(&f.note_id("Round Trip Copy").await).await,
             links_before
         );
+        let source = f.k.entity(&id).await.unwrap();
+        let copy =
+            f.k.entity(&f.note_id("Round Trip Copy").await)
+                .await
+                .unwrap();
+        assert_eq!(tag_ids(&copy), tag_ids(&source));
+        assert_eq!(tag_ids(&copy).len(), 2, "the copy keeps the source's tags");
         assert_eq!(
             f.entity_count().await,
             count + 1,
@@ -669,10 +706,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_note_frontmatter_has_only_name_and_version() {
+    async fn get_note_frontmatter_has_name_version_and_tags() {
         let f = fixture().await;
-        f.k.create_note("Target", "Body.", &[]).await.unwrap();
-        f.k.create_note("Source", "Points at [[Target]].", &[])
+        f.k.create_note("Target", "Body.", None).await.unwrap();
+        f.k.create_note("Source", "Points at [[Target]].", None)
             .await
             .unwrap();
 
@@ -686,7 +723,7 @@ mod tests {
             .lines()
             .map(|l| l.split_once(':').unwrap().0)
             .collect();
-        assert_eq!(keys, ["name", "version"], "{note}");
+        assert_eq!(keys, ["name", "version", "tags"], "{note}");
 
         let backlinks = f.k.get_backlinks("Target").await.unwrap();
         assert!(backlinks.contains("Source"), "{backlinks}");
@@ -695,18 +732,20 @@ mod tests {
     #[tokio::test]
     async fn create_note_refuses_an_existing_note() {
         let f = fixture().await;
-        f.k.create_note("Existing", "Original.", &[]).await.unwrap();
-        let refused = err(f.k.create_note("Existing", "Replacement.", &[]).await);
+        f.k.create_note("Existing", "Original.", None)
+            .await
+            .unwrap();
+        let refused = err(f.k.create_note("Existing", "Replacement.", None).await);
         assert!(refused.contains("already exists"), "{refused}");
         assert!(
-            err(f.k.create_note("existing", "Case.", &[]).await).contains("already exists"),
+            err(f.k.create_note("existing", "Case.", None).await).contains("already exists"),
             "names match case-insensitively"
         );
         assert_eq!(body(&f.k.get_note("Existing").await.unwrap()), "Original.");
 
-        f.k.create_note("Blank", "", &[]).await.unwrap();
+        f.k.create_note("Blank", "", None).await.unwrap();
         assert!(
-            err(f.k.create_note("Blank", "Filled.", &[]).await).contains("already exists"),
+            err(f.k.create_note("Blank", "Filled.", None).await).contains("already exists"),
             "even a blank note exists"
         );
     }
@@ -714,11 +753,11 @@ mod tests {
     #[tokio::test]
     async fn a_link_to_a_missing_target_fails_the_write_and_creates_nothing() {
         let f = fixture().await;
-        f.k.create_note("Existing", "Body.", &[]).await.unwrap();
+        f.k.create_note("Existing", "Body.", None).await.unwrap();
         let before = f.entity_count().await;
         let md = "See [[Attenton]] and [[DailyNote/February 1, 1901]].";
         for failure in [
-            err(f.k.create_note("New", md, &[]).await),
+            err(f.k.create_note("New", md, None).await),
             err(f.k.append_to_note("Existing", md).await),
             err(f.k.append_to_daily_note("2026-06-13", md).await),
             err(f
@@ -760,7 +799,7 @@ mod tests {
     async fn a_missing_tag_is_created() {
         let f = fixture().await;
         let saved =
-            f.k.create_note("Tagged", "About #brandnew things.", &[])
+            f.k.create_note("Tagged", "About #brandnew things.", None)
                 .await
                 .unwrap();
         assert!(saved.contains("Wikilinks: 1 [Tag]"), "{saved}");
@@ -769,7 +808,7 @@ mod tests {
     #[tokio::test]
     async fn create_note_may_link_to_itself() {
         let f = fixture().await;
-        f.k.create_note("Selfie", "I am [[Selfie]].", &[])
+        f.k.create_note("Selfie", "I am [[Selfie]].", None)
             .await
             .unwrap();
         let id = f.note_id("Selfie").await;
@@ -783,7 +822,7 @@ mod tests {
     #[tokio::test]
     async fn a_leading_rule_that_is_not_frontmatter_is_note_content() {
         let f = fixture().await;
-        f.k.create_note("Rule", "---\nplain text\n---", &[])
+        f.k.create_note("Rule", "---\nplain text\n---", None)
             .await
             .unwrap();
         assert!(body(&f.k.get_note("Rule").await.unwrap()).contains("plain text"));
@@ -792,11 +831,11 @@ mod tests {
     #[tokio::test]
     async fn query_text_location_reports_whole_blocks_and_the_version() {
         let f = fixture().await;
-        f.k.create_note("Link", "", &[]).await.unwrap();
+        f.k.create_note("Link", "", None).await.unwrap();
         f.k.create_note(
             "Subject",
             "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].",
-            &[],
+            None,
         )
         .await
         .unwrap();
@@ -844,11 +883,11 @@ mod tests {
     #[tokio::test]
     async fn edit_note_replaces_inserts_and_deletes_whole_blocks() {
         let f = fixture().await;
-        f.k.create_note("Link", "", &[]).await.unwrap();
+        f.k.create_note("Link", "", None).await.unwrap();
         f.k.create_note(
             "Subject",
             "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]].",
-            &[],
+            None,
         )
         .await
         .unwrap();
@@ -951,7 +990,7 @@ mod tests {
     #[tokio::test]
     async fn append_keeps_nodes_the_converter_does_not_know() {
         let f = fixture().await;
-        f.k.create_note("Rich", "First.", &[]).await.unwrap();
+        f.k.create_note("Rich", "First.", None).await.unwrap();
         let id = f.note_id("Rich").await;
         let r = tools::doc_ref("Note", &id).unwrap();
         let (_, updated_at) = f.k.get_doc(&r).await.unwrap();
@@ -970,7 +1009,7 @@ mod tests {
 
     /// Create a note and store `content` as its doc, as the browser would.
     async fn note_with_blocks(f: &Fixture, name: &str, content: Value) -> tools::DocRef {
-        f.k.create_note(name, "", &[]).await.unwrap();
+        f.k.create_note(name, "", None).await.unwrap();
         let r = tools::doc_ref("Note", &f.note_id(name).await).unwrap();
         let (_, updated_at) = f.k.get_doc(&r).await.unwrap();
         f.k.put_doc(
@@ -1166,7 +1205,10 @@ mod tests {
         let f = fixture().await;
         f.create("Tag", "ml").await;
         let tags = ["ml".to_string(), "brandnew".to_string(), "ML".to_string()];
-        let saved = f.k.create_note("Tagged", "Body.", &tags).await.unwrap();
+        let saved =
+            f.k.create_note("Tagged", "Body.", Some(&tags))
+                .await
+                .unwrap();
         assert!(
             saved.contains("Wikilinks: 0 [none]") && saved.contains("tags: 2."),
             "{saved}"
@@ -1186,9 +1228,168 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn get_note_frontmatter_shows_tags() {
+        let f = fixture().await;
+        let tags = ["ml".to_string(), "papers".to_string()];
+        f.k.create_note("Tagged", "Body.", Some(&tags))
+            .await
+            .unwrap();
+        f.k.create_note("Plain", "Body #ml.", None).await.unwrap();
+
+        let tagged = f.k.get_note("Tagged").await.unwrap();
+        assert!(
+            tagged.contains("\ntags: [\"ml\",\"papers\"]\n---\n"),
+            "{tagged}"
+        );
+        let plain = f.k.get_note("Plain").await.unwrap();
+        assert!(
+            plain.contains("\ntags: []\n---\n"),
+            "a body #tag is not one of the note's tags: {plain}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_note_tags_argument_wins_over_frontmatter() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+        let md = "---\nname: \"Wins\"\nversion: 1\ntags: [\"a\"]\n---\nBody.";
+        f.k.create_note("Wins", md, Some(&[])).await.unwrap();
+        let note = f.k.entity(&f.note_id("Wins").await).await.unwrap();
+        assert!(tag_ids(&note).is_empty(), "{:?}", note.properties);
+        assert_eq!(
+            f.entity_count().await,
+            before + 1,
+            "no Tag \"a\" is created"
+        );
+
+        let other = ["b".to_string()];
+        f.k.create_note("Other", md, Some(&other)).await.unwrap();
+        let note = f.k.entity(&f.note_id("Other").await).await.unwrap();
+        assert_eq!(tag_ids(&note), [tag_id(&f, "b").await]);
+
+        f.k.create_note("Copied", md, None).await.unwrap();
+        let note = f.k.entity(&f.note_id("Copied").await).await.unwrap();
+        assert_eq!(
+            tag_ids(&note),
+            [tag_id(&f, "a").await],
+            "without the argument, the frontmatter's tags are used"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_note_rejects_malformed_frontmatter_tags() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+        for value in ["ml", "[\"ml\", 3]", "[ml]"] {
+            let md = format!("---\nname: \"Bad\"\ntags: {value}\n---\nAbout #x.");
+            let failure = err(f.k.create_note("Bad", &md, None).await);
+            assert!(
+                failure.contains("tags:") && failure.contains("JSON list"),
+                "{failure}"
+            );
+        }
+        assert_eq!(f.entity_count().await, before, "not even the #x Tag exists");
+        assert!(f
+            .k
+            .get_note("Bad")
+            .await
+            .unwrap()
+            .starts_with("No note named"));
+    }
+
+    fn tag_args(names: &[&str]) -> Vec<String> {
+        names.iter().map(|n| n.to_string()).collect()
+    }
+
+    #[tokio::test]
+    async fn tag_entity_adds_and_removes() {
+        let f = fixture().await;
+        f.create("Tag", "ml").await;
+        f.k.create_note("X", "Body.", None).await.unwrap();
+
+        let added = f.k.tag_entity("X", &tag_args(&["ml", "new"]), &[]).await;
+        assert_eq!(added.unwrap(), "Tags on \"X\": ml, new.");
+        let note = f.k.entity(&f.note_id("X").await).await.unwrap();
+        assert_eq!(
+            tag_ids(&note),
+            [tag_id(&f, "ml").await, tag_id(&f, "new").await],
+            "`new` is created"
+        );
+
+        let count = f.entity_count().await;
+        let removed = f.k.tag_entity("X", &[], &tag_args(&["ml", "absent"])).await;
+        assert_eq!(removed.unwrap(), "Tags on \"X\": new.");
+        let note = f.k.entity(&f.note_id("X").await).await.unwrap();
+        assert_eq!(tag_ids(&note), [tag_id(&f, "new").await]);
+        assert_eq!(f.entity_count().await, count, "removing creates no Tag");
+        assert!(f
+            .k
+            .get_note("X")
+            .await
+            .unwrap()
+            .contains("\ntags: [\"new\"]\n"));
+
+        let cleared = f.k.tag_entity("X", &[], &tag_args(&["NEW"])).await;
+        assert_eq!(cleared.unwrap(), "Tags on \"X\": none.");
+        let again = f.k.tag_entity("X", &tag_args(&["ML", "ml"]), &[]).await;
+        assert_eq!(again.unwrap(), "Tags on \"X\": ml.", "repeats are folded");
+    }
+
+    #[tokio::test]
+    async fn tag_entity_keeps_a_concurrent_tag() {
+        let f = fixture().await;
+        f.k.create_note("X", "Body.", None).await.unwrap();
+        let id = f.note_id("X").await;
+
+        f.k.tag_entity("X", &tag_args(&["a"]), &[]).await.unwrap();
+        f.create("Tag", "b").await;
+        let req = AddRelationTargetRequest {
+            entity_id: id.clone(),
+            property_id: "tags".into(),
+            target_id: tag_id(&f, "b").await,
+        };
+        f.entity
+            .add_relation_target(Request::new(req))
+            .await
+            .unwrap();
+
+        let result = f.k.tag_entity("X", &tag_args(&["c"]), &[]).await;
+        assert_eq!(result.unwrap(), "Tags on \"X\": a, b, c.");
+        let result = f.k.tag_entity("X", &[], &tag_args(&["a"])).await;
+        assert_eq!(result.unwrap(), "Tags on \"X\": b, c.");
+    }
+
+    #[tokio::test]
+    async fn tag_entity_errors() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+        let missing = err(f.k.tag_entity("Ghost", &tag_args(&["x"]), &[]).await);
+        assert!(missing.contains("No note named"), "{missing}");
+        assert_eq!(f.entity_count().await, before, "no note and no Tag");
+
+        f.k.create_note("X", "Body.", None).await.unwrap();
+        let before = f.entity_count().await;
+        let empty = err(f.k.tag_entity("X", &[], &[]).await);
+        assert!(empty.contains("at least one"), "{empty}");
+        let both = err(f
+            .k
+            .tag_entity("X", &tag_args(&["fresh", "ML"]), &tag_args(&["ml"]))
+            .await);
+        assert!(
+            both.contains("\"ML\"") && both.contains("both add and remove"),
+            "{both}"
+        );
+        assert_eq!(f.entity_count().await, before, "nothing was written");
+        let note = f.k.entity(&f.note_id("X").await).await.unwrap();
+        assert!(tag_ids(&note).is_empty());
+    }
+
+    #[tokio::test]
     async fn a_body_hashtag_references_the_tag_without_tagging_the_note() {
         let f = fixture().await;
-        f.k.create_note("Mentions", "About #x.", &[]).await.unwrap();
+        f.k.create_note("Mentions", "About #x.", None)
+            .await
+            .unwrap();
         let note = f.k.entity(&f.note_id("Mentions").await).await.unwrap();
         assert!(tag_ids(&note).is_empty(), "{:?}", note.properties);
         let x = tag_id(&f, "x").await;
@@ -1247,6 +1448,7 @@ mod tests {
                 "edit_note",
                 "create_note",
                 "append_to_note",
+                "tag_entity",
                 "link_notes",
                 "get_backlinks",
                 "create_daily_note",
@@ -1322,6 +1524,46 @@ mod tests {
                 .unwrap()["error"]["code"],
             METHOD_NOT_FOUND
         );
+    }
+
+    #[tokio::test]
+    async fn json_rpc_tag_entity_tags_a_note() {
+        let f = fixture().await;
+        let call = |name: &str, arguments: Value| {
+            handle_message(
+                &f.k,
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } }),
+            )
+        };
+        let text = |reply: &Value| {
+            reply["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+
+        call("create_note", json!({ "name": "A", "markdown": "Body." }))
+            .await
+            .unwrap();
+        let tagged = call(
+            "tag_entity",
+            json!({ "name": "A", "add": ["ml", "papers"] }),
+        )
+        .await
+        .unwrap();
+        assert_eq!(tagged["result"]["isError"], false, "{tagged}");
+        assert_eq!(text(&tagged), "Tags on \"A\": ml, papers.");
+        let untagged = call("tag_entity", json!({ "name": "A", "remove": ["ml"] }))
+            .await
+            .unwrap();
+        assert_eq!(text(&untagged), "Tags on \"A\": papers.");
+
+        let none_given = call("tag_entity", json!({ "name": "A" })).await.unwrap();
+        assert_eq!(none_given["result"]["isError"], true, "{none_given}");
+        let no_name = call("tag_entity", json!({ "add": ["ml"] })).await.unwrap();
+        assert_eq!(no_name["error"]["code"], INVALID_PARAMS);
+        let read = call("get_note", json!({ "name": "A" })).await.unwrap();
+        assert!(text(&read).contains("\ntags: [\"papers\"]\n"), "{read}");
     }
 
     /// The status `POST /mcp` answers through the local-only layers, sent with

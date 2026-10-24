@@ -14,10 +14,10 @@ use crate::proto::entity_service_server::EntityService as EntityServiceTrait;
 use crate::proto::rich_text_service_server::RichTextService as RichTextServiceTrait;
 use crate::proto::search_service_server::SearchService as SearchServiceTrait;
 use crate::proto::{
-    property_value, resolve_entity_request, Entity, EntityRef, EntityRefList, GetEntityRequest,
-    GetRichTextRequest, ListBacklinksRequest, MatchRange, PropertyValue, PutRichTextRequest,
-    ResolveEntityRequest, ResolveEntityResponse, SearchMode, SearchRequest,
-    SetEntityPropertyRequest,
+    property_value, resolve_entity_request, AddRelationTargetRequest, Entity, EntityRef,
+    EntityRefList, GetEntityRequest, GetRichTextRequest, ListBacklinksRequest, MatchRange,
+    PropertyValue, PutRichTextRequest, RemoveRelationTargetRequest, ResolveEntityRequest,
+    ResolveEntityResponse, SearchMode, SearchRequest, SetEntityPropertyRequest,
 };
 use crate::services::entity::{ts_from_millis, EntityService};
 use crate::services::richtext::RichTextService;
@@ -189,6 +189,29 @@ fn strip_frontmatter(markdown: &str) -> &str {
     FRONTMATTER
         .find(markdown)
         .map_or(markdown, |m| &markdown[m.end()..])
+}
+
+/// The `tags:` line of a leading frontmatter block, as get_note writes it: a
+/// JSON list of tag names. `None` when there is no block or it has no such line.
+/// A value that isn't a list of strings is an error, so a copied note never
+/// loses its tags without saying so.
+fn frontmatter_tags(markdown: &str) -> Result<Option<Vec<String>>, ToolError> {
+    let Some(block) = FRONTMATTER.find(markdown) else {
+        return Ok(None);
+    };
+    let Some(value) = block
+        .as_str()
+        .lines()
+        .find_map(|line| line.strip_prefix("tags:"))
+    else {
+        return Ok(None);
+    };
+    match serde_json::from_str::<Vec<String>>(value.trim()) {
+        Ok(tags) => Ok(Some(tags)),
+        Err(_) => fail(format!(
+            "The frontmatter line `tags:{value}` must be a JSON list of tag names, like tags: [\"ml\",\"papers\"]. Nothing was written."
+        )),
+    }
 }
 
 const APPEND_ATTEMPTS: usize = 3;
@@ -438,8 +461,16 @@ impl Knowledge {
     /// Links are checked before the note is created, so a failed call leaves
     /// nothing behind; the note's links to itself are the one target allowed to
     /// be missing. Each of `tags` is resolved, or created, as a Tag and set as
-    /// the note's `tags` property; a body #tag only references its Tag.
-    pub async fn create_note(&self, name: &str, markdown: &str, tags: &[String]) -> ToolResult {
+    /// the note's `tags` property; a body #tag only references its Tag. With no
+    /// `tags`, the `tags:` line of the markdown's leading frontmatter is used, so
+    /// a get_note result keeps its tags when copied into a new note; `Some`, even
+    /// an empty list, wins over the frontmatter.
+    pub async fn create_note(
+        &self,
+        name: &str,
+        markdown: &str,
+        tags: Option<&[String]>,
+    ) -> ToolResult {
         let exists = || {
             ToolError(format!(
                 "A note named \"{name}\" already exists; nothing was written. Use get_note, then edit_note or append_to_note to change it."
@@ -451,6 +482,11 @@ impl Knowledge {
             Err(e) => return Err(e.into()),
         }
 
+        // Before the first write: resolving the body's #tags creates Tags.
+        let tags = match tags {
+            Some(tags) => tags.to_vec(),
+            None => frontmatter_tags(markdown)?.unwrap_or_default(),
+        };
         let parsed = markdown::parse(strip_frontmatter(markdown));
         let (mut ids, missing) = self.resolve_references(&parsed.references).await?;
         let own_key = Reference {
@@ -462,7 +498,7 @@ impl Knowledge {
         if !missing.is_empty() {
             return Err(unknown_targets(&missing));
         }
-        let tag_ids = self.resolve_tags(tags).await?;
+        let tag_ids = self.resolve_tags(&tags).await?;
 
         let res = self.resolve_name("Note", name, true).await?;
         // Someone else made it between the check above and now.
@@ -559,6 +595,89 @@ impl Knowledge {
             ent.name,
             ent.links.len()
         ))
+    }
+
+    /// Tag or untag an existing note, one tag at a time through the entity
+    /// service, so a tag added by someone else meanwhile is kept. Each `add` name
+    /// is resolved, or created, as a Tag; a `remove` name that is no Tag, or that
+    /// the note doesn't have, is skipped. Nothing is written when both lists are
+    /// empty or a name is in both. Returns the note's tags afterwards.
+    pub async fn tag_entity(&self, name: &str, add: &[String], remove: &[String]) -> ToolResult {
+        let id = self.existing_note_id(name).await?;
+        if add.is_empty() && remove.is_empty() {
+            return fail("Give at least one tag name in add or remove; nothing was written.");
+        }
+        let removed: Vec<String> = remove.iter().map(|t| structures::fold_name(t)).collect();
+        if let Some(both) = add
+            .iter()
+            .find(|t| removed.contains(&structures::fold_name(t)))
+        {
+            return fail(format!(
+                "\"{both}\" is in both add and remove; nothing was written."
+            ));
+        }
+
+        let add_ids = self.resolve_tags(add).await?;
+        let mut remove_ids: Vec<String> = Vec::new();
+        for tag in remove {
+            match self.resolve_name("Tag", tag, false).await {
+                Ok(res) => {
+                    let tag_id = res.entity.map(|e| e.id).unwrap_or_default();
+                    if !remove_ids.contains(&tag_id) {
+                        remove_ids.push(tag_id);
+                    }
+                }
+                Err(e) if is_code(&e, Code::NotFound) => {}
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        for tag_id in add_ids {
+            let req = AddRelationTargetRequest {
+                entity_id: id.clone(),
+                property_id: "tags".into(),
+                target_id: tag_id,
+            };
+            self.entity.add_relation_target(Request::new(req)).await?;
+        }
+        for tag_id in remove_ids {
+            let req = RemoveRelationTargetRequest {
+                entity_id: id.clone(),
+                property_id: "tags".into(),
+                target_id: tag_id,
+            };
+            self.entity
+                .remove_relation_target(Request::new(req))
+                .await?;
+        }
+
+        let ent = self.entity(&id).await?;
+        let names = self.tag_names(&ent).await?;
+        let tags = if names.is_empty() {
+            "none".to_string()
+        } else {
+            names.join(", ")
+        };
+        Ok(format!("Tags on \"{}\": {tags}.", ent.name))
+    }
+
+    /// The names of the Tags in the entity's `tags` property, in stored order. A
+    /// ref whose Tag no longer exists is skipped.
+    async fn tag_names(&self, entity: &Entity) -> Result<Vec<String>, Status> {
+        let Some(property_value::Value::Relations(list)) =
+            entity.properties.get("tags").and_then(|v| v.value.as_ref())
+        else {
+            return Ok(Vec::new());
+        };
+        let mut names = Vec::new();
+        for tag in &list.refs {
+            match self.entity(&tag.id).await {
+                Ok(tag) => names.push(tag.name),
+                Err(e) if is_code(&e, Code::NotFound) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(names)
     }
 
     /// Where `query` occurs in a note's body, as the whole-block line ranges
@@ -702,10 +821,11 @@ impl Knowledge {
         ))
     }
 
-    /// The note as markdown under a frontmatter block (name, version). Values
-    /// are JSON, which is valid YAML, so a name with a colon or a quote can't
-    /// break the block. `version` is what edit_note checks its line numbers
-    /// against.
+    /// The note as markdown under a frontmatter block (name, version, tags).
+    /// Values are JSON, which is valid YAML, so a name with a colon or a quote
+    /// can't break the block. `version` is what edit_note checks its line numbers
+    /// against; `tags` is the names in the note's `tags` property, `[]` when it
+    /// has none, and what create_note reads back.
     pub async fn get_note(&self, name: &str) -> ToolResult {
         let found = match self.resolve_name("Note", name, false).await {
             Ok(res) => res.entity.unwrap_or_default(),
@@ -718,10 +838,12 @@ impl Knowledge {
         };
         let (doc, updated_at) = self.get_doc(&doc_ref("Note", &found.id)?).await?;
         let (body, _) = self.render_body(&doc).await?;
+        let tags = self.tag_names(&found).await?;
         Ok(format!(
-            "---\nname: {}\nversion: {}\n---\n{body}",
+            "---\nname: {}\nversion: {}\ntags: {}\n---\n{body}",
             json!(found.name),
             timestamp_ms(&updated_at),
+            json!(tags),
         ))
     }
 
