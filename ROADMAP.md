@@ -25,7 +25,7 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 | 1 | I-34: relation edits resend the whole list | M | Live now: quick-add and the agent's `create_note` both write `tags`. Touches the proto, the browser and the MCP tools. |
 | 2 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
 | 3 | I-42: a failed rich-text save is dropped silently | M | Medium severity but deferred as very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. |
-| 4 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. |
+| 4 | I-61: MCP link syntax isn't escaped | S–M | Keep the Rust change small until the markdown converter is replaced. Direct relationships (below) remove the `link_notes` half. |
 | 5 | I-36, I-45: create-race errors | S each | Deferred unless seen. |
 | 6 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
@@ -42,7 +42,21 @@ the first connection attempt fails. Covers every page, not just `/e/<id>`. Chose
 
 ## Next up
 
-### 1. AI chat panel (RAG) · size: L · **blocked: LLM provider undecided**
+### 1. Direct relationships · size: L · ADR 12 (proposed)
+
+Associate two notes without writing a mention into the text. A relationship is a row in a
+new `relationships` table, added and removed one at a time by `AddRelationship` and
+`RemoveRelationship`, limited by the source structure's `relates_to`, and derived into
+`links` under the reserved scope `@related`. The server rejects any property id starting
+with `@`, and deleting a target republishes the entities that related to it.
+
+The entity page gets one relationships section: rich-text links, relationships and
+back-references, one row per other entity labelled *related* and/or *mentioned*, with an
+"Add" picker. The agent's `link_notes` calls `AddRelationship` instead of appending
+`Related: [[to]]`, a new `unlink_notes` removes one, and both take a name or an id.
+Fixes I-34 for associations (not for `tags`) and removes the `link_notes` half of I-61.
+
+### 2. AI chat panel (RAG) · size: L · **blocked: LLM provider undecided**
 
 The headline feature the retrieval work was built for, and the last piece of "AI as a
 first-class writer."
@@ -56,7 +70,7 @@ Thin client, zero new knowledge-ops logic — every operation it needs already e
 an RPC. **Decide the provider first** (Anthropic, OpenAI, local via Ollama, or a
 provider-agnostic layer); that choice is the only thing blocking this.
 
-### 2. Native gRPC with reflection · size: S · optional
+### 3. Native gRPC with reflection · size: S · optional
 
 The backend serves only gRPC-Web, under `/api` through axum (see the README's "No native
 gRPC"), so `grpcurl` can't reach it and backend checks go through the browser, an MCP
