@@ -158,8 +158,7 @@ impl RichTextServiceTrait for RichTextService {
 
         if !expectation_met(body.expected_updated_at.as_ref(), previous) {
             return Err(Status::failed_precondition(format!(
-                "richtext {}/{} changed since it was read",
-                entity_id, property_id
+                "richtext {entity_id}/{property_id} changed since it was read"
             )));
         }
 

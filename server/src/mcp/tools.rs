@@ -513,17 +513,16 @@ impl Knowledge {
             let Some(source) = backlink.source else {
                 continue;
             };
-            let at = match sources.iter().position(|(id, _)| *id == source.id) {
-                Some(at) => at,
-                None => {
-                    let entry = BacklinkSource {
-                        name: source.name,
-                        structure_type: source.structure_type,
-                        property_ids: Vec::new(),
-                    };
-                    sources.push((source.id, entry));
-                    sources.len() - 1
-                }
+            let at = if let Some(at) = sources.iter().position(|(id, _)| *id == source.id) {
+                at
+            } else {
+                let entry = BacklinkSource {
+                    name: source.name,
+                    structure_type: source.structure_type,
+                    property_ids: Vec::new(),
+                };
+                sources.push((source.id, entry));
+                sources.len() - 1
             };
             sources[at].1.property_ids.push(backlink.source_property_id);
         }
@@ -1169,7 +1168,7 @@ impl Knowledge {
     }
 
     /// The registry lives in `structures.rs`; this only formats it.
-    pub fn list_structures(&self) -> ToolResult {
+    pub fn list_structures(&self) -> String {
         let lines: Vec<String> = STRUCTURES
             .iter()
             .map(|s| {
@@ -1203,7 +1202,7 @@ impl Knowledge {
                 )
             }))
             .collect();
-        Ok(lines.join("\n"))
+        lines.join("\n")
     }
 }
 
@@ -1347,7 +1346,10 @@ mod unit {
             backlink_label(&BacklinkSource {
                 name: "A".into(),
                 structure_type: "Note".into(),
-                property_ids: property_ids.iter().map(|p| p.to_string()).collect(),
+                property_ids: property_ids
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect(),
             })
         };
         assert_eq!(label(&["content"]), "A", "rich-text sources stay bare");

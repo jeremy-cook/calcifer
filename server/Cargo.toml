@@ -2,6 +2,7 @@
 name = "calcifer-server"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.95"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -36,3 +37,22 @@ fastembed = "5"
 
 [build-dependencies]
 tonic-build = "0.12"
+
+[lints.clippy]
+# Beyond clippy's default set: lints that have caught real noise here and
+# have few or no hits. `pedantic` as a whole is too noisy (doc_markdown alone
+# is over 200).
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+implicit_clone = "warn"
+manual_let_else = "warn"
+map_unwrap_or = "warn"
+match_same_arms = "warn"
+needless_pass_by_value = "warn"
+redundant_closure_for_method_calls = "warn"
+redundant_else = "warn"
+semicolon_if_nothing_returned = "warn"
+single_match_else = "warn"
+uninlined_format_args = "warn"
+unnecessary_wraps = "warn"

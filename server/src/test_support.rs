@@ -93,7 +93,10 @@ pub(crate) fn tag(name: &str) -> CreateEntityRequest {
 
 /// `req` with `facets` attached on create, e.g. `with_facets(note("Ship"), &["todo"])`.
 pub(crate) fn with_facets(mut req: CreateEntityRequest, facets: &[&str]) -> CreateEntityRequest {
-    req.facets = facets.iter().map(|f| f.to_string()).collect();
+    req.facets = facets
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
     req
 }
 

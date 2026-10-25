@@ -43,12 +43,12 @@ pub fn router(knowledge: Knowledge) -> axum::Router {
 
 async fn post_mcp(State(knowledge): State<Knowledge>, body: Bytes) -> Response {
     let Ok(message) = serde_json::from_slice::<Value>(&body) else {
-        return json_response(error_reply(Value::Null, PARSE_ERROR, "invalid JSON"));
+        return json_response(&error_reply(&Value::Null, PARSE_ERROR, "invalid JSON"));
     };
     // A batch is answered with a batch of the replies; notifications have none.
     let reply = match message {
         Value::Array(messages) if messages.is_empty() => {
-            Some(error_reply(Value::Null, INVALID_REQUEST, "empty batch"))
+            Some(error_reply(&Value::Null, INVALID_REQUEST, "empty batch"))
         }
         Value::Array(messages) => {
             let replies: Vec<Value> = futures::future::join_all(
@@ -63,12 +63,12 @@ async fn post_mcp(State(knowledge): State<Knowledge>, body: Bytes) -> Response {
         message => handle_message(&knowledge, message).await,
     };
     match reply {
-        Some(reply) => json_response(reply),
+        Some(reply) => json_response(&reply),
         None => StatusCode::ACCEPTED.into_response(),
     }
 }
 
-fn json_response(body: Value) -> Response {
+fn json_response(body: &Value) -> Response {
     (
         [(header::CONTENT_TYPE, "application/json")],
         body.to_string(),
@@ -76,7 +76,7 @@ fn json_response(body: Value) -> Response {
         .into_response()
 }
 
-fn error_reply(id: Value, code: i64, message: &str) -> Value {
+fn error_reply(id: &Value, code: i64, message: &str) -> Value {
     json!({ "jsonrpc": "2.0", "id": id, "error": { "code": code, "message": message } })
 }
 
@@ -85,14 +85,14 @@ fn error_reply(id: Value, code: i64, message: &str) -> Value {
 async fn handle_message(knowledge: &Knowledge, message: Value) -> Option<Value> {
     if !message.is_object() {
         return Some(error_reply(
-            Value::Null,
+            &Value::Null,
             INVALID_REQUEST,
             "not a JSON-RPC message",
         ));
     }
     let id = message.get("id").cloned();
     let Some(method) = message["method"].as_str() else {
-        return id.map(|id| error_reply(id, INVALID_REQUEST, "not a JSON-RPC request"));
+        return id.map(|id| error_reply(&id, INVALID_REQUEST, "not a JSON-RPC request"));
     };
     let id = id?;
     let params = &message["params"];
@@ -105,7 +105,7 @@ async fn handle_message(knowledge: &Knowledge, message: Value) -> Option<Value> 
     };
     Some(match outcome {
         Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
-        Err((code, message)) => error_reply(id, code, &message),
+        Err((code, message)) => error_reply(&id, code, &message),
     })
 }
 
@@ -310,11 +310,15 @@ async fn dispatch(
             let a: DailyArgs = parse_args(name, args)?;
             k.append_to_daily_note(&a.date, &a.markdown).await
         }
-        "list_structures" => k.list_structures(),
+        "list_structures" => Ok(k.list_structures()),
         _ => return Err(format!("unknown tool {name}")),
     })
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "every call site builds the description and schema inline"
+)]
 fn tool(name: &str, description: String, properties: Value, required: &[&str]) -> Value {
     json!({
         "name": name,
@@ -1608,7 +1612,7 @@ mod tests {
     #[tokio::test]
     async fn list_structures_describes_the_registry() {
         let f = fixture().await;
-        let listed = f.k.list_structures().unwrap();
+        let listed = f.k.list_structures();
         assert!(
             listed.contains("- Note: ") && listed.contains("- DailyNote: "),
             "{listed}"
@@ -1833,7 +1837,7 @@ mod tests {
     #[tokio::test]
     async fn list_structures_shows_relates_to() {
         let f = fixture().await;
-        let listed = f.k.list_structures().unwrap();
+        let listed = f.k.list_structures();
         let entries: Vec<&str> = listed.split("\n- ").collect();
         let entry = |prefix: &str| {
             entries
@@ -1855,7 +1859,7 @@ mod tests {
     #[tokio::test]
     async fn list_structures_shows_facets() {
         let f = fixture().await;
-        let listed = f.k.list_structures().unwrap();
+        let listed = f.k.list_structures();
         let note = &listed[listed.find("- Note: ").unwrap()..];
         assert!(
             note.lines().take(3).any(|l| l == "  facets: todo"),
@@ -1988,7 +1992,7 @@ mod tests {
     }
 
     fn tag_args(names: &[&str]) -> Vec<String> {
-        names.iter().map(|n| n.to_string()).collect()
+        names.iter().map(std::string::ToString::to_string).collect()
     }
 
     #[tokio::test]

@@ -127,12 +127,11 @@ fn unescape(text: &str) -> String {
     let mut out = String::new();
     let mut i = 0;
     while i < text.len() {
-        let (c, width) = match escaped_char(&text[i..]) {
-            Some(c) => (c, 1 + c.len_utf8()),
-            None => {
-                let c = text[i..].chars().next().expect("i < text.len()");
-                (c, c.len_utf8())
-            }
+        let (c, width) = if let Some(c) = escaped_char(&text[i..]) {
+            (c, 1 + c.len_utf8())
+        } else {
+            let c = text[i..].chars().next().expect("i < text.len()");
+            (c, c.len_utf8())
         };
         out.push(c);
         i += width;
@@ -1150,13 +1149,13 @@ fn attr_fits(node_type: &str, key: &str, value: &Value) -> bool {
                 })
         }
         ("dateChip", "date") => value.as_str().is_some_and(|d| date_at(d) == Some(d)),
-        // A chip is written from its target, whatever its stored label says.
+        // A chip is written from its target, whatever its stored label says; an
+        // image's attributes are checked by image_is_expressible.
         (
             "mention" | "hashtag",
             "id" | "label" | "structureType" | "char" | "mentionSuggestionChar",
-        ) => true,
-        // Checked by image_is_expressible.
-        ("image", "src" | "alt" | "title" | "caption" | "width" | "alignment") => true,
+        )
+        | ("image", "src" | "alt" | "title" | "caption" | "width" | "alignment") => true,
         _ => value.is_null(),
     }
 }
@@ -1408,10 +1407,18 @@ mod tests {
         Mark::Link(href.into()).to_json()
     }
 
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "call sites pass json! literals"
+    )]
     fn text(text: &str, marks: Value) -> Value {
         json!({ "type": "text", "text": text, "marks": marks })
     }
 
+    #[allow(
+        clippy::needless_pass_by_value,
+        reason = "call sites pass json! literals"
+    )]
     fn paragraph_doc(content: Value) -> Value {
         json!({ "type": "doc", "content": [{ "type": "paragraph", "content": content }] })
     }

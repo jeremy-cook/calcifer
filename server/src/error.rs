@@ -21,8 +21,8 @@ impl From<AppError> for Status {
             AppError::NotFound(msg) => Status::not_found(msg),
             AppError::Invalid(msg) => Status::invalid_argument(msg),
             AppError::FailedPrecondition(msg) => Status::failed_precondition(msg),
-            AppError::Db(e) => Status::internal(format!("db: {}", e)),
-            AppError::Decode(e) => Status::internal(format!("decode: {}", e)),
+            AppError::Db(e) => Status::internal(format!("db: {e}")),
+            AppError::Decode(e) => Status::internal(format!("decode: {e}")),
         }
     }
 }
