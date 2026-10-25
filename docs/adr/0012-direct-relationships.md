@@ -1,7 +1,7 @@
 # 12. Direct relationships beside content links
 
-- **Status:** Proposed
-- **Date:** 2026-10-24
+- **Status:** Accepted
+- **Date:** 2026-10-24. Accepted 2026-10-24.
 
 ## Context
 
@@ -126,11 +126,15 @@ publishes `upserted` for each after commit (rule 7).
 ### Frontend
 
 The entity page gets one relationships section built from the entity's rich-text links,
-its relationships and the back-references to it. Links from relation properties, such as
-`tags`, stay in their own property fields.
+its relationships and the back-references to it. It replaces the Backlinks panel, in its
+place on the page. Outgoing links from the entity's own relation properties, such as
+`tags`, stay in their own property fields. Referenced dates aren't listed: they belong to
+the calendar (ADR 4).
 
 - One row per other entity, labelled with why it's there: *related*, *mentioned*, or
-  both. Back-references read *related to this* or *mentions this*.
+  both. Back-references read *related to this* or *mentions this*. A back-reference that
+  comes from a relation property (a Note whose `tags` names this Tag) is a row labelled by
+  the property, *via Tags*.
 - Only a direct relationship has a remove control. A content-only row jumps to the
   mention instead, since removing it means editing the author's text. With several
   mentions, it jumps to the first in document order, across the entity's documents in
@@ -201,10 +205,9 @@ its relationships and the back-references to it. Links from relation properties,
 - The agent's tool surface changes: `link_notes` changes meaning, `unlink_notes` is
   added, and both take a name or an id.
 
-## Open questions
+## Decisions on the open questions (2026-10-24)
 
-- **Referenced dates.** List them in the section, or leave them to the calendar?
-- **"Keep" a mention.** Offer an action on a content-only row that adds a relationship,
-  so it outlives the text?
-- **DailyNote.** Should it relate to Notes from the start (`relates_to: &["Note"]`), or
-  wait for a reason?
+- **Referenced dates.** Not listed in the relationships section. They stay on the
+  calendar.
+- **"Keep" a mention.** No action on content-only rows for now.
+- **DailyNote.** `relates_to: &[]` until there's a reason.
