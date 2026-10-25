@@ -211,6 +211,7 @@ impl EntityService {
             )));
         }
 
+        check_name_chars(name)?;
         let entity = new_entity(structure_type, Some(name), HashMap::new(), &[]);
         let saved = self.persist_new_entity(&entity).await?;
         Ok(self.created(saved))
@@ -1430,6 +1431,19 @@ fn known_structure(structure_type: &str) -> Result<&'static structures::Structur
     })
 }
 
+/// `InvalidArgument` if `name` (already trimmed) contains `|` or `]]`. The agent's
+/// link syntax (`[[Name|Alias]]`, closed by `]]`) can't express such a name, so no
+/// path that sets one accepts it (I-61). A lone `[` or `]` is fine: only `]]`
+/// closes a link.
+fn check_name_chars(name: &str) -> Result<(), Status> {
+    if name.contains('|') || name.contains("]]") {
+        return Err(Status::invalid_argument(
+            r#"names can't contain "|" or "]]""#,
+        ));
+    }
+    Ok(())
+}
+
 /// The registry entry for facet `id`, or `InvalidArgument` for one the registry
 /// doesn't declare.
 fn known_facet(id: &str) -> Result<&'static FacetDef, Status> {
@@ -1544,6 +1558,9 @@ impl EntityServiceTrait for EntityService {
             }
         }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
+        if let Some(name) = &name {
+            check_name_chars(name)?;
+        }
         let mut entity = new_entity(&structure_type, name.as_deref(), properties, &facet_defs);
         if name.is_none() && def.unique_names() {
             entity.name = self
@@ -1563,7 +1580,7 @@ impl EntityServiceTrait for EntityService {
     // The name (and its FTS row) and updated_at only: properties are untouched,
     // so a rename doesn't undo a concurrent SetProperty (I-15). A structure with
     // `name_editable = false` (a DailyNote, named for its date) can't be renamed.
-    // The name is trimmed, as Create trims it, and can't be blank.
+    // The name is trimmed, as Create trims it, and can't be blank or contain `|` or `]]`.
     async fn rename_entity(
         &self,
         req: Request<RenameEntityRequest>,
@@ -1573,6 +1590,7 @@ impl EntityServiceTrait for EntityService {
         if name.is_empty() {
             return Err(Status::invalid_argument("name can't be blank"));
         }
+        check_name_chars(name)?;
         let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
@@ -2429,6 +2447,74 @@ mod tests {
         let stored = svc.load_entity(&entity.id).await.expect("load");
         assert_eq!(stored, entity);
         assert_eq!(fts_name(&pool, &entity.id).await, "Kept");
+    }
+
+    // I-61: the agent's link syntax can't express "|" or "]]" in a name.
+    #[tokio::test]
+    async fn names_with_a_pipe_or_double_bracket_are_invalid() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let kept = create(&svc, note("Kept")).await;
+        let before = entity_count(&pool).await;
+
+        for name in ["A|B", "x]]y", "  A|B  ", "a]]", "|"] {
+            let err = try_create(&svc, note(name))
+                .await
+                .expect_err("create refuses it");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{name:?}");
+            assert_eq!(
+                err.message(),
+                r#"names can't contain "|" or "]]""#,
+                "{name:?}"
+            );
+
+            let err = rename(&svc, &kept.id, name)
+                .await
+                .expect_err("rename refuses it");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{name:?}");
+
+            let err = resolve(&svc, "Note", by_name(name), true)
+                .await
+                .expect_err("a creating resolve refuses it");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{name:?}");
+        }
+        assert_eq!(entity_count(&pool).await, before, "nothing was created");
+        let stored = svc.load_entity(&kept.id).await.expect("load");
+        assert_eq!(stored, kept, "the rename wrote nothing");
+        assert_eq!(fts_name(&pool, &kept.id).await, "Kept");
+
+        // A tag's name is checked on every path too.
+        let err = try_create(&svc, tag("a|b")).await.expect_err("tag name");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+        let err = resolve(&svc, "Tag", by_name("a]]b"), true)
+            .await
+            .expect_err("tag name");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+
+        // A lone bracket doesn't close a link.
+        let made = create(&svc, note("a[b]c")).await;
+        assert_eq!(made.name, "a[b]c");
+        let renamed = rename(&svc, &kept.id, "[x]").await.expect("rename");
+        assert_eq!(renamed.name, "[x]");
+        let resolved = resolve(&svc, "Note", by_name("a]b[c"), true)
+            .await
+            .expect("resolve");
+        assert!(resolved.created);
+    }
+
+    #[tokio::test]
+    async fn resolving_such_a_name_without_create_is_not_found() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let before = entity_count(&pool).await;
+
+        for name in ["A|B", "x]]y"] {
+            let err = resolve(&svc, "Note", by_name(name), false)
+                .await
+                .expect_err("no such note");
+            assert_eq!(err.code(), tonic::Code::NotFound, "{name:?}");
+        }
+        assert_eq!(entity_count(&pool).await, before);
     }
 
     // I-8: an unknown id is NotFound, and nothing is written for it.

@@ -814,6 +814,54 @@ mod tests {
         );
     }
 
+    // I-61: `[[Name|Alias]]` and `]]` can't be told from a name containing them.
+    #[tokio::test]
+    async fn create_note_refuses_a_pipe_in_the_name() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+
+        for name in ["A|B", "x]]y"] {
+            let refused = err(f.k.create_note(name, "Body.", None).await);
+            assert_eq!(refused, r#"names can't contain "|" or "]]""#);
+        }
+        assert_eq!(f.entity_count().await, before, "no note was created");
+        assert!(f.notes_named("A|B").await.is_empty());
+
+        // A lone bracket is a fine name.
+        f.k.create_note("a[b]c", "Body.", None).await.unwrap();
+        assert_eq!(f.notes_named("a[b]c").await.len(), 1);
+    }
+
+    // A note's name can look like a structure path: `[[Note/Tag/X]]` is the Note
+    // named "Tag/X", never the Tag "X", and link_notes takes the name as it is.
+    #[tokio::test]
+    async fn a_note_named_like_a_structure_path_round_trips() {
+        let f = fixture().await;
+        f.create("Tag", "X").await;
+        f.k.create_note("Tag/X", "The note.", None).await.unwrap();
+        let target = f.note_id("Tag/X").await;
+        f.k.create_note("Source", "See [[Note/Tag/X]].", None)
+            .await
+            .unwrap();
+        f.k.create_note("Third", "", None).await.unwrap();
+
+        let source = f.k.get_note(NoteKey::Name("Source")).await.unwrap();
+        assert_eq!(body(&source), "See [[Note/Tag/X]].", "{source}");
+        assert_eq!(
+            f.link_targets(&f.note_id("Source").await).await,
+            [format!("Note:{target}")]
+        );
+
+        assert_eq!(
+            f.k.link_notes("Third", "Tag/X").await.unwrap(),
+            "Related \"Third\" -> \"Tag/X\"."
+        );
+        assert_eq!(
+            f.link_targets(&f.note_id("Third").await).await,
+            [format!("Note:{target}")]
+        );
+    }
+
     #[tokio::test]
     async fn a_link_to_a_missing_target_fails_the_write_and_creates_nothing() {
         let f = fixture().await;

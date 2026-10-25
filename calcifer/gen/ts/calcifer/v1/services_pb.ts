@@ -1049,8 +1049,9 @@ export const EntityService: GenService<{
    * Create a new entity from intent. The server mints the id, timestamps,
    * default properties and default name ("Untitled <structure name>", or for a
    * unique-names structure the first free "Untitled <name> N"). INVALID_ARGUMENT
-   * for a structure_type not in the registry or a property value of the wrong
-   * kind; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
+   * for a structure_type not in the registry, a property value of the wrong
+   * kind, or a name (once trimmed) containing "|" or "]]", which the agent's
+   * [[Name|Alias]] link syntax can't express; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
    * comes from ResolveEntity by date); ALREADY_EXISTS for a taken Tag name.
    * `facets` are checked as in AttachFacet (INVALID_ARGUMENT for an unknown one,
    * FAILED_PRECONDITION for one the structure doesn't accept), and a value for
@@ -1066,7 +1067,7 @@ export const EntityService: GenService<{
   /**
    * Change only an entity's name. Other properties are untouched, so a rename
    * doesn't overwrite a concurrent SetEntityProperty. The name is trimmed; a blank
-   * one is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
+   * one, or one containing "|" or "]]", is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
    * for a structure whose name isn't editable (DailyNote), ALREADY_EXISTS for a
    * taken Tag name.
    *
@@ -1128,7 +1129,9 @@ export const EntityService: GenService<{
    * Names match case-insensitively. Only Tag names are unique, so for other
    * structures several entities can share a name: the one with the oldest
    * created_at wins, and the lowest id breaks ties. A day has at most one
-   * DailyNote.
+   * DailyNote. A name (once trimmed) containing "|" or "]]" is never created: with
+   * create_if_missing and no match it is INVALID_ARGUMENT; without, it is
+   * NOT_FOUND like any unknown name.
    *
    * @generated from rpc calcifer.v1.EntityService.ResolveEntity
    */
