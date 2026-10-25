@@ -11,6 +11,38 @@ beforeEach(() => {
 const state = () => useReplica.getState()
 
 describe('replica', () => {
+  it('starts connecting and resets to connecting', () => {
+    expect(state().connection).toBe('connecting')
+    replica.setConnection('live')
+    replica.reset()
+    expect(state().connection).toBe('connecting')
+  })
+
+  it('setConnection changes only the connection', () => {
+    replica.applySnapshot([entity('a')])
+    const { byId, all, ready } = state()
+    replica.setConnection('retrying')
+    expect(state().connection).toBe('retrying')
+    expect(state().byId).toBe(byId)
+    expect(state().all).toBe(all)
+    expect(state().ready).toBe(ready)
+  })
+
+  it('setConnection to the same state changes nothing', () => {
+    replica.setConnection('live')
+    const before = state()
+    replica.setConnection('live')
+    expect(state()).toBe(before)
+  })
+
+  it('keeps the connection across entity writes', () => {
+    replica.setConnection('live')
+    replica.applySnapshot([entity('a')])
+    replica.upsert(entity('b'))
+    replica.remove('a')
+    expect(state().connection).toBe('live')
+  })
+
   it('keeps every reference on an echo', () => {
     replica.applySnapshot([entity('a'), entity('b')])
     const before = state()

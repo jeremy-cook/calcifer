@@ -23,6 +23,9 @@ export const structuresQuery = queryOptions({
   queryFn: (): Promise<ListStructuresResponse> => structureClient.listStructures({}),
   staleTime: Infinity,
   gcTime: Infinity,
+  // The app can't render without the registry, so it retries until the server answers.
+  retry: true,
+  retryDelay: 2_000,
 })
 
 // Sync read for non-React code (editor suggestions, route validation, pure

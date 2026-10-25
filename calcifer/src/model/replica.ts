@@ -5,6 +5,11 @@ import { compareTimestamps } from '~/model/dates'
 
 // The Watch-fed entity replica (ADR 9). Only model/sync.ts and the mutations
 // in model/store.ts write it; components read it through store.ts's hooks.
+// The Watch stream: `connecting` until the first attempt succeeds or fails, `live` from a
+// stream's first message (always a snapshot), `retrying` from a failure or an ended stream
+// until the next stream's first message. Set only by model/sync.ts.
+export type ConnectionState = 'connecting' | 'live' | 'retrying'
+
 interface ReplicaState {
   // Snapshot order, then creates; replacing a key keeps its slot, so lists such
   // as the mention menu don't reshuffle on an edit.
@@ -13,9 +18,15 @@ interface ReplicaState {
   all: Entity[]
   // False until this page load's first snapshot; never goes back.
   ready: boolean
+  connection: ConnectionState
 }
 
-export const useReplica = create<ReplicaState>()(() => ({ byId: new Map(), all: [], ready: false }))
+export const useReplica = create<ReplicaState>()(() => ({
+  byId: new Map(),
+  all: [],
+  ready: false,
+  connection: 'connecting',
+}))
 
 // Ids deleted this session. Ids are server-minted UUIDs and never reused, so this is never cleared.
 const tombstones = new Set<string>()
@@ -75,6 +86,11 @@ export const replica = {
   patch(id: string, edit: (entity: Entity) => Entity): void {
     const cached = useReplica.getState().byId.get(id)
     if (cached) put(edit(cached))
+  },
+  // The Watch stream's state. Touches nothing else, and nothing at all when unchanged.
+  setConnection(connection: ConnectionState): void {
+    if (useReplica.getState().connection === connection) return
+    useReplica.setState({ connection })
   },
   // Test-only: back to an empty, not-ready replica with no deletes.
   reset(): void {

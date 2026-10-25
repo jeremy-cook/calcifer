@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WatchEntitiesResponse } from '@calcifer/proto/calcifer/v1/services_pb'
+import type { ConnectionState } from '~/model/replica'
 import { entity, richText, watch } from '~/model/testing'
 
 // Fresh modules per test: the replica and its caches are module state.
@@ -62,5 +64,99 @@ describe('applyWatchEvent', () => {
   it('writes a changed rich-text doc to its cache', () => {
     sync.applyWatchEvent(watch.richTextChanged(richText('a', 'content', '{"v":1}', 2_000)))
     expect(api.queryClient.getQueryData(api.qk.richtext('a', 'content'))).toMatchObject({ doc: '{"v":1}' })
+  })
+})
+
+describe('runEntitySync', () => {
+  type WatchEntities = (request: unknown, options: { signal: AbortSignal }) => AsyncIterable<WatchEntitiesResponse>
+
+  let useReplica: typeof import('~/model/replica').useReplica
+  let watchEntities: ReturnType<typeof vi.fn<WatchEntities>>
+
+  // Fresh modules again, now with the Watch client mocked out.
+  beforeEach(async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    watchEntities = vi.fn<WatchEntities>()
+    vi.resetModules()
+    vi.doMock('~/model/api', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('~/model/api')>()),
+      entityClient: { watchEntities },
+    }))
+    ;({ useReplica } = await import('~/model/replica'))
+    sync = await import('~/model/sync')
+  })
+
+  afterEach(() => {
+    vi.doUnmock('~/model/api')
+    vi.restoreAllMocks()
+  })
+
+  // A Watch stream that yields `events`, then ends, fails, or stays open until `signal` aborts.
+  async function* stream(
+    signal: AbortSignal,
+    events: WatchEntitiesResponse[],
+    then: 'end' | 'fail' | 'hold',
+  ): AsyncGenerator<WatchEntitiesResponse> {
+    for (const event of events) yield event
+    if (then === 'fail') throw new Error('connection refused')
+    if (then === 'hold') {
+      await new Promise<never>((_, reject) => signal.addEventListener('abort', () => reject(new Error('aborted'))))
+    }
+  }
+
+  const connection = (): ConnectionState => useReplica.getState().connection
+
+  // Every change of the connection state from now on, in order.
+  function recordConnection(): ConnectionState[] {
+    const seen: ConnectionState[] = []
+    let last = connection()
+    useReplica.subscribe((s) => {
+      if (s.connection === last) return
+      last = s.connection
+      seen.push(last)
+    })
+    return seen
+  }
+
+  it('is retrying after a failed attempt and live after the next snapshot', async () => {
+    watchEntities
+      .mockImplementationOnce((_, { signal }) => stream(signal, [], 'fail'))
+      .mockImplementationOnce((_, { signal }) => stream(signal, [watch.snapshot(entity('a'))], 'hold'))
+    const seen = recordConnection()
+    const controller = new AbortController()
+    const done = sync.runEntitySync(controller.signal, 0)
+    expect(connection()).toBe('connecting')
+    await vi.waitFor(() => expect(connection()).toBe('live'))
+    expect(seen).toEqual(['retrying', 'live'])
+    expect(watchEntities).toHaveBeenCalledTimes(2)
+    controller.abort()
+    await done
+  })
+
+  it('is retrying when a stream ends', async () => {
+    watchEntities
+      .mockImplementationOnce((_, { signal }) => stream(signal, [watch.snapshot(entity('a'))], 'end'))
+      .mockImplementation((_, { signal }) => stream(signal, [], 'hold'))
+    const seen = recordConnection()
+    const controller = new AbortController()
+    const done = sync.runEntitySync(controller.signal, 0)
+    await vi.waitFor(() => expect(watchEntities).toHaveBeenCalledTimes(2))
+    expect(seen).toEqual(['live', 'retrying'])
+    expect(connection()).toBe('retrying')
+    controller.abort()
+    await done
+  })
+
+  it('stops on abort without setting retrying', async () => {
+    watchEntities.mockImplementation((_, { signal }) => stream(signal, [watch.snapshot(entity('a'))], 'hold'))
+    const seen = recordConnection()
+    const controller = new AbortController()
+    const done = sync.runEntitySync(controller.signal, 0)
+    await vi.waitFor(() => expect(connection()).toBe('live'))
+    controller.abort()
+    await done
+    expect(seen).toEqual(['live'])
+    expect(connection()).toBe('live')
+    expect(watchEntities).toHaveBeenCalledTimes(1)
   })
 })

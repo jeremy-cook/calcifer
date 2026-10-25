@@ -17,9 +17,10 @@ import type { ResolveEntityRequest } from '@calcifer/proto/calcifer/v1/services_
 import { entityClient } from '~/model/api'
 import { timestampMsOrZero } from '~/model/dates'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
-import { replica, useReplica } from '~/model/replica'
+import { replica, useReplica, type ConnectionState } from '~/model/replica'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+export type { ConnectionState } from '~/model/replica'
 
 // The entity RPCs wrap their entity in a response message; the server always
 // sets it, so a missing one is a protocol error.
@@ -57,6 +58,11 @@ export function useEntitiesByIds(ids: readonly string[]): (Entity | undefined)[]
 // False until the first Watch snapshot has arrived.
 export function useReplicaReady(): boolean {
   return useReplica((s) => s.ready)
+}
+
+// The Watch stream's state, for the connection notice.
+export function useConnectionState(): ConnectionState {
+  return useReplica((s) => s.connection)
 }
 
 export type EntityStatus = 'loading' | 'found' | 'missing'

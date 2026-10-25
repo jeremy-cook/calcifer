@@ -37,28 +37,35 @@ export function applyWatchEvent({ event }: WatchEntitiesResponse): void {
 }
 
 // Long-lived Watch loop: keeps the replica in step with the server, including
-// the MCP agent's writes, without polling. A stream that fails or ends
-// reconnects after a second (so a server that keeps closing streams can't cause
-// a tight loop); the new stream's first message is a snapshot, which resyncs.
+// the MCP agent's writes, without polling. A stream's first message sets the
+// connection state to `live`; a stream that fails or ends sets it to `retrying`
+// and reconnects after `retryDelayMs` (a second by default, so a server that
+// keeps closing streams can't cause a tight loop). The new stream's first
+// message is a snapshot, which resyncs. Runs until `signal` aborts. Exported
+// for tests.
+export async function runEntitySync(signal: AbortSignal, retryDelayMs = 1_000): Promise<void> {
+  while (!signal.aborted) {
+    try {
+      for await (const event of entityClient.watchEntities({}, { signal })) {
+        if (signal.aborted) return
+        replica.setConnection('live')
+        applyWatchEvent(event)
+      }
+      if (signal.aborted) return
+      console.warn('watch ended; reconnecting in 1s')
+    } catch (err) {
+      if (signal.aborted) return
+      console.warn('watch disconnected; reconnecting in 1s', err)
+    }
+    replica.setConnection('retrying')
+    await new Promise((r) => setTimeout(r, retryDelayMs))
+  }
+}
+
 export function useEntitySync(): void {
   useEffect(() => {
     const controller = new AbortController()
-    void (async () => {
-      while (!controller.signal.aborted) {
-        try {
-          for await (const event of entityClient.watchEntities({}, { signal: controller.signal })) {
-            if (controller.signal.aborted) return
-            applyWatchEvent(event)
-          }
-          if (controller.signal.aborted) return
-          console.warn('watch ended; reconnecting in 1s')
-        } catch (err) {
-          if (controller.signal.aborted) return
-          console.warn('watch disconnected; reconnecting in 1s', err)
-        }
-        await new Promise((r) => setTimeout(r, 1000))
-      }
-    })()
+    void runEntitySync(controller.signal)
     return () => controller.abort()
   }, [])
 }
