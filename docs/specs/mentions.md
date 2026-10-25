@@ -5,7 +5,7 @@ How mentions work **as built**. Prior-art research that informed this is in
 graph semantics behind it are in
 [ADR 3](../adr/0003-server-authoritative-link-graph.md).
 
-**Code:** `calcifer/src/editors/tiptap/extensions/entity-mention.ts`,
+**Code:** `web/src/editors/tiptap/extensions/entity-mention.ts`,
 `components/mention/*`, `components/suggestion-popup.ts`.
 
 ---

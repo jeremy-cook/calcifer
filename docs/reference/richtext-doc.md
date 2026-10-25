@@ -151,7 +151,7 @@ On `PutRichText` to the entity's `content`, the server derives:
 
 For reference; the server contract above is what counts.
 
-**Browser editor** (`calcifer/src/editors/tiptap/`). `extensions/entity-mention.ts`
+**Browser editor** (`web/src/editors/tiptap/`). `extensions/entity-mention.ts`
 defines `mention` (`EntityMention`) and `hashtag` (`HashtagMention`) on top of
 `@tiptap/extension-mention`. `components/mention/make-suggestion.ts` inserts them with
 `id`, `label`, `structureType` and `char` (`@` or `#`). TipTap also serializes the

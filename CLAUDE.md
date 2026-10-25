@@ -109,7 +109,7 @@ function Sections({ sections }: SectionsProps) {
 
 ## State
 
-- Data the server pushes lives in Zustand stores in `calcifer/src/model/` (the Watch-fed entity replica, `model/replica.ts`).
+- Data the server pushes lives in Zustand stores in `web/src/model/` (the Watch-fed entity replica, `model/replica.ts`).
 - Data the browser requests, and mutations, use TanStack Query.
 - Components read both through hooks in `model/`, never the stores directly.
 - A selector returns stored references (`s.all`, `s.byId.get(id)`); one that builds a new array or object goes through `useShallow`.
@@ -117,11 +117,11 @@ function Sections({ sections }: SectionsProps) {
 ## Checks
 
 There is no CI. Before calling a change done, run what it touches (UI commands in
-`calcifer/`, server commands in `server/`; `calcifer/.nvmrc` has the Node version):
+`web/`, server commands in `server/`; `web/.nvmrc` has the Node version):
 
 - **UI:** `pnpm lint`, `pnpm exec tsc -b`, `pnpm test`, `pnpm format:check`.
 - **Server:** `cargo fmt --check`, `cargo clippy --all-targets` (no new warnings), `cargo test`.
 - **SQL:** after changing a `sqlx::query!` or a migration, refresh `server/.sqlx/`
   and confirm `cargo sqlx prepare --check -- --all-targets` passes (the README says how).
 - **Proto:** `pnpm proto:lint`, then `pnpm proto:gen` and commit the regenerated
-  `calcifer/gen/ts/`.
+  `web/gen/ts/`.

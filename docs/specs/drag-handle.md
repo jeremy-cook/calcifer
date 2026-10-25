@@ -4,7 +4,7 @@ Block reordering handle in the editor's left gutter, **as built**. The compariso
 against BlockNote's SideMenu that informed it is in
 [`../research/blocknote-vs-tiptap.md`](../research/blocknote-vs-tiptap.md).
 
-**Code:** `calcifer/src/editors/tiptap/TiptapEditor.tsx`, `TiptapEditor.css`.
+**Code:** `web/src/editors/tiptap/TiptapEditor.tsx`, `TiptapEditor.css`.
 
 ---
 

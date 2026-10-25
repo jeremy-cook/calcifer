@@ -5,10 +5,10 @@ as a first-class writer, not a bolted-on sidebar.
 
 ## Architecture
 
-- `calcifer/` — React + Vite frontend (TipTap editor, TanStack Query + Router, Zustand)
+- `web/` — React + Vite frontend (TipTap editor, TanStack Query + Router, Zustand)
 - `server/` — Rust backend (tonic gRPC + SQLite via sqlx) — the source of truth
 - `server/src/mcp/` — the MCP server (knowledge tools for an AI agent), hosted by the same backend process
-- `proto/` — protobuf schema, generated to TS (`calcifer/gen/ts`) and to Rust (tonic-build)
+- `proto/` — protobuf schema, generated to TS (`web/gen/ts`) and to Rust (tonic-build)
 - `scripts/calcifer` — boots the service
 
 The backend is the one service: a single process with two listeners, both on localhost by
@@ -16,7 +16,7 @@ default.
 
 | address | path | what |
 |---|---|---|
-| `CALCIFER_ADDR` (`127.0.0.1:8080`) | `/` | the built UI (`calcifer/dist`, with `index.html` fallback for client-side routes) |
+| `CALCIFER_ADDR` (`127.0.0.1:8080`) | `/` | the built UI (`web/dist`, with `index.html` fallback for client-side routes) |
 | | `/api/*` | gRPC-Web, which the UI speaks |
 | `CALCIFER_MCP_ADDR` (`127.0.0.1:8081`) | `/mcp` | MCP over streamable HTTP, which agents speak; its tools call the services in-process |
 
@@ -43,7 +43,7 @@ scripts/calcifer dev      # debug backend + Vite hot reload (UI on http://localh
 The first run creates and migrates `server/calcifer.db`. The build always checks
 `sqlx::query!` SQL against the committed cache in `server/.sqlx/` (`server/.cargo/config.toml`
 sets `SQLX_OFFLINE`). Settings, all optional:
-`CALCIFER_ADDR` (default `127.0.0.1:8080`), `CALCIFER_MCP_ADDR` (default `127.0.0.1:8081`), `CALCIFER_UI_DIR` (default `../calcifer/dist`, relative
+`CALCIFER_ADDR` (default `127.0.0.1:8080`), `CALCIFER_MCP_ADDR` (default `127.0.0.1:8081`), `CALCIFER_UI_DIR` (default `../web/dist`, relative
 to `server/`), `DATABASE_URL` (default `sqlite://./calcifer.db`). Without a UI build the
 service still runs, API and MCP only.
 
@@ -69,8 +69,8 @@ rest of the server's: `cd server && cargo test`.
 After editing anything under `proto/`, lint it and regenerate the TS bindings:
 
 ```bash
-cd calcifer && pnpm proto:lint   # buf lint, default rules; must exit 0
-cd calcifer && pnpm proto:gen
+cd web && pnpm proto:lint   # buf lint, default rules; must exit 0
+cd web && pnpm proto:gen
 ```
 
 `buf lint` enforces buf's RPC naming: a verb-and-noun RPC name (`GetEntity`), a
@@ -82,7 +82,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
 ## Conventions
 
 - **Node version trap:** fresh shells may resolve Node 16 and break pnpm. The version
-  wanted is in `calcifer/.nvmrc` (`nvm use` there); `scripts/calcifer` falls back to the
+  wanted is in `web/.nvmrc` (`nvm use` there); `scripts/calcifer` falls back to the
   newest nvm Node by itself. For other commands, prefix with
   `export PATH="/Users/bebop/.nvm/versions/node/v24.12.0/bin:$PATH"`.
 - **Rust toolchain:** `server/rust-toolchain.toml` pins it; rustfmt and the extra clippy
@@ -103,7 +103,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
   (above). Note the `ref` field generates as `r#ref` in Rust.
 - **MCP (Rust):** tool ops in `server/src/mcp/tools.rs`, the JSON-RPC transport and tool
   schemas in `server/src/mcp/mod.rs`, markdown <-> TipTap in `server/src/mcp/markdown.rs`.
-- **FE (React):** `calcifer/src/model/` is the data layer: `api.ts` (client and query
+- **FE (React):** `web/src/model/` is the data layer: `api.ts` (client and query
   cache), `sync.ts` and `replica.ts` (the Watch-fed replica), `store.ts` (the hooks and
   mutations components use), and one module per domain (`richtext`, `relationships`,
   `todos`, `calendar`, `daily-notes`, `dates`, `structures`); connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules

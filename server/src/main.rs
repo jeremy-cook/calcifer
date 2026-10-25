@@ -41,9 +41,9 @@ use crate::watch::WatchHub;
 const DEFAULT_ADDR: &str = "127.0.0.1:8080";
 /// Where MCP listens unless `CALCIFER_MCP_ADDR` says otherwise.
 const DEFAULT_MCP_ADDR: &str = "127.0.0.1:8081";
-/// The built UI (`pnpm build` in `calcifer/`), relative to the working
+/// The built UI (`pnpm build` in `web/`), relative to the working
 /// directory, unless `CALCIFER_UI_DIR` says otherwise.
-const DEFAULT_UI_DIR: &str = "../calcifer/dist";
+const DEFAULT_UI_DIR: &str = "../web/dist";
 
 /// The built UI with client-side routing: any path that isn't a file is
 /// answered with `index.html`, so a deep link like `/e/<id>` loads the app.
@@ -52,7 +52,7 @@ fn ui_service(dir: PathBuf) -> Option<ServeDir<ServeFile>> {
     let index = dir.join("index.html");
     if !index.is_file() {
         tracing::warn!(
-            "no UI build at {} (run `pnpm build` in calcifer/, or set CALCIFER_UI_DIR); serving the API and MCP only",
+            "no UI build at {} (run `pnpm build` in web/, or set CALCIFER_UI_DIR); serving the API and MCP only",
             dir.display()
         );
         return None;

@@ -4,7 +4,7 @@ How the block-insertion menu works **as built**, including the suggestion popup 
 with mentions. Prior-art research is in
 [`../research/blocknote-vs-tiptap.md`](../research/blocknote-vs-tiptap.md).
 
-**Code:** `calcifer/src/lib/tiptap-extension-slash-command/`,
+**Code:** `web/src/lib/tiptap-extension-slash-command/`,
 `editors/tiptap/components/slash-menu/*`, `components/suggestion-popup.ts`.
 
 ---

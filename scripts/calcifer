@@ -13,7 +13,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-ui="$root/calcifer"
+ui="$root/web"
 server="$root/server"
 
 # The major version of the node on PATH, 0 when there is none.
