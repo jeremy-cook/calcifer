@@ -318,6 +318,7 @@ impl EntityService {
                 return Err(Status::invalid_argument(format!("{field} is required")));
             }
         }
+        reject_reserved_property_id(property_id)?;
         let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
@@ -1270,6 +1271,18 @@ fn date_properties(date: &str) -> HashMap<String, PropertyValue> {
     HashMap::from([("date".to_string(), value)])
 }
 
+/// `InvalidArgument` for a property id that starts with `@`. Those ids are
+/// reserved for the link scopes the server derives, such as `@related` (ADR 12,
+/// rule 9), so no write may name one as a property.
+pub(crate) fn reject_reserved_property_id(id: &str) -> Result<(), Status> {
+    if id.starts_with('@') {
+        return Err(Status::invalid_argument(
+            "property ids starting with @ are reserved",
+        ));
+    }
+    Ok(())
+}
+
 /// The registry entry for `structure_type`, or `InvalidArgument` for a type the
 /// registry doesn't declare (I-24). Every write or lookup that takes a
 /// `structure_type` goes through this, so an unknown type can't create an entity.
@@ -1376,6 +1389,9 @@ impl EntityServiceTrait for EntityService {
             properties,
             facets,
         } = req.into_inner();
+        for property_id in properties.keys() {
+            reject_reserved_property_id(property_id)?;
+        }
         let def = known_structure(&structure_type)?;
         if !def.creatable {
             return Err(Status::failed_precondition(format!(
@@ -1481,6 +1497,7 @@ impl EntityServiceTrait for EntityService {
         if property_id.is_empty() {
             return Err(Status::invalid_argument("property_id is required"));
         }
+        reject_reserved_property_id(&property_id)?;
         // An unset value, or one with no case, clears the property.
         let value = value.filter(|v| v.value.is_some());
         let now = chrono::Utc::now().timestamp_millis();
@@ -4553,6 +4570,83 @@ mod tests {
             wrong.message().contains("must reference a Tag"),
             "{}",
             wrong.message()
+        );
+
+        assert!(stored_property_ids(&pool, &entity.id).await.is_empty());
+        assert_eq!(svc.load_entity(&entity.id).await.expect("load"), entity);
+    }
+
+    // ADR 12, rule 9: no write may name a property id starting with `@`, since
+    // those are the link scopes the server derives.
+    #[tokio::test]
+    async fn reserved_property_ids_are_invalid_argument() {
+        use crate::proto::rich_text_service_server::RichTextService as _;
+        use crate::proto::GetRichTextRequest;
+
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let rich = richtext_service(pool.clone(), WatchHub::new());
+        let entity = create(&svc, note("Ship")).await;
+        let target = create(&svc, note("Dock")).await;
+        let before = entity_count(&pool).await;
+
+        fn assert_reserved(err: Status) {
+            assert_eq!(err.code(), tonic::Code::InvalidArgument);
+            assert!(err.message().contains("reserved"), "{}", err.message());
+        }
+
+        let create_err = try_create(
+            &svc,
+            with_value(
+                note("Sneaky"),
+                "@x",
+                property_value::Value::Text("v".into()),
+            ),
+        )
+        .await
+        .expect_err("CreateEntity with @x");
+        assert_reserved(create_err);
+        assert_eq!(entity_count(&pool).await, before);
+
+        let text = Some(property_value::Value::Text("v".into()));
+        assert_reserved(
+            set_property(&svc, &entity.id, "@related", text)
+                .await
+                .expect_err("SetEntityProperty with @related"),
+        );
+        assert_reserved(
+            set_property(&svc, &entity.id, "@related", None)
+                .await
+                .expect_err("clearing @related"),
+        );
+        assert_reserved(
+            add_target(&svc, &entity.id, "@related", &target.id)
+                .await
+                .expect_err("AddRelationTarget with @related"),
+        );
+        assert_reserved(
+            remove_target(&svc, &entity.id, "@related", &target.id)
+                .await
+                .expect_err("RemoveRelationTarget with @related"),
+        );
+
+        assert_reserved(
+            rich.put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: entity.id.clone(),
+                property_id: "@x".to_string(),
+                doc: r#"{"type":"doc","content":[]}"#.to_string(),
+                expected_updated_at: None,
+            }))
+            .await
+            .expect_err("PutRichText with @x"),
+        );
+        assert_reserved(
+            rich.get_rich_text(Request::new(GetRichTextRequest {
+                entity_id: entity.id.clone(),
+                property_id: "@x".to_string(),
+            }))
+            .await
+            .expect_err("GetRichText with @x"),
         );
 
         assert!(stored_property_ids(&pool, &entity.id).await.is_empty());

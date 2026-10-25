@@ -10,7 +10,9 @@ use crate::proto::{
     GetRichTextRequest, GetRichTextResponse, PutRichTextRequest, PutRichTextResponse, RichText,
     RichTextRef,
 };
-use crate::services::entity::{fts_upsert_body, load_entity, ts_from_millis};
+use crate::services::entity::{
+    fts_upsert_body, load_entity, reject_reserved_property_id, ts_from_millis,
+};
 use crate::structures;
 use crate::tiptap::references::extract_doc_references;
 use crate::tiptap::text::extract_plain_text;
@@ -28,7 +30,8 @@ impl RichTextService {
     }
 }
 
-/// `InvalidArgument` if either id of `r` is empty, checked before any lookup (I-50).
+/// `InvalidArgument` if either id of `r` is empty, or the property id is reserved
+/// (starts with `@`, ADR 12), checked before any lookup (I-50).
 fn require_ids(r: &RichTextRef) -> Result<(), Status> {
     if r.entity_id.is_empty() {
         return Err(Status::invalid_argument("entity_id is required"));
@@ -36,7 +39,7 @@ fn require_ids(r: &RichTextRef) -> Result<(), Status> {
     if r.property_id.is_empty() {
         return Err(Status::invalid_argument("property_id is required"));
     }
-    Ok(())
+    reject_reserved_property_id(&r.property_id)
 }
 
 /// Check that `r` names a declared rich-text property of an existing entity:
