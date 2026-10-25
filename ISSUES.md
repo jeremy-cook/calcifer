@@ -168,6 +168,24 @@ scope `format` to `src` to match `format:check`.
 
 ---
 
+### I-75 · `get_note` reports a missing note as a result, not an error · low · confirmed
+
+**Where:** `server/src/mcp/tools.rs` (`get_note`, `find_doc`)
+
+**Problem:** `get_note {name}` for a note that doesn't exist returns "No note named …" as
+an ordinary result (`isError: false`), while `get_note {date}` for a missing day, and
+`query_text_location` / `edit_note` for either, return `isError: true`. An agent that
+checks `isError` treats the missing note as found. Kept as it was when the date form was
+added; found in T01 of the agent-daily-notes plan, confirmed by reading.
+
+**Fix:** Have `get_note` by name fail through `existing_doc` like the others, and update
+the tests that assert the plain-result text.
+
+**Done when:** a missing note and a missing day both come back from `get_note` with
+`isError: true`.
+
+---
+
 ## Resolved
 
 - **I-72 · The agent can't see or change an existing note's tags.** Fixed 2026-10-24 (70155a8). `get_note`'s frontmatter has a `tags` line, `create_note` reads it back when given no `tags` argument, and the new `tag_entity(name, add, remove)` tool tags and untags an existing note one target at a time. Covered by `tag_entity_adds_and_removes`, `tag_entity_keeps_a_concurrent_tag` and the extended `get_note_copied_into_create_note_links_the_same_targets`; checked over MCP on a scratch DB.

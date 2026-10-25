@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `i-34-tag-edits` @ `1a1b189`, where I-34 and I-72 are fixed (stacked on `tooling-pass`).
+**Last reviewed:** 2026-10-24, against `agent-daily-notes` @ `0cdb433`, where the agent reads and edits daily notes by date (stacked on `i-34-tag-edits`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,13 +22,12 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | Agent reads and edits daily notes (Smaller items) | S | `get_note`, `query_text_location` and `edit_note` take a `date` as an alternative to `name`. |
-| 2 | Connection status (below) | M | Says when the server can't be reached, at load and after a drop, and recovers by itself. |
-| 3 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses Connection status's retrying state. |
-| 4 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
-| 5 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
-| 6 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 7 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | Connection status (below) | M | Says when the server can't be reached, at load and after a drop, and recovers by itself. |
+| 2 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses Connection status's retrying state. |
+| 3 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
+| 4 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
+| 5 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 6 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ### Connection status · size: M
 
@@ -157,11 +156,6 @@ the acceptance suite, and I-61's escaping cases belong in it.
   tags. Add the properties, taking inspiration from Taskwarrior's `task add` (`due:fri`,
   `priority:H`, named dates like `eow`). Decide how a property token is told apart from
   the end of the name, and whether the agent shares the parser.
-- **Agent reads and edits daily notes** (Current work 1) — the agent can create and append to a daily
-  note, but `get_note`, `query_text_location` and `edit_note` look up Notes by name
-  only, so it can't read a day in full or fix what's already there. Let those three
-  take a `date` as an alternative to `name`, through the same `ResolveEntity` date key
-  `append_to_daily_note` uses (without creating a missing day).
 - **Tags on DailyNote** — ADR 11 gives only Note the `tags` property; adding it to
   DailyNote is a one-line registry edit once there's a reason.
 - **Editor gaps** — none blocking: emoji picker, math/KaTeX, table of contents,
