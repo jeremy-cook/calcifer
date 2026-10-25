@@ -17,8 +17,6 @@ import { TaskItem } from '@tiptap/extension-task-item'
 import { Typography } from '@tiptap/extension-typography'
 import { ReactNodeViewRenderer } from '@tiptap/react'
 import { Link } from '@tiptap/extension-link'
-import { bundledLanguages } from 'shiki'
-import type { BundledLanguage } from 'shiki'
 
 import { Details, DetailsContent, DetailsSummary } from '@tiptap/extension-details'
 import { Table } from '@tiptap/extension-table'
@@ -27,10 +25,10 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 
 import { CodeBlockShiki } from '~/lib/tiptap-extension-code-block-shiki'
+import { getHighlighter } from '~/lib/shiki'
 import { DateChip } from '~/lib/tiptap-extension-date'
 import { DateChipView } from '~/editors/tiptap/components/date/DateChipView'
 import { ResizableImage } from '~/lib/tiptap-extension-resize-image'
-import { CODE_LANGUAGES } from './components/formatting-options'
 import { SlashCommand } from '~/lib/tiptap-extension-slash-command'
 import { slashSuggestion } from './components/slash-menu/slash-suggestion'
 import { EntityMention, HashtagMention } from './extensions/entity-mention'
@@ -117,7 +115,7 @@ export function TiptapEditor({
           light: 'everforest-dark',
           dark: 'everforest-dark',
         },
-        languages: CODE_LANGUAGES.map((l) => l.value).filter((v): v is BundledLanguage => v in bundledLanguages),
+        getHighlighter,
       }).extend({
         addNodeView() {
           return ReactNodeViewRenderer(TiptapCodeBlock)

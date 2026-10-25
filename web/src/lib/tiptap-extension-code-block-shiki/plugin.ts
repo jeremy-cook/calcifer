@@ -3,29 +3,12 @@ import type { Node as ProsemirrorNode } from '@tiptap/pm/model'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import type { Step } from '@tiptap/pm/transform'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
-import { createHighlighter, bundledLanguages } from 'shiki'
-import type { Highlighter, BundledTheme, BundledLanguage } from 'shiki'
+import type { HighlighterCore } from 'shiki/core'
+import type { BundledTheme } from 'shiki'
 
 export const SHIKI_FORCE_DECORATION = 'shikiForceDecoration'
 
-let highlighter: Highlighter | null = null
-let highlighterPromise: Promise<void> | null = null
-
-export type GetHighlighter = () => Highlighter
-
-// May return null before async init completes
-export function getDefaultHighlighter(): Highlighter | null {
-  return highlighter
-}
-
-export function initHighlighter(themes: BundledTheme[], languages: BundledLanguage[]): Promise<void> {
-  if (highlighter) return Promise.resolve()
-  if (highlighterPromise) return highlighterPromise
-  highlighterPromise = createHighlighter({ themes, langs: languages }).then((h) => {
-    highlighter = h
-  })
-  return highlighterPromise
-}
+export type GetHighlighter = () => HighlighterCore
 
 interface ShikiPluginOptions {
   name: string
@@ -38,8 +21,6 @@ interface GetDecorationsOptions extends ShikiPluginOptions {
   doc: ProsemirrorNode
 }
 
-const isBundledLanguage = (l: string): l is BundledLanguage => l in bundledLanguages
-
 function getDecorations({
   doc,
   name,
@@ -47,7 +28,7 @@ function getDecorations({
   themes,
   defaultLanguage,
 }: GetDecorationsOptions): DecorationSet {
-  const h = get ? get() : getDefaultHighlighter()
+  const h = get?.()
   if (!h) return DecorationSet.empty
 
   const decorations: Decoration[] = []
@@ -56,7 +37,7 @@ function getDecorations({
   findChildren(doc, (node) => node.type.name === name).forEach((block) => {
     let from = block.pos + 1
     const requestedLang = (block.node.attrs.language as string) || defaultLanguage || ''
-    if (!isBundledLanguage(requestedLang) || !languages.includes(requestedLang)) return
+    if (!languages.includes(requestedLang)) return
 
     const lang = requestedLang
     const result = h.codeToTokens(block.node.textContent, { lang, themes })

@@ -5,7 +5,7 @@ import { Button } from '~/components/ui/button'
 import { CopySimpleIcon, CheckIcon } from '@phosphor-icons/react'
 import { CODE_LANGUAGES } from '../formatting-options'
 
-export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProps) {
+export function TiptapCodeBlock({ node, updateAttributes }: NodeViewProps) {
   const [copied, setCopied] = useState(false)
   const language = (node.attrs.language as string) || 'plaintext'
 
@@ -17,7 +17,6 @@ export function TiptapCodeBlock({ node, updateAttributes, editor }: NodeViewProp
 
   const handleLanguageChange = (v: string) => {
     updateAttributes({ language: v })
-    editor.commands.loadCodeLanguage(v as Parameters<typeof editor.commands.loadCodeLanguage>[0])
   }
 
   return (

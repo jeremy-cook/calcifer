@@ -25,6 +25,38 @@ export default defineConfig({
       '@calcifer/proto': path.resolve(__dirname, 'gen/ts'),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        // The editor's libraries get chunks of their own, so an app change doesn't
+        // invalidate them in the browser's cache and no chunk passes the 500 kB
+        // warning. Only named libraries are grouped, and not @tiptap: a @tiptap
+        // group ends up statically imported by the first screen, which would then
+        // download the whole editor. The grammars are one chunk each.
+        codeSplitting: {
+          groups: [
+            { name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/, priority: 40 },
+            {
+              name: 'prosemirror',
+              test: /node_modules[\\/](prosemirror-[^\\/]+|orderedmap|rope-sequence|w3c-keyname)[\\/]/,
+              priority: 30,
+            },
+            { name: 'pickers', test: /node_modules[\\/](cmdk|react-day-picker|date-fns)[\\/]/, priority: 25 },
+            {
+              // One chunk per grammar, so the largest (TypeScript, HTML) stay small.
+              name: (id) => {
+                const grammar = id.match(/@shikijs[\\/]langs[\\/]dist[\\/]([\w-]+)\.mjs/)?.[1]
+                return grammar ? `shiki-${grammar}` : null
+              },
+              test: /@shikijs[\\/]langs[\\/]dist[\\/]/,
+              priority: 15,
+            },
+            { name: 'shiki', test: /node_modules[\\/](shiki|@shikijs)[\\/]/, priority: 10 },
+          ],
+        },
+      },
+    },
+  },
   server: {
     proxy: {
       // Forward gRPC-Web calls to the backend, which serves them under /api.
