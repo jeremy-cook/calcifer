@@ -1,5 +1,3 @@
-import type { Editor, Range } from '@tiptap/core'
-import type { Icon } from '@phosphor-icons/react'
 import {
   CalendarBlankIcon,
   CalendarIcon,
@@ -17,17 +15,9 @@ import {
   ImageIcon,
   MinusIcon,
 } from '@phosphor-icons/react'
-import { showDatePicker } from '~/editors/tiptap/components/date/showDatePicker'
+import type { SlashCommandItem } from '~/lib/tiptap-extension-slash-command'
+import { showDatePicker } from '../date/showDatePicker'
 import { shiftIso, todayIso } from '~/model/dates'
-
-export type SlashCommandItem = {
-  title: string
-  subtitle: string
-  group: string
-  icon?: Icon
-  searchTerms?: string[]
-  command: (props: { editor: Editor; range: Range }) => void
-}
 
 export const SLASH_ITEMS: SlashCommandItem[] = [
   // Inline

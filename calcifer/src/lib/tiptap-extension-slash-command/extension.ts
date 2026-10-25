@@ -1,7 +1,7 @@
 import { Extension } from '@tiptap/core'
 import Suggestion from '@tiptap/suggestion'
 import type { SuggestionOptions } from '@tiptap/suggestion'
-import type { SlashCommandItem } from './items'
+import type { SlashCommandItem } from './types'
 
 export type SlashCommandOptions = {
   suggestion: Omit<SuggestionOptions<SlashCommandItem>, 'editor'>

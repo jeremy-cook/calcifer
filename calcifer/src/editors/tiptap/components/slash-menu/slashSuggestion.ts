@@ -1,5 +1,6 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
-import { SLASH_ITEMS, type SlashCommandItem } from '~/lib/tiptap-extension-slash-command'
+import type { SlashCommandItem } from '~/lib/tiptap-extension-slash-command'
+import { SLASH_ITEMS } from './slashItems'
 import { createSuggestionPopup } from '~/editors/tiptap/components/suggestionPopup'
 import { SlashCommandMenu } from './SlashCommandMenu'
 
