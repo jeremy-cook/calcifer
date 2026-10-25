@@ -832,6 +832,22 @@ mod tests {
         assert_eq!(f.notes_named("a[b]c").await.len(), 1);
     }
 
+    // The name is refused before resolving the body's #tags and the `tags` list,
+    // which would create Tags and leave them behind.
+    #[tokio::test]
+    async fn create_note_with_a_refused_name_leaves_nothing_behind() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+
+        let refused = err(f
+            .k
+            .create_note("A|B", "Body #leaky.", Some(&["t1".into()]))
+            .await);
+
+        assert_eq!(refused, r#"names can't contain "|" or "]]""#);
+        assert_eq!(f.entity_count().await, before, "no note or Tag was created");
+    }
+
     // A note's name can look like a structure path: `[[Note/Tag/X]]` is the Note
     // named "Tag/X", never the Tag "X", and link_notes takes the name as it is.
     #[tokio::test]

@@ -1434,8 +1434,8 @@ fn known_structure(structure_type: &str) -> Result<&'static structures::Structur
 /// `InvalidArgument` if `name` (already trimmed) contains `|` or `]]`. The agent's
 /// link syntax (`[[Name|Alias]]`, closed by `]]`) can't express such a name, so no
 /// path that sets one accepts it (I-61). A lone `[` or `]` is fine: only `]]`
-/// closes a link.
-fn check_name_chars(name: &str) -> Result<(), Status> {
+/// closes a link. The MCP `create_note` calls it too, before it writes anything.
+pub(crate) fn check_name_chars(name: &str) -> Result<(), Status> {
     if name.contains('|') || name.contains("]]") {
         return Err(Status::invalid_argument(
             r#"names can't contain "|" or "]]""#,

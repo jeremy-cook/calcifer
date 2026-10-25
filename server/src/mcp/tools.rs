@@ -20,7 +20,7 @@ use crate::proto::{
     RemoveRelationTargetRequest, RemoveRelationshipRequest, ResolveEntityRequest,
     ResolveEntityResponse, SearchMode, SearchRequest, SetEntityPropertyRequest,
 };
-use crate::services::entity::{ts_from_millis, EntityService};
+use crate::services::entity::{check_name_chars, ts_from_millis, EntityService};
 use crate::services::richtext::RichTextService;
 use crate::services::search::SearchService;
 use crate::structures::{self, PropertyDef, PropertyKind, FACETS, STRUCTURES};
@@ -555,6 +555,9 @@ impl Knowledge {
             Err(e) if is_code(&e, Code::NotFound) => {}
             Err(e) => return Err(e.into()),
         }
+        // Before anything is written: resolving #tags below creates Tags, and a
+        // refused name would leave them behind.
+        check_name_chars(name.trim())?;
 
         // Before the first write: resolving the body's #tags creates Tags.
         let tags = match tags {
