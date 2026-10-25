@@ -90,23 +90,6 @@ published last.
 
 ---
 
-### I-61 · Names containing `|` or `]]` can't be written in MCP link syntax · low · confirmed
-
-**Where:** `server/src/mcp/markdown.rs` (`mention_markdown`, the `[[…]]` parser), `server/src/services/entity.rs` (name writes)
-
-**Problem:** `get_note` writes a Note's name unescaped inside `[[…]]`, so a name containing
-`|` or `]]` is misparsed when read back or copied into `create_note`. Found in T28. The
-`link_notes` half (raw `[[{to}]]` and structure-prefix confusion) is gone: since direct
-relationships, `link_notes` calls `AddRelationship` and writes no text.
-
-**Fix:** Refuse `|` and `]]` in entity names on create and rename (decided by the user 2026-10-24, over an escape syntax). No existing name contains them, so nothing needs migrating. The structure-prefix half goes away when `link_notes` calls `AddRelationship` (ADR 12) instead of writing `[[{to}]]`.
-
-**Done when:** creating or renaming an entity to a name containing `|` or `]]` is
-`INVALID_ARGUMENT` from every writer (browser and MCP), and a Note named `Tag/X`
-round-trips through `link_notes`, `get_note` and `create_note`.
-
----
-
 ### I-73 · `create_note`'s tags aren't written in the note's transaction · low · confirmed
 
 **Where:** `server/src/mcp/tools.rs` (`create_note`, `resolve_tags`, `set_tags`)
@@ -206,6 +189,7 @@ direct-relationships plan, confirmed by reading.
 
 ## Resolved
 
+- **I-61 · Names containing `|` or `]]` can't be written in MCP link syntax.** Fixed 2026-10-24 (8a53ebd, 243cab9, 5bfd190). The server refuses `|` and `]]` in a name on `CreateEntity`, `RenameEntity` and a creating `ResolveEntity` (user's choice over an escape syntax; no existing names needed migrating), and `create_note` checks the name before writing anything. The `link_notes` half went with direct relationships. Verified over MCP on a scratch DB (`A|B` and `x]]y` refused with nothing left behind, `a[b]c` accepted, a Note named `Tag/X` round-trips and `link_notes` to it relates the Note) and in the browser (a rename to `A|B` reverts).
 - **I-42 · A rich-text save that fails for a non-conflict reason is dropped silently.** Fixed 2026-10-24 (e00b852). A save that fails for a reason that can pass is kept and retried with backoff (1 s doubling to 30 s, and at once when the Watch stream turns live), and the editor shows "Not saved yet. Retrying…" until it lands. The retry keeps the doc's outstanding save open, so a daily-note prune waits for it. Covered by eight `usePutRichText` tests; in the browser, text typed with the server down saved by itself when it returned, and an empty daily note typed in offline and then left was saved, not pruned.
 - **I-72 · The agent can't see or change an existing note's tags.** Fixed 2026-10-24 (70155a8). `get_note`'s frontmatter has a `tags` line, `create_note` reads it back when given no `tags` argument, and the new `tag_entity(name, add, remove)` tool tags and untags an existing note one target at a time. Covered by `tag_entity_adds_and_removes`, `tag_entity_keeps_a_concurrent_tag` and the extended `get_note_copied_into_create_note_links_the_same_targets`; checked over MCP on a scratch DB.
 - **I-34 · Relation edits resend the whole list.** Fixed 2026-10-24 (6b9c1dd, ff1aa8c, f6480c1). New `AddRelationTarget` / `RemoveRelationTarget` RPCs change one target of a `relations` property, idempotently, and the browser's tag field uses them. Covered by `two_adds_of_different_targets_both_survive` and the store tests; on a scratch DB, a tag added by the agent while the page was open and one added in the browser both survived.

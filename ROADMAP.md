@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `direct-relationships` @ `fe9d89c`, where direct relationships are built (stacked on `i-42-save-retry`).
+**Last reviewed:** 2026-10-24, against `i-61-name-rule` @ `243cab9`, the end of a stack of seven queue branches from `tooling-pass` (each ready to merge in order).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,9 +22,8 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. The `link_notes` half went with direct relationships. |
-| 2 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 3 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 2 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ## Next up
 
