@@ -68,6 +68,10 @@ pub struct StructureDef {
     pub keys: &'static [KeyDef],
     /// Facet ids this structure accepts.
     pub facets: &'static [&'static str],
+    /// Structure types its entities may hold direct relationships to (ADR 12);
+    /// empty = none. It limits what can be attached with `AddRelationship`,
+    /// never what a document may mention.
+    pub relates_to: &'static [&'static str],
 }
 
 /// A facet: a fixed group of properties an entity can have attached or not,
@@ -153,6 +157,7 @@ pub const STRUCTURES: &[StructureDef] = &[
         name_editable: true,
         keys: &[],
         facets: &["todo"],
+        relates_to: &["Note"],
     },
     StructureDef {
         type_: "Tag",
@@ -169,6 +174,7 @@ pub const STRUCTURES: &[StructureDef] = &[
             source: KeySource::Name,
         }],
         facets: &[],
+        relates_to: &[],
     },
     StructureDef {
         type_: "DailyNote",
@@ -189,6 +195,7 @@ pub const STRUCTURES: &[StructureDef] = &[
             source: KeySource::Property("date"),
         }],
         facets: &[],
+        relates_to: &[],
     },
 ];
 
@@ -365,6 +372,7 @@ impl From<&StructureDef> for proto::StructureDef {
             unique_names: def.unique_names(),
             name_editable: def.name_editable,
             facets: def.facets.iter().map(|f| f.to_string()).collect(),
+            relates_to: def.relates_to.iter().map(|t| t.to_string()).collect(),
         }
     }
 }
@@ -551,5 +559,34 @@ mod tests {
         assert!(property_for("Note", &["todo"], "todo.nope").is_none());
         assert!(property_for("Note", &["todo"], "nope.status").is_none());
         assert!(property_for("Nope", &[], "content").is_none());
+    }
+
+    #[test]
+    fn relates_to_names_known_structures() {
+        for s in STRUCTURES {
+            for target in s.relates_to {
+                assert!(
+                    structure(target).is_some(),
+                    "{} relates to undeclared structure {target:?}",
+                    s.type_
+                );
+            }
+        }
+        assert_eq!(structure("Note").expect("Note").relates_to, ["Note"]);
+        assert!(structure("Tag").expect("Tag").relates_to.is_empty());
+        assert!(structure("DailyNote")
+            .expect("DailyNote")
+            .relates_to
+            .is_empty());
+    }
+
+    // `@` ids are reserved for link scopes the server derives (ADR 12, rule 9).
+    #[test]
+    fn no_property_id_starts_with_at() {
+        let structure_props = STRUCTURES.iter().flat_map(|s| s.properties);
+        let facet_props = FACETS.iter().flat_map(|f| f.properties);
+        for p in structure_props.chain(facet_props) {
+            assert!(!p.id.starts_with('@'), "property {:?} starts with @", p.id);
+        }
     }
 }

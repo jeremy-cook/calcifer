@@ -108,6 +108,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_structures_carries_relates_to() {
+        let structures = list().await;
+        let relates_to = |structure_type: &str| -> Vec<String> {
+            structures
+                .iter()
+                .find(|s| s.r#type == structure_type)
+                .expect("structure")
+                .relates_to
+                .clone()
+        };
+        assert_eq!(relates_to("Note"), ["Note"]);
+        assert!(relates_to("Tag").is_empty());
+        assert!(relates_to("DailyNote").is_empty());
+    }
+
+    #[tokio::test]
     async fn list_returns_facets() {
         let response = list_response().await;
         let ids: Vec<&str> = response.facets.iter().map(|f| f.id.as_str()).collect();
@@ -183,6 +199,7 @@ mod tests {
                 )
             );
             assert_eq!(wire.facets, def.facets);
+            assert_eq!(wire.relates_to, def.relates_to);
             assert_eq!(wire.properties.len(), def.properties.len());
             for (wp, dp) in wire.properties.iter().zip(def.properties) {
                 assert_eq!(wp.id, dp.id);

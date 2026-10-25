@@ -111,4 +111,86 @@ mod tests {
             .expect("count");
         assert_eq!(left, 0);
     }
+
+    #[tokio::test]
+    async fn relationships_cascades_from_either_end() {
+        let pool = memory_pool().await;
+        let keys: Vec<(String, String, String)> = sqlx::query_as(
+            "SELECT \"from\", \"table\", on_delete FROM pragma_foreign_key_list('relationships')
+             ORDER BY \"from\"",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("relationships has foreign keys");
+        let keys: Vec<(&str, &str, &str)> = keys
+            .iter()
+            .map(|(from, table, on_delete)| (from.as_str(), table.as_str(), on_delete.as_str()))
+            .collect();
+        assert_eq!(
+            keys,
+            [
+                ("entity_id", "entities", "CASCADE"),
+                ("target_id", "entities", "CASCADE"),
+            ]
+        );
+        let indexed: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM pragma_index_list('relationships') WHERE name = 'relationships_target'",
+        )
+        .fetch_one(&pool)
+        .await
+        .expect("index list");
+        assert_eq!(indexed, 1);
+
+        for id in ["a", "b", "c"] {
+            sqlx::query(
+                "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
+                 VALUES (?, 'Note', ?, 0, 0)",
+            )
+            .bind(id)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("insert entity");
+        }
+        for (entity_id, target_id) in [("a", "b"), ("b", "c")] {
+            sqlx::query(
+                "INSERT INTO relationships (entity_id, target_id, created_at) VALUES (?, ?, 0)",
+            )
+            .bind(entity_id)
+            .bind(target_id)
+            .execute(&pool)
+            .await
+            .expect("insert relationship");
+        }
+        let duplicate = sqlx::query(
+            "INSERT INTO relationships (entity_id, target_id, created_at) VALUES ('a', 'b', 1)",
+        )
+        .execute(&pool)
+        .await;
+        assert!(
+            duplicate.is_err(),
+            "(entity_id, target_id) is the primary key"
+        );
+
+        let count = || async {
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM relationships")
+                .fetch_one(&pool)
+                .await
+                .expect("count")
+        };
+        assert_eq!(count().await, 2);
+
+        // Deleting the target ('c') removes b -> c; deleting the source ('a')
+        // removes a -> b.
+        sqlx::query("DELETE FROM entities WHERE id = 'c'")
+            .execute(&pool)
+            .await
+            .expect("delete target");
+        assert_eq!(count().await, 1);
+        sqlx::query("DELETE FROM entities WHERE id = 'a'")
+            .execute(&pool)
+            .await
+            .expect("delete source");
+        assert_eq!(count().await, 0);
+    }
 }

@@ -41,6 +41,7 @@ message StructureDef {
   bool unique_names = 8;                 // case-insensitive name is the identity
   bool name_editable = 9;
   repeated string facets = 10;           // facet ids this structure accepts, e.g. 'todo'
+  repeated string relates_to = 11;       // structure types its entities may hold relationships to (ADR 12); empty = none
 }
 
 // A facet: a fixed group of properties that can be attached to and detached
