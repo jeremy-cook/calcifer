@@ -4,6 +4,8 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },
   ],
+  // The app project declares the same paths; this copy is for tools that read
+  // only the root file (the shadcn CLI resolves its aliases from it).
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
