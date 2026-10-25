@@ -36,7 +36,7 @@ so each item owns its own insertion behaviour and is responsible for its own
 
 ## Items
 
-`SLASH_ITEMS` in `items.ts`. Shape:
+`SLASH_ITEMS` in `editors/tiptap/components/slash-menu/slash-items.ts`. Shape:
 
 ```ts
 interface SlashCommandItem {
