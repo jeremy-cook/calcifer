@@ -24,7 +24,7 @@ use crate::proto::{
     RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
     SetEntityPropertyResponse, WatchEntitiesRequest, WatchEntitiesResponse,
 };
-use crate::structures::{self, fold_name, FacetDef, KeyDef, KeySource, PropertyKind};
+use crate::structures::{self, fold_name, FacetDef, KeyDef, KeySource, PropertyKind, StructureDef};
 use crate::watch::WatchHub;
 
 /// The reserved link scope a relationship's links are derived under (ADR 12, rules 8
@@ -108,7 +108,7 @@ impl EntityService {
         structure_type: &str,
         name: &str,
     ) -> Result<Option<String>, AppError> {
-        if let Some(def) = structures::structure(structure_type).and_then(|s| s.name_key()) {
+        if let Some(def) = structures::structure(structure_type).and_then(StructureDef::name_key) {
             return self
                 .find_by_key(structure_type, def.key, &fold_name(name))
                 .await;
@@ -704,7 +704,7 @@ pub(crate) async fn load_entity(pool: &SqlitePool, id: &str) -> Result<Entity, A
     )
     .fetch_optional(pool)
     .await?
-    .ok_or_else(|| AppError::NotFound(format!("entity {}", id)))?;
+    .ok_or_else(|| AppError::NotFound(format!("entity {id}")))?;
 
     let prop_rows = sqlx::query!(
         r#"SELECT property_id AS "property_id!", value_blob AS "value_blob!"
@@ -3249,10 +3249,18 @@ mod tests {
         .map(|r| r.into_inner().entity.expect("entity"))
     }
 
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "fills the Option<Value> of a property literal"
+    )]
     fn select(key: &str) -> Option<property_value::Value> {
         Some(property_value::Value::Select(key.to_string()))
     }
 
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "fills the Option<Value> of a property literal"
+    )]
     fn tags_value(refs: &[(&str, &str)]) -> Option<property_value::Value> {
         Some(property_value::Value::Relations(EntityRefList {
             refs: refs
@@ -3533,6 +3541,10 @@ mod tests {
             .expect("entity")
     }
 
+    #[allow(
+        clippy::unnecessary_wraps,
+        reason = "fills the Option<Value> of a property literal"
+    )]
     fn date(d: &str) -> Option<property_value::Value> {
         Some(property_value::Value::Date(d.to_string()))
     }
@@ -4957,7 +4969,7 @@ mod tests {
         let target = create(&svc, note("Dock")).await;
         let before = entity_count(&pool).await;
 
-        fn assert_reserved(err: Status) {
+        fn assert_reserved(err: &Status) {
             assert_eq!(err.code(), tonic::Code::InvalidArgument);
             assert!(err.message().contains("reserved"), "{}", err.message());
         }
@@ -4972,48 +4984,50 @@ mod tests {
         )
         .await
         .expect_err("CreateEntity with @x");
-        assert_reserved(create_err);
+        assert_reserved(&create_err);
         assert_eq!(entity_count(&pool).await, before);
 
         let text = Some(property_value::Value::Text("v".into()));
         assert_reserved(
-            set_property(&svc, &entity.id, "@related", text)
+            &set_property(&svc, &entity.id, "@related", text)
                 .await
                 .expect_err("SetEntityProperty with @related"),
         );
         assert_reserved(
-            set_property(&svc, &entity.id, "@related", None)
+            &set_property(&svc, &entity.id, "@related", None)
                 .await
                 .expect_err("clearing @related"),
         );
         assert_reserved(
-            add_target(&svc, &entity.id, "@related", &target.id)
+            &add_target(&svc, &entity.id, "@related", &target.id)
                 .await
                 .expect_err("AddRelationTarget with @related"),
         );
         assert_reserved(
-            remove_target(&svc, &entity.id, "@related", &target.id)
+            &remove_target(&svc, &entity.id, "@related", &target.id)
                 .await
                 .expect_err("RemoveRelationTarget with @related"),
         );
 
         assert_reserved(
-            rich.put_rich_text(Request::new(PutRichTextRequest {
-                entity_id: entity.id.clone(),
-                property_id: "@x".to_string(),
-                doc: r#"{"type":"doc","content":[]}"#.to_string(),
-                expected_updated_at: None,
-            }))
-            .await
-            .expect_err("PutRichText with @x"),
+            &rich
+                .put_rich_text(Request::new(PutRichTextRequest {
+                    entity_id: entity.id.clone(),
+                    property_id: "@x".to_string(),
+                    doc: r#"{"type":"doc","content":[]}"#.to_string(),
+                    expected_updated_at: None,
+                }))
+                .await
+                .expect_err("PutRichText with @x"),
         );
         assert_reserved(
-            rich.get_rich_text(Request::new(GetRichTextRequest {
-                entity_id: entity.id.clone(),
-                property_id: "@x".to_string(),
-            }))
-            .await
-            .expect_err("GetRichText with @x"),
+            &rich
+                .get_rich_text(Request::new(GetRichTextRequest {
+                    entity_id: entity.id.clone(),
+                    property_id: "@x".to_string(),
+                }))
+                .await
+                .expect_err("GetRichText with @x"),
         );
 
         assert!(stored_property_ids(&pool, &entity.id).await.is_empty());
