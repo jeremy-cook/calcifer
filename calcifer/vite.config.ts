@@ -8,10 +8,7 @@ import { tanstackRouter } from '@tanstack/router-plugin/vite'
 // The backend's UI and API listener (scripts/calcifer passes CALCIFER_ADDR
 // through). A wildcard bind is reached on localhost, because the backend
 // refuses requests whose Host isn't this machine.
-const backendAddr = (process.env.CALCIFER_ADDR ?? '127.0.0.1:8080').replace(
-  /^(0\.0\.0\.0|\[::\])(?=:)/,
-  'localhost',
-)
+const backendAddr = (process.env.CALCIFER_ADDR ?? '127.0.0.1:8080').replace(/^(0\.0\.0\.0|\[::\])(?=:)/, 'localhost')
 
 export default defineConfig({
   plugins: [
