@@ -1,49 +1,6 @@
 use super::*;
 
 #[test]
-fn new_entity_builds_defaults_and_lets_the_caller_win() {
-    let entity = new_entity(
-        "Note",
-        Some("Water plants"),
-        HashMap::from([(
-            "todo.priority".to_string(),
-            PropertyValue {
-                value: Some(property_value::Value::Select("high".to_string())),
-            },
-        )]),
-        &[structures::facet("todo").expect("todo facet")],
-    );
-
-    assert_eq!(entity.name, "Water plants");
-    assert_eq!(
-        select_value(&entity, "todo.status").as_deref(),
-        Some("open")
-    );
-    assert_eq!(
-        select_value(&entity, "todo.priority").as_deref(),
-        Some("high")
-    );
-    // The defaults (status, priority) with the caller's priority laid over.
-    assert_eq!(entity.properties.len(), 2);
-    // Rich-text properties get no value (I-22).
-    assert!(!entity.properties.contains_key("content"));
-}
-
-// A map entry can't omit its value, so a value with no case is the "missing
-// value" a Property with no value used to be (I-28).
-#[tokio::test]
-async fn create_with_an_empty_property_value_is_invalid_argument() {
-    let svc = entity_service(memory_pool().await);
-    let mut req = note("Empty");
-    req.properties
-        .insert("mood".to_string(), PropertyValue { value: None });
-
-    let err = try_create(&svc, req).await.expect_err("empty value");
-
-    assert_eq!(err.code(), tonic::Code::InvalidArgument);
-}
-
-#[test]
 fn new_entity_names_a_daily_note_for_its_date() {
     let entity = new_entity(
         "DailyNote",
@@ -211,4 +168,26 @@ async fn clearing_a_daily_note_date_removes_its_key_row() {
         .await
         .expect("the day is free");
     assert!(resolved.created);
+}
+
+// I-26: a DailyNote is named for its date, so Rename refuses it.
+#[tokio::test]
+async fn rename_of_a_daily_note_is_failed_precondition() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let day = resolve(&svc, "", by_date("2026-06-13"), true)
+        .await
+        .expect("create daily note")
+        .entity
+        .expect("entity");
+
+    let err = rename(&svc, &day.id, "Friday")
+        .await
+        .expect_err("DailyNote names aren't editable");
+
+    assert_eq!(err.code(), tonic::Code::FailedPrecondition);
+    let stored = svc.load_entity(&day.id).await.expect("load");
+    assert_eq!(stored.name, "June 13, 2026");
+    assert_eq!(stored.updated_at, day.updated_at);
+    assert_eq!(fts_name(&pool, &day.id).await, "June 13, 2026");
 }

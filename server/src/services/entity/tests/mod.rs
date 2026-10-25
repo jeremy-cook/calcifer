@@ -1,11 +1,12 @@
 //! Tests for `EntityService`, by topic. The helpers here are shared by all of them.
 
+mod concurrency;
+mod create;
 mod daily_notes;
 mod delete;
 mod facets;
-mod lifecycle;
 mod list;
-mod properties;
+mod names;
 mod relation_targets;
 mod relationships;
 mod resolve;

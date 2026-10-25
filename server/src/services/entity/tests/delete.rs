@@ -122,3 +122,99 @@ async fn delete_leaves_rich_text_mentions_out_of_properties() {
     );
     assert!(rx.try_recv().is_err(), "no upsert for a rich-text mention");
 }
+
+#[tokio::test]
+async fn delete_removes_facet_rows() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
+    let _kept = create(&svc, with_facets(note("Kept"), &["todo"])).await;
+    assert_eq!(facet_row_count(&pool).await, 2);
+
+    delete(&svc, &ship.id).await;
+
+    assert_eq!(facet_row_count(&pool).await, 1);
+}
+
+#[tokio::test]
+async fn delete_removes_key_rows() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let label = create(&svc, tag("urgent")).await;
+    let day = daily_note(&svc, "2026-06-13").await;
+    assert_eq!(key_row_count(&pool).await, 2);
+
+    delete(&svc, &label.id).await;
+    delete(&svc, &day.id).await;
+
+    assert_eq!(key_row_count(&pool).await, 0);
+}
+
+#[tokio::test]
+async fn delete_removes_richtext_chunks_and_embeddings() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let gone = create(&svc, note("Gone")).await;
+    let kept = create(&svc, note("Kept")).await;
+    for entity in [&gone, &kept] {
+        put_content(
+            &pool,
+            &entity.id,
+            &[r#"{"type":"text","text":"body"}"#.to_string()],
+        )
+        .await;
+        // Embeddings are disabled in tests, so store a chunk and its
+        // vector as the embed worker would.
+        let chunk_id: i64 = sqlx::query_scalar(
+            "INSERT INTO chunks (entity_id, chunk_index, text) VALUES (?, 0, '') RETURNING id",
+        )
+        .bind(&entity.id)
+        .fetch_one(&pool)
+        .await
+        .expect("insert chunk");
+        sqlx::query("INSERT INTO entity_vec (id, embedding) VALUES (?, ?)")
+            .bind(chunk_id)
+            .bind(crate::embed::vector_blob(
+                &[0.0; crate::embed::provider::EMBED_DIM],
+            ))
+            .execute(&pool)
+            .await
+            .expect("insert vector");
+    }
+
+    delete(&svc, &gone.id).await;
+
+    for (table, sql) in [
+        ("richtext", "SELECT entity_id FROM richtext"),
+        ("chunks", "SELECT entity_id FROM chunks"),
+        (
+            "entity_vec",
+            "SELECT c.entity_id FROM entity_vec v LEFT JOIN chunks c ON c.id = v.id",
+        ),
+    ] {
+        let owners: Vec<Option<String>> =
+            sqlx::query_scalar(sql).fetch_all(&pool).await.expect(table);
+        assert_eq!(owners, [Some(kept.id.clone())], "{table}");
+    }
+}
+
+#[tokio::test]
+async fn delete_removes_the_fts_row_and_its_rowid() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let gone = create(&svc, note("Gone")).await;
+    let kept = create(&svc, note("Kept")).await;
+
+    delete(&svc, &gone.id).await;
+
+    let fts: Vec<String> = sqlx::query_scalar("SELECT entity_id FROM entity_fts")
+        .fetch_all(&pool)
+        .await
+        .expect("fts rows");
+    assert_eq!(fts, vec![kept.id.clone()]);
+    let rowids: Vec<String> = sqlx::query_scalar("SELECT entity_id FROM entity_fts_rowids")
+        .fetch_all(&pool)
+        .await
+        .expect("rowid rows");
+    assert_eq!(rowids, vec![kept.id.clone()]);
+}

@@ -1,59 +1,168 @@
 use super::*;
 
-// I-11's done-when: two writers start from the same snapshot and each edit a
-// different property; both edits survive.
 #[tokio::test]
-async fn concurrent_set_property_edits_both_survive() {
+async fn select_values_are_checked_against_the_declared_kind() {
     let svc = entity_service(memory_pool().await);
-    let snapshot = create(&svc, todo("Water plants")).await;
 
-    set_property(&svc, &snapshot.id, "todo.status", select("done"))
+    // A select on a property the structure doesn't declare as one.
+    let err = try_create(&svc, with_select(note("Stray"), "status", "open"))
         .await
-        .expect("writer A");
-    set_property(&svc, &snapshot.id, "todo.priority", select("high"))
-        .await
-        .expect("writer B");
+        .expect_err("select on a non-select property should be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
 
-    let stored = svc.load_entity(&snapshot.id).await.expect("load");
-    assert_eq!(
-        select_value(&stored, "todo.status").as_deref(),
-        Some("done")
+    // A declared select holding some other kind of value.
+    let mistyped = with_value(
+        todo("Mistyped"),
+        "todo.status",
+        property_value::Value::Text("open".to_string()),
     );
+    let err = try_create(&svc, mistyped)
+        .await
+        .expect_err("text on a select property should be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+}
+
+#[tokio::test]
+async fn tag_in_todo_tags_links_with_its_real_type() {
+    let svc = entity_service(memory_pool().await);
+    let urgent = create(&svc, tag("urgent")).await;
+
+    // An empty claimed type is allowed; the link still records the real one.
+    let todo = create(
+        &svc,
+        with_relations(todo("Water plants"), "tags", &[(&urgent.id, "")]),
+    )
+    .await;
+
     assert_eq!(
-        select_value(&stored, "todo.priority").as_deref(),
-        Some("high")
+        link_targets(&todo, "tags"),
+        [(urgent.id.clone(), "Tag".to_string())]
     );
 }
 
-// I-40: two writers race on one entity. Each reads before it writes, so a
-// DEFERRED transaction that loses would fail at once with SQLITE_BUSY
-// (Internal) instead of waiting on busy_timeout. Both must succeed. A few
-// rounds, because one race can miss the window.
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn racing_set_property_writes_both_succeed() {
-    let scratch = ScratchDb::new().await;
-    let svc = entity_service(scratch.pool.clone());
-    let entity = create(&svc, todo("Water plants")).await;
+#[tokio::test]
+async fn relation_ref_with_wrong_claimed_type_is_rejected() {
+    let svc = entity_service(memory_pool().await);
+    let target = create(&svc, note("Target")).await;
 
-    for (status, priority) in [("done", "high"), ("open", "low"), ("done", "medium")] {
-        let (a, b) = tokio::join!(
-            set_property(&svc, &entity.id, "todo.status", select(status)),
-            set_property(&svc, &entity.id, "todo.priority", select(priority)),
-        );
-        a.expect("status write");
-        b.expect("priority write");
+    // Claims a Tag in a declared Tag-only property, but the target is a Note.
+    let todo = create(&svc, todo("Water plants")).await;
+    let err = set_property(&svc, &todo.id, "tags", tags_value(&[(&target.id, "Tag")]))
+        .await
+        .expect_err("lying claimed type should be rejected");
+    assert_eq!(err.code(), tonic::Code::InvalidArgument);
+}
 
-        let stored = svc.load_entity(&entity.id).await.expect("load");
-        assert_eq!(
-            select_value(&stored, "todo.status").as_deref(),
-            Some(status)
-        );
-        assert_eq!(
-            select_value(&stored, "todo.priority").as_deref(),
-            Some(priority)
-        );
+// I-79: a property is declared in the registry before it takes a value, on
+// Create and SetProperty, whatever the value's kind.
+#[tokio::test]
+async fn undeclared_properties_are_invalid() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let target = create(&svc, note("Target")).await;
+    let memo = create(&svc, note("Memo")).await;
+    let mut rx = svc.hub.subscribe();
+
+    let values = [
+        property_value::Value::Text("kept".to_string()),
+        property_value::Value::Number(3.0),
+        property_value::Value::Date("2026-02-03".to_string()),
+        property_value::Value::Select("open".to_string()),
+        property_value::Value::Relation(EntityRef {
+            id: target.id.clone(),
+            structure_type: "Note".to_string(),
+        }),
+        tags_value(&[(&target.id, "Note")]).expect("relations value"),
+    ];
+    // `TODO.note` only looks like the todo facet's namespace: ids are
+    // case-sensitive, so it's undeclared, not an unattached facet property.
+    for property_id in ["mood", "TODO.note"] {
+        for value in &values {
+            let err = try_create(&svc, with_value(note("M"), property_id, value.clone()))
+                .await
+                .expect_err("undeclared on create");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{err:?}");
+            assert!(
+                err.message().contains("isn't a declared property"),
+                "{}",
+                err.message()
+            );
+
+            let err = set_property(&svc, &memo.id, property_id, Some(value.clone()))
+                .await
+                .expect_err("undeclared on set");
+            assert_eq!(err.code(), tonic::Code::InvalidArgument, "{err:?}");
+        }
     }
-    scratch.pool.close().await;
+
+    assert_eq!(entity_count(&pool).await, 2);
+    assert!(stored_property_ids(&pool, &memo.id).await.is_empty());
+    assert_eq!(svc.load_entity(&memo.id).await.expect("load"), memo);
+    assert!(rx.try_recv().is_err(), "no event");
+}
+
+// A value stored before undeclared properties were refused (I-79) can still
+// be cleared, and clearing a relation value drops its links.
+#[tokio::test]
+async fn an_undeclared_value_can_be_cleared() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let target = create(&svc, note("Target")).await;
+    let memo = create(&svc, note("Memo")).await;
+    store_legacy_relations(&pool, &memo.id, "related", &target).await;
+    assert_eq!(
+        link_targets(&svc.load_entity(&memo.id).await.expect("load"), "related").len(),
+        1
+    );
+
+    let cleared = set_property(&svc, &memo.id, "related", None)
+        .await
+        .expect("clear");
+
+    assert!(!cleared.properties.contains_key("related"));
+    assert!(link_targets(&cleared, "related").is_empty());
+    assert!(stored_property_ids(&pool, &memo.id).await.is_empty());
+}
+
+// A client may resend a stale tag list that still holds a deleted Tag (Delete
+// strips it from stored values, but not from a client's copy), so a dead ref
+// must not block the write.
+#[tokio::test]
+async fn dead_relation_ref_does_not_block_set_property() {
+    let svc = entity_service(memory_pool().await);
+    let gone = create(&svc, tag("gone")).await;
+    let kept = create(&svc, tag("kept")).await;
+    let added = create(&svc, tag("added")).await;
+    let todo = create(
+        &svc,
+        with_relations(
+            todo("Water plants"),
+            "tags",
+            &[(&gone.id, "Tag"), (&kept.id, "Tag")],
+        ),
+    )
+    .await;
+    svc.delete_entity(Request::new(DeleteEntityRequest {
+        id: gone.id.clone(),
+    }))
+    .await
+    .expect("delete tag");
+
+    let updated = set_property(
+        &svc,
+        &todo.id,
+        "tags",
+        tags_value(&[(&gone.id, "Tag"), (&kept.id, "Tag"), (&added.id, "Tag")]),
+    )
+    .await
+    .expect("tag edit with a dead tag ref");
+
+    let mut expected = vec![
+        (kept.id.clone(), "Tag".to_string()),
+        (added.id.clone(), "Tag".to_string()),
+    ];
+    expected.sort();
+    assert_eq!(link_targets(&updated, "tags"), expected);
 }
 
 #[tokio::test]

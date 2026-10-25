@@ -37,28 +37,6 @@ async fn add_relation_target_twice_is_a_no_op() {
     assert!(rx.try_recv().is_err(), "no event");
 }
 
-// I-34's done-when at the RPC level: two writers add different targets to the
-// same starting list, and neither add undoes the other.
-#[tokio::test]
-async fn two_adds_of_different_targets_both_survive() {
-    let svc = entity_service(memory_pool().await);
-    let seed = create(&svc, tag("seed")).await;
-    let a = create(&svc, tag("a")).await;
-    let b = create(&svc, tag("b")).await;
-    let entity = tagged_todo(&svc, &[&seed]).await;
-
-    add_target(&svc, &entity.id, "tags", &a.id)
-        .await
-        .expect("add a");
-    add_target(&svc, &entity.id, "tags", &b.id)
-        .await
-        .expect("add b");
-
-    let stored = svc.load_entity(&entity.id).await.expect("load");
-    assert_eq!(relation_refs(&stored, "tags"), tag_refs(&[&seed, &a, &b]));
-    assert_eq!(link_targets(&stored, "tags").len(), 3);
-}
-
 #[tokio::test]
 async fn add_relation_target_checks_entity_property_and_target() {
     let pool = memory_pool().await;

@@ -274,19 +274,6 @@ async fn clearing_a_facet_property_without_the_facet_is_allowed() {
     assert!(saved.facets.is_empty());
 }
 
-#[tokio::test]
-async fn delete_removes_facet_rows() {
-    let pool = memory_pool().await;
-    let svc = entity_service(pool.clone());
-    let ship = create(&svc, with_facets(note("Ship"), &["todo"])).await;
-    let _kept = create(&svc, with_facets(note("Kept"), &["todo"])).await;
-    assert_eq!(facet_row_count(&pool).await, 2);
-
-    delete(&svc, &ship.id).await;
-
-    assert_eq!(facet_row_count(&pool).await, 1);
-}
-
 #[test]
 fn facets_load_in_registry_order_with_unknown_ones_last() {
     let mut facets = vec!["zeta".to_string(), "todo".to_string(), "alpha".to_string()];
