@@ -90,14 +90,14 @@ published last.
 
 ---
 
-### I-61 · MCP link syntax isn't escaped for names containing `|`, `]]` or a structure prefix · low · confirmed
+### I-61 · Names containing `|` or `]]` can't be written in MCP link syntax · low · confirmed
 
-**Where:** `server/src/mcp/tools.rs` (`link_notes`), `server/src/mcp/markdown.rs` (`mention_markdown`)
+**Where:** `server/src/mcp/markdown.rs` (`mention_markdown`, the `[[…]]` parser), `server/src/services/entity.rs` (name writes)
 
-**Problem:** `link_notes` writes `[[{to}]]` raw, and `get_note` writes a Note's name
-unescaped. A name containing `|` or `]]` is misparsed, and a name like `Tag/X` passed
-to `link_notes` targets a Tag (the serializer already writes such a Note as
-`[[Note/Tag/X]]`). Any registry prefix does the same (`DailyNote/X`). Found in T28.
+**Problem:** `get_note` writes a Note's name unescaped inside `[[…]]`, so a name containing
+`|` or `]]` is misparsed when read back or copied into `create_note`. Found in T28. The
+`link_notes` half (raw `[[{to}]]` and structure-prefix confusion) is gone: since direct
+relationships, `link_notes` calls `AddRelationship` and writes no text.
 
 **Fix:** Refuse `|` and `]]` in entity names on create and rename (decided by the user 2026-10-24, over an escape syntax). No existing name contains them, so nothing needs migrating. The structure-prefix half goes away when `link_notes` calls `AddRelationship` (ADR 12) instead of writing `[[{to}]]`.
 
@@ -183,6 +183,24 @@ the I-42 plan, confirmed by reading.
 
 **Done when:** a test where the reload after a conflict fails once shows the reload
 retried and `whenRichTextSaved` resolving only after it succeeds.
+
+---
+
+### I-77 · Stale backlinks references after direct relationships · low · confirmed
+
+**Where:** `server/src/services/entity.rs` (`list_backlinks` comment, "matching the frontend's backlinks panel"), `server/src/mcp/mod.rs` (`LINK_SYNTAX`), `proto/calcifer/v1/entities.proto` (`LinkRef.source_property_id` comment)
+
+**Problem:** After direct relationships, a few comments and texts still describe the old
+world. The `list_backlinks` comment names the Backlinks panel, which is now the
+relationships section. `LINK_SYNTAX` doesn't say that `link_notes` relates two notes
+without touching their text (the tool descriptions do). The `source_property_id` comment
+gives only `'content'` as an example and doesn't mention `@related`. Found in T07 of the
+direct-relationships plan, confirmed by reading.
+
+**Fix:** Reword the three comments and texts. Comments and an MCP string only.
+
+**Done when:** `grep -rn "backlinks panel" server/src` matches nothing, and the
+`LinkRef.source_property_id` comment mentions `@related`.
 
 ---
 

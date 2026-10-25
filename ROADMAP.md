@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `i-42-save-retry` @ `e00b852`, where failed saves retry (stacked on `connection-status`).
+**Last reviewed:** 2026-10-24, against `direct-relationships` @ `fe9d89c`, where direct relationships are built (stacked on `i-42-save-retry`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,30 +22,13 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
-| 2 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
-| 3 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 4 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. The `link_notes` half went with direct relationships. |
+| 2 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 3 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ## Next up
 
-### 1. Direct relationships · size: L · ADR 12 (accepted 2026-10-24)
-
-Associate two notes without writing a mention into the text. A relationship is a row in a
-new `relationships` table, added and removed one at a time by `AddRelationship` and
-`RemoveRelationship`, limited by the source structure's `relates_to`, and derived into
-`links` under the reserved scope `@related`. The server rejects any property id starting
-with `@`, and deleting a target republishes the entities that related to it.
-
-The entity page gets one relationships section: rich-text links, relationships and
-back-references, one row per other entity labelled *related* and/or *mentioned*, with an
-"Add" picker. The agent's `link_notes` calls `AddRelationship` instead of appending
-`Related: [[to]]`, a new `unlink_notes` removes one, and both take a name or an id.
-Fixes I-34 for associations (not for `tags`) and removes the `link_notes` half of I-61.
-ADR 12's open questions, answered 2026-10-24: referenced dates stay on the calendar, there's
-no "Keep" action on mention-only rows yet, and DailyNote keeps `relates_to: []`.
-
-### 2. AI chat panel (RAG) · size: L · **blocked: LLM provider undecided**
+### 1. AI chat panel (RAG) · size: L · **blocked: LLM provider undecided**
 
 The headline feature the retrieval work was built for, and the last piece of "AI as a
 first-class writer."
@@ -59,7 +42,7 @@ Thin client, zero new knowledge-ops logic — every operation it needs already e
 an RPC. **Decide the provider first** (Anthropic, OpenAI, local via Ollama, or a
 provider-agnostic layer); that choice is the only thing blocking this.
 
-### 3. Native gRPC with reflection · size: S · optional
+### 2. Native gRPC with reflection · size: S · optional
 
 The backend serves only gRPC-Web, under `/api` through axum (see the README's "No native
 gRPC"), so `grpcurl` can't reach it and backend checks go through the browser, an MCP
