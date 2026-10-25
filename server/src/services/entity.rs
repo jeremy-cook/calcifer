@@ -2132,7 +2132,7 @@ impl EntityServiceTrait for EntityService {
             return Err(AppError::NotFound(format!("entity {target_id}")).into());
         }
 
-        // Self-links are left out, matching the frontend's backlinks panel.
+        // Self-links are left out, matching the frontend's relationships section.
         let rows = sqlx::query!(
             r#"SELECT entity_id AS "entity_id!", source_property_id AS "source_property_id!",
                       created_at AS "created_at!"

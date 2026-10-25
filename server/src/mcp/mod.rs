@@ -24,7 +24,7 @@ pub use tools::Knowledge;
 use tools::{NoteKey, ToolError};
 
 /// How note markdown refers to other entities; shared by the tools that read or write it.
-const LINK_SYNTAX: &str = "[[Name]] links an existing note; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); it doesn't tag the note. Pass `tags` to create_note, or use tag_entity, to tag it. A link to anything that doesn't exist fails the call and writes nothing, so create the target first. These become real graph links automatically.";
+const LINK_SYNTAX: &str = "[[Name]] links an existing note; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); it doesn't tag the note. Pass `tags` to create_note, or use tag_entity, to tag it. To relate two notes without writing a link into either, use link_notes. A link to anything that doesn't exist fails the call and writes nothing, so create the target first. These become real graph links automatically.";
 
 /// Newest first. A client's version is echoed back when we speak it.
 const PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];

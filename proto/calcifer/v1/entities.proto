@@ -68,7 +68,9 @@ message LinkRef {
   // The target's real type, read when the link was derived, for relation and
   // rich-text links alike.
   EntityRef target = 2;
-  string source_property_id = 3;              // the property it was derived from
+  // The property it was derived from, or a reserved scope such as '@related' for a
+  // direct relationship (ADR 12).
+  string source_property_id = 3;
   google.protobuf.Timestamp created_at = 4;   // when this edge was first derived
 }
 

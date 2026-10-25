@@ -218,7 +218,8 @@ export type LinkRef = Message<"calcifer.v1.LinkRef"> & {
   target?: EntityRef | undefined;
 
   /**
-   * the property it was derived from
+   * The property it was derived from, or a reserved scope such as '@related' for a
+   * direct relationship (ADR 12).
    *
    * @generated from field: string source_property_id = 3;
    */
