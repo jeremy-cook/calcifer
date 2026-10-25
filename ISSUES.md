@@ -17,23 +17,6 @@ running app. Nothing below has been reproduced yet.
 
 ---
 
-### I-34 · Relation edits resend the whole list · low · confirmed
-
-**Where:** `calcifer/src/components/entity/EntityRelationsField.tsx:25-31`, `calcifer/src/routes/e.$id.tsx:259-270`
-
-**Problem:** Adding or removing a tag sends the full relations list through
-`SetProperty`. If the browser and the agent tag something at the same time, one change is
-lost. Related to I-14.
-
-**Fix:** Add and remove single relation targets (e.g. add/remove ops on `SetProperty`)
-instead of replacing the list. Deferred until the agent starts tagging, which the to-do
-facet brings: its quick-add and the MCP `create_note` `tags` argument both write `tags`
-(ADR 11).
-
-**Done when:** concurrent tag additions from two clients both survive.
-
----
-
 ### I-36 · `ResolveEntity` fails instead of returning the winner when it loses a create race · low · confirmed
 
 **Where:** `server/src/services/entity.rs` (`resolve_name`, `resolve_date`)
@@ -145,30 +128,6 @@ round-trips through `link_notes`, `get_note` and `create_note`.
 
 ---
 
-### I-72 · The agent can't see or change an existing note's tags · medium · confirmed
-
-**Where:** `server/src/mcp/tools.rs` (`get_note`, `append_to_note`, `edit_note`),
-`server/src/mcp/mod.rs` (tool definitions)
-
-**Problem:** Since ADR 11, a note is tagged by its `tags` property; a body `#tag` only
-references the Tag. `create_note` is the only tool that writes `tags`, so an agent can't
-tag or untag a note that already exists. Appending `#ml` adds a reference, not a tag.
-`get_note`'s frontmatter doesn't show `tags` either, so the agent can't tell what a note
-is tagged with, and a `get_note` copied into `create_note` drops its tags. Found
-2026-10-24 reviewing T07 (294d877); confirmed by reading.
-
-**Fix:** Add `tags` (the tag names) to `get_note`'s frontmatter, and have `create_note`
-read it there when no `tags` argument is given. Give the agent a way to change tags: a
-`tags` argument on `append_to_note`, or a `tag_note` tool with add and remove lists.
-Pick one shape and say it in the descriptions. The add/remove form lines up with
-I-34's single-target relation edits; if I-34 lands first, build on it.
-
-**Done when:** `get_note` shows a note's tags, the agent can add and remove a tag on an
-existing note, the round-trip test (`get_note_copied_into_create_note_links_the_same_targets`)
-covers tags, and the descriptions match.
-
----
-
 ### I-73 · `create_note`'s tags aren't written in the note's transaction · low · confirmed
 
 **Where:** `server/src/mcp/tools.rs` (`create_note`, `resolve_tags`, `set_tags`)
@@ -190,8 +149,29 @@ transaction, and its tests still pass.
 
 ---
 
+### I-74 · `pnpm format` rewrites generated stubs and `vite.config.ts` · low · confirmed
+
+**Where:** `calcifer/package.json` (`"format": "prettier --write ."`), `calcifer/.prettierignore`
+
+**Problem:** `pnpm format` runs prettier over the whole package, including the generated
+proto stubs in `calcifer/gen/ts/` and `vite.config.ts`, which aren't prettier-formatted.
+A format run then fills a diff with unrelated changes, and the stubs change back on the
+next `pnpm proto:gen`. `pnpm format:check` covers only `src`, so it doesn't notice. Found
+in T02 of the I-34 plan, when an engineer ran `pnpm format` by accident; reproduced by
+that run.
+
+**Fix:** Add `gen/` to `.prettierignore`. Then either format `vite.config.ts` once, or
+scope `format` to `src` to match `format:check`.
+
+**Done when:** `cd calcifer && pnpm format` leaves `gen/` and `vite.config.ts` unchanged
+(or `vite.config.ts` changes only in a formatting commit), and `git status` is clean after it.
+
+---
+
 ## Resolved
 
+- **I-72 · The agent can't see or change an existing note's tags.** Fixed 2026-10-24 (70155a8). `get_note`'s frontmatter has a `tags` line, `create_note` reads it back when given no `tags` argument, and the new `tag_entity(name, add, remove)` tool tags and untags an existing note one target at a time. Covered by `tag_entity_adds_and_removes`, `tag_entity_keeps_a_concurrent_tag` and the extended `get_note_copied_into_create_note_links_the_same_targets`; checked over MCP on a scratch DB.
+- **I-34 · Relation edits resend the whole list.** Fixed 2026-10-24 (6b9c1dd, ff1aa8c, f6480c1). New `AddRelationTarget` / `RemoveRelationTarget` RPCs change one target of a `relations` property, idempotently, and the browser's tag field uses them. Covered by `two_adds_of_different_targets_both_survive` and the store tests; on a scratch DB, a tag added by the agent while the page was open and one added in the browser both survived.
 - **I-71 · `get_note` queries backlinks on every read.** Fixed 2026-10-24 (763ba04). `get_note`'s frontmatter is `name` and `version` only, and its description points to `get_backlinks`. Covered by `get_note_frontmatter_has_only_name_and_version`; checked over MCP against a scratch DB.
 - **I-69 · `cargo clippy` reports eight warnings.** Fixed 2026-10-24 (b78e2b7). `clippy::result_large_err` is allowed once at the crate root (`tonic::Status` is every handler's error), the tests use `std::slice::from_ref`, and the sqlite-vec `transmute` names its types. `cargo clippy --all-targets -- -D warnings` passes and is now part of the server checks.
 - **I-68 · `server/.env` points sqlx at the empty live DB.** Fixed 2026-10-24 (bc7d9b8). A committed `server/.cargo/config.toml` sets `SQLX_OFFLINE=true` (`.env` is gitignored, so it couldn't carry the fix), and `scripts/calcifer` drops `ensure_database`. An explicit `SQLX_OFFLINE=false` still refreshes the cache. After `cargo clean`, `cargo test` passes with `SQLX_OFFLINE` unset and `DATABASE_URL` pointing at a nonexistent file.

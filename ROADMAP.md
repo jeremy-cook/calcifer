@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `tooling-pass` @ `763ba04`, where I-67, I-68, I-69 and I-71 are fixed.
+**Last reviewed:** 2026-10-24, against `i-34-tag-edits` @ `1a1b189`, where I-34 and I-72 are fixed (stacked on `tooling-pass`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,28 +22,23 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-34 + I-72: tags edited one at a time, by the browser and the agent | M | New `AddRelationTarget` / `RemoveRelationTarget` RPCs, and a `tag_entity` MCP tool with add and remove lists (decided 2026-10-24). `get_note` shows `tags`. |
-| 2 | Agent reads and edits daily notes (Smaller items) | S | `get_note`, `query_text_location` and `edit_note` take a `date` as an alternative to `name`. |
-| 3 | Connection status (below) | M | Fixes the blank `/e/<id>` deep link when the server is down. |
-| 4 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses Connection status's retrying state. |
-| 5 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
-| 6 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
-| 7 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 8 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | Agent reads and edits daily notes (Smaller items) | S | `get_note`, `query_text_location` and `edit_note` take a `date` as an alternative to `name`. |
+| 2 | Connection status (below) | M | Says when the server can't be reached, at load and after a drop, and recovers by itself. |
+| 3 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses Connection status's retrying state. |
+| 4 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
+| 5 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
+| 6 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 7 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ### Connection status · size: M
 
-Pages that read the Watch replica render nothing until the first snapshot, and Watch
-retries silently, so with the server unreachable a deep link to `/e/<id>` stays blank
-forever. Have the replica track the stream's state (connecting, live, retrying) in
-`model/replica.ts`, set it from `model/sync.ts`, and show "Can't reach the server" once
-the first connection attempt fails. Covers every page, not just `/e/<id>`.
-Decided 2026-10-24: the notice is a full-width banner under the top bar reading "Can't reach
-the server. Retrying…", shown whenever the stream isn't live after a failed attempt (on
-first load and when a live stream drops), and hidden once it's live again.
-
-The replica approach was chosen over a `GetEntity` on load, which fails the same way and
-renders a page without its relations.
+When the server goes away after load, Watch retries silently and the page keeps showing
+stale data with no sign; at load, the structures registry fails at once (`retry: false`)
+with "Reload to retry". Have the replica track the stream's state (connecting, live,
+retrying) in `model/replica.ts`, set it from `model/sync.ts`, and let the registry query
+retry on its own. Decided 2026-10-24: one message for both, a full-width banner under the
+top bar reading "Can't reach the server. Retrying…", shown whenever the browser has tried
+and failed to reach the server and hidden once it answers. No reload needed.
 
 ---
 
@@ -162,7 +157,7 @@ the acceptance suite, and I-61's escaping cases belong in it.
   tags. Add the properties, taking inspiration from Taskwarrior's `task add` (`due:fri`,
   `priority:H`, named dates like `eow`). Decide how a property token is told apart from
   the end of the name, and whether the agent shares the parser.
-- **Agent reads and edits daily notes** (Current work 2) — the agent can create and append to a daily
+- **Agent reads and edits daily notes** (Current work 1) — the agent can create and append to a daily
   note, but `get_note`, `query_text_location` and `edit_note` look up Notes by name
   only, so it can't read a day in full or fix what's already there. Let those three
   take a `date` as an alternative to `name`, through the same `ResolveEntity` date key
