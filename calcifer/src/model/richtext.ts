@@ -6,6 +6,7 @@ import { useQuery } from '@tanstack/react-query'
 import { RichTextRefSchema, type RichText, type RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
 import { qk, queryClient, richTextClient } from '~/model/api'
 import { compareTimestamps } from '~/model/dates'
+import { useReplica } from '~/model/replica'
 
 // The address of one rich-text doc: an entity and one of its structure's
 // declared rich-text property ids (see `richTextPropertyIds`). Entities store
@@ -103,6 +104,33 @@ function isFailedPrecondition(err: unknown): boolean {
   return err instanceof ConnectError && err.code === Code.FailedPrecondition
 }
 
+// A save failure worth retrying: anything but the codes where the same doc can
+// never succeed. Network failures that aren't a ConnectError count as retryable.
+// FailedPrecondition (a conflict) is handled before this is asked.
+function isRetryable(err: unknown): boolean {
+  if (!(err instanceof ConnectError)) return true
+  return ![Code.InvalidArgument, Code.NotFound, Code.PermissionDenied, Code.Unimplemented].includes(err.code)
+}
+
+// Resolves after the backoff for the `failures`-th failure in a row: 1 s,
+// doubling, capped at 30 s. Resolves early when the Watch stream turns `live`,
+// since the server was just reached.
+function waitToRetry(failures: number): Promise<void> {
+  const delay = Math.min(1_000 * 2 ** (failures - 1), 30_000)
+  return new Promise((resolve) => {
+    const finish = () => {
+      clearTimeout(timer)
+      unsubscribe()
+      resolve()
+    }
+    const timer = setTimeout(finish, delay)
+    // Only the change to `live`: the replica also changes while it stays live.
+    const unsubscribe = useReplica.subscribe((state, prev) => {
+      if (state.connection === 'live' && prev.connection !== 'live') finish()
+    })
+  })
+}
+
 const EPOCH = createMessage(TimestampSchema, { seconds: 0n, nanos: 0 })
 
 export interface UsePutRichTextOptions {
@@ -118,13 +146,17 @@ export interface UsePutRichTextOptions {
 export interface RichTextSaver {
   // Queue a save of `doc`. Saves are serialised: while one is in flight only
   // the latest queued doc is kept, and it goes out once the in-flight one
-  // resolves, expecting the version that one produced.
+  // resolves, expecting the version that one produced. A save that fails is
+  // retried with backoff until it lands (see `usePutRichText`).
   save: (doc: string) => void
   // The caller's content now reflects `updatedAt` (e.g. an outside change was
   // loaded into the editor), so the next save expects it.
   adopt: (updatedAt: Timestamp | undefined) => void
   // True while a Put is in flight or a doc is queued behind one.
   busy: boolean
+  // True from a save that failed and is being retried until a save succeeds (or a conflict
+  // or a dropped error ends it).
+  unsaved: boolean
 }
 
 interface SaveQueue {
@@ -132,6 +164,8 @@ interface SaveQueue {
   base: Timestamp | undefined
   inFlight: boolean
   pending: string | null
+  // Failed attempts in a row, for the backoff. Zero after a save lands or is given up on.
+  failures: number
 }
 
 interface SaveTarget {
@@ -140,7 +174,14 @@ interface SaveTarget {
   onConflict?: (latest: RichTextState) => void
 }
 
-async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict }: SaveTarget): Promise<void> {
+// `saved`: the Put landed. `retry`: it failed in a way that may pass, so the doc
+// is back in `queue.pending` (unless a newer one is queued) and the caller backs
+// off. `dropped`: it can never succeed, so it was logged and discarded.
+// `conflict`: it lost to another writer, so queued docs were dropped and the
+// latest version reloaded.
+type SaveOutcome = 'saved' | 'retry' | 'dropped' | 'conflict'
+
+async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict }: SaveTarget): Promise<SaveOutcome> {
   try {
     const saved = requireRichText(
       await richTextClient.putRichText({
@@ -151,18 +192,29 @@ async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict
       }),
     )
     queue.base = saved.updatedAt
+    queue.failures = 0
     writeRichTextIfNewer(saved)
     // Put also changed the entity's links, referenced_dates and updated_at on
     // the server; its Watch `upserted` event brings them into the replica.
     onSaved?.(toState(saved))
+    return 'saved'
   } catch (err) {
-    if (!isFailedPrecondition(err)) {
-      console.error('rich text save failed', err)
-      return
+    if (isFailedPrecondition(err)) {
+      // Lost to another writer: drop queued local docs and reload (no merge).
+      queue.failures = 0
+      queue.pending = null
+      await reloadAfterConflict(queue, ref, onConflict)
+      return 'conflict'
     }
-    // Lost to another writer: drop queued local docs and reload (no merge).
-    queue.pending = null
-    await reloadAfterConflict(queue, ref, onConflict)
+    if (isRetryable(err)) {
+      // Keep the doc unless a newer one was queued while this Put was in flight.
+      queue.pending ??= doc
+      queue.failures += 1
+      return 'retry'
+    }
+    console.error('rich text save failed', err)
+    queue.failures = 0
+    return 'dropped'
   }
 }
 
@@ -217,12 +269,18 @@ export function whenRichTextSaved(ref: RichTextRef): Promise<void> {
 // Conditional saves for one rich-text doc. Each Put sends `expected_updated_at`
 // = the version the content is based on (the epoch if nothing is saved), so a
 // save built on a stale version fails instead of overwriting an outside change.
+// A Put that fails for a reason that may pass (the server is unreachable, say)
+// is retried forever, backing off 1 s doubling to 30 s and going at once when
+// the Watch stream turns live, always with the newest queued doc. The doc keeps
+// its outstanding save meanwhile, so `whenRichTextSaved` waits for it to land.
+// Only a conflict or an error the doc can never get past ends the retrying.
 export function usePutRichText(
   ref: RichTextRef,
   { initialBase, onSaved, onConflict }: UsePutRichTextOptions,
 ): RichTextSaver {
   const [busy, setBusy] = useState(false)
-  const queueRef = useRef<SaveQueue>({ base: initialBase, inFlight: false, pending: null })
+  const [unsaved, setUnsaved] = useState(false)
+  const queueRef = useRef<SaveQueue>({ base: initialBase, inFlight: false, pending: null, failures: 0 })
   // Latest ref and callbacks without re-creating `save` on every render.
   const targetRef = useRef<SaveTarget>({ ref, onSaved, onConflict })
   useEffect(() => {
@@ -241,7 +299,9 @@ export function usePutRichText(
       while (queue.pending !== null) {
         const next = queue.pending
         queue.pending = null
-        await putOnce(queue, next, targetRef.current)
+        const outcome = await putOnce(queue, next, targetRef.current)
+        setUnsaved(outcome === 'retry')
+        if (outcome === 'retry') await waitToRetry(queue.failures)
       }
       queue.inFlight = false
       setBusy(false)
@@ -254,5 +314,5 @@ export function usePutRichText(
     if (isNewerRichText(updatedAt, queue.base)) queue.base = updatedAt
   }, [])
 
-  return { save, adopt, busy }
+  return { save, adopt, busy, unsaved }
 }

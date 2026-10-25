@@ -77,7 +77,7 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
     setSynced((s) => ({ updatedAt: latest.updatedAt, doc: latest.doc, version: s.version + 1 }))
   }, [])
 
-  const { save, adopt, busy } = usePutRichText(propertyRef, {
+  const { save, adopt, busy, unsaved } = usePutRichText(propertyRef, {
     initialBase: initial.updatedAt,
     onSaved: handleSaved,
     onConflict: handleConflict,
@@ -121,9 +121,16 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
     [save],
   )
 
-  const notice = conflicted ? (
+  // A save being retried comes first; a conflict ends the retrying and takes its place.
+  const noticeText = () => {
+    if (unsaved) return 'Not saved yet. Retrying…'
+    if (conflicted) return "Updated elsewhere; your latest edit wasn't saved."
+    return null
+  }
+  const message = noticeText()
+  const notice = message ? (
     <p role="status" className="border-b border-border px-4 py-1 text-xs text-muted-foreground">
-      Updated elsewhere; your latest edit wasn't saved.
+      {message}
     </p>
   ) : null
 
