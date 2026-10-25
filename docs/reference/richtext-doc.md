@@ -189,6 +189,10 @@ outside its allow-list with a non-null value (`textAlign` other than null, say).
 A mention's `structureType` is the structure it resolved in, and its `label` is the
 `label` after `|` if given, else the name without any `Structure/` prefix.
 
+A name can't contain `|` or `]]`: the server refuses both on every path that sets a name
+(see the name rule in [`data-model.md`](data-model.md)), so `[[…]]` text never needs an
+escape for either.
+
 `block_markdown` in `markdown.rs` goes the other way for `get_note`. Each chip is written from its
 target's **current** name and structure, looked up by id, not from its stored `label`:
 a Note mention as `[[Name]]`, a mention of any other structure as `[[Structure/Name]]`,

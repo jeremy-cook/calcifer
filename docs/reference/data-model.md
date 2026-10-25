@@ -525,9 +525,9 @@ re-syncs only that property's relation links, so the browser and the agent editi
 different properties of one entity don't overwrite each other. Renames go through
 `RenameEntity`, which writes only the name (and its FTS row) and `updated_at`, so it can't
 undo a concurrent `SetEntityProperty`. `RenameEntity` trims the name and returns `INVALID_ARGUMENT`
-for a blank one, and `FAILED_PRECONDITION` for a structure with `name_editable: false`
-(DailyNote). A unique-index clash is `ALREADY_EXISTS` with a message for the index
-that failed: `a Tag named "<name>" already exists` or `a DailyNote for <date> already
+for a blank one or one that breaks the name rule (under `CreateEntity`), and
+`FAILED_PRECONDITION` for a structure with `name_editable: false` (DailyNote). A
+unique-index clash is `ALREADY_EXISTS` with a message for the index that failed: `a Tag named "<name>" already exists` or `a DailyNote for <date> already
 exists`. There is no whole-entity write.
 
 `ListEntities` returns entities most recently updated first; entities with the same
@@ -552,6 +552,14 @@ the request.
 (`INVALID_ARGUMENT` for one not in the registry, `FAILED_PRECONDITION` for one the
 structure doesn't accept). Each one's select defaults are laid under the request's
 `properties`. A value on a facet that isn't requested is `FAILED_PRECONDITION`.
+
+**Name rule.** A name can't contain `|` or `]]`, checked after trimming: `CreateEntity`,
+`RenameEntity` and `ResolveEntity` by name (when it would create) return `INVALID_ARGUMENT`
+with `names can't contain "|" or "]]"`. The agent's link syntax (`[[Name|label]]`, closed by
+`]]`) can't express such a name, so a note with one couldn't be linked or round-tripped
+through the MCP tools (I-61). A lone `[` or `]` is fine, since only `]]` closes a link.
+Existing entities keep any name they already have, and a lookup with `create_if_missing`
+unset is an ordinary lookup: it finds whatever has the name, else `NOT_FOUND`.
 
 **Facets.** `AttachFacet` and `DetachFacet` return `NOT_FOUND` for an unknown
 `entity_id` and `INVALID_ARGUMENT` for a facet not in the registry. `AttachFacet` is
@@ -619,7 +627,9 @@ or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is 
 which case the server builds the entity (`new_entity`: minted id, select defaults,
 and for a date the `date` property and its name), saves it, publishes `upserted` and returns `created = true`.
 Creating by name is `FAILED_PRECONDITION` for a structure that isn't `creatable` (a
-DailyNote is resolved by `date`); looking one up by name still works.
+DailyNote is resolved by `date`); looking one up by name still works. A miss with
+`create_if_missing` set and a name that breaks the name rule (under `CreateEntity`) is
+`INVALID_ARGUMENT`.
 
 **DailyNote name rule.** A DailyNote's name is its `date` as a long date ("June 13,
 2026"), set by the server when `ResolveEntity` creates it and when `SetEntityProperty` changes its
@@ -783,7 +793,8 @@ Writes go through the same service methods the browser's RPCs reach. Markdown is
 to TipTap JSON in `server/src/mcp/markdown.rs`, resolving `[[wikilink]]` and `#tag` through
 `ResolveEntity` by name. A missing `#tag` is created; a `[[wikilink]]` to a missing target
 fails the call, which writes nothing. A body `#tag` only references its Tag; it doesn't
-tag the note. `create_note` fails for a name that already exists, and takes an optional
+tag the note. `create_note` fails for a name that already exists or breaks the name rule (a `|` or
+`]]`), and takes an optional
 `tags` list: each name is resolved or created as a Tag (repeats folded) and set as the
 note's `tags` property through `SetEntityProperty`, after the body is written. Without a
 `tags` argument it takes the `tags:` line of the markdown's leading frontmatter, a JSON list
