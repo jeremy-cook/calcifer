@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ConnectError } from '@connectrpc/connect'
 import { create as createMessage } from '@bufbuild/protobuf'
+import { timestampNow } from '@bufbuild/protobuf/wkt'
 import { useMutation } from '@tanstack/react-query'
 import { useShallow } from 'zustand/react/shallow'
 import {
   EntityRefListSchema,
   EntityRefSchema,
   EntitySchema,
+  LinkRefSchema,
   PropertyValueSchema,
   type Entity,
   type EntityRef,
+  type LinkRef,
   type RichTextRef,
   type PropertyValue,
 } from '@calcifer/proto/calcifer/v1/entities_pb'
@@ -21,6 +24,10 @@ import { replica, useReplica, type ConnectionState } from '~/model/replica'
 
 export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
 export type { ConnectionState } from '~/model/replica'
+
+// The reserved link scope of a direct relationship (ADR 12): the `sourcePropertyId` of the
+// `LinkRef` the server derives from each `relationships` row.
+export const RELATED_SCOPE = '@related'
 
 // The entity RPCs wrap their entity in a response message; the server always
 // sets it, so a missing one is a protocol error.
@@ -328,6 +335,81 @@ export function useRemoveRelationTarget({ onError }: UseSetPropertyOptions = {})
   )
 }
 
+interface AddRelationshipVars {
+  entity: Entity
+  target: RelationTarget
+}
+
+// Relate `entity` to `target` through EntityService.AddRelationship, which adds that one
+// row, so it can't drop a relationship another writer added meanwhile (ADR 12).
+// Optimistic: a `@related` link to the target on the entity as currently cached. On
+// error only that link is removed again, and only if the optimistic step added it. On
+// success the server's entity replaces the cached one.
+export function useAddRelationship({ onError }: UseSetPropertyOptions = {}) {
+  // Latest callback without re-creating the mutation on every render.
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
+  const { mutate } = useMutation({
+    mutationFn: async ({ entity, target }: AddRelationshipVars) =>
+      requireEntity(await entityClient.addRelationship({ entityId: entity.id, targetId: target.id })),
+    onMutate: ({ entity, target }) => {
+      const link = createMessage(LinkRefSchema, {
+        target: createMessage(EntityRefSchema, { id: target.id, structureType: target.structureType }),
+        sourcePropertyId: RELATED_SCOPE,
+        createdAt: timestampNow(),
+      })
+      const cached = getEntity(entity.id)
+      const added = cached !== undefined && withRelationshipAdded(cached, link) !== cached
+      replica.patch(entity.id, (e) => withRelationshipAdded(e, link))
+      return { added }
+    },
+    onSuccess: (entity) => replica.upsert(entity),
+    onError: (err, { entity, target }, ctx) => {
+      if (ctx?.added) replica.patch(entity.id, (e) => withRelationshipRemoved(e, target.id))
+      onErrorRef.current?.(err, entity)
+    },
+  })
+  return useCallback((entity: Entity, target: RelationTarget) => mutate({ entity, target }), [mutate])
+}
+
+interface RemoveRelationshipVars {
+  entity: Entity
+  targetId: string
+}
+
+// Remove `entity`'s relationship to `targetId` through EntityService.RemoveRelationship,
+// the counterpart of useAddRelationship. Optimistic: the `@related` link to the target
+// goes; links from content or properties to the same target stay. On error only that
+// link is put back, as it was, and only if the optimistic step removed it. On success
+// the server's entity replaces the cached one.
+export function useRemoveRelationship({ onError }: UseSetPropertyOptions = {}) {
+  // Latest callback without re-creating the mutation on every render.
+  const onErrorRef = useRef(onError)
+  useEffect(() => {
+    onErrorRef.current = onError
+  })
+  const { mutate } = useMutation({
+    mutationFn: async ({ entity, targetId }: RemoveRelationshipVars) =>
+      requireEntity(await entityClient.removeRelationship({ entityId: entity.id, targetId })),
+    onMutate: ({ entity, targetId }) => {
+      const cached = getEntity(entity.id)
+      // `undefined`: there was no such relationship, so there is nothing to restore.
+      const removed = cached?.links.find((l) => isRelationshipTo(l, targetId))
+      replica.patch(entity.id, (e) => withRelationshipRemoved(e, targetId))
+      return { removed }
+    },
+    onSuccess: (entity) => replica.upsert(entity),
+    onError: (err, { entity }, ctx) => {
+      const removed = ctx?.removed
+      if (removed) replica.patch(entity.id, (e) => withRelationshipAdded(e, removed))
+      onErrorRef.current?.(err, entity)
+    },
+  })
+  return useCallback((entity: Entity, targetId: string) => mutate({ entity, targetId }), [mutate])
+}
+
 export interface PropertyWriters {
   // `null` clears the text.
   setText: (entity: Entity, propertyId: string, text: string | null) => void
@@ -388,7 +470,7 @@ export function relationsValue(targets: readonly RelationTarget[]): PropertyValu
   })
 }
 
-// --- Pure edit builders (the optimistic apply of useSetProperty() and the relation target writers) ---
+// --- Pure edit builders (the optimistic apply of useSetProperty(), the relation target writers and the relationship writers) ---
 
 // `null` removes the property. The server still clears links for declared
 // relation properties that are absent (SetEntityProperty also for ad-hoc ones), so
@@ -421,6 +503,25 @@ function withTargetRemoved(entity: Entity, propertyId: string, targetId: string)
   if (!refs.some((ref) => ref.id === targetId)) return entity
   const rest = refs.filter((ref) => ref.id !== targetId)
   return withProperty(entity, propertyId, rest.length === 0 ? null : relationsValue(rest).value)
+}
+
+// Whether `link` is the direct relationship to `targetId`.
+function isRelationshipTo(link: LinkRef, targetId: string): boolean {
+  return link.sourcePropertyId === RELATED_SCOPE && link.target?.id === targetId
+}
+
+// Appends the `@related` link `link`. A relationship to its target already there returns
+// `entity` itself.
+function withRelationshipAdded(entity: Entity, link: LinkRef): Entity {
+  if (!link.target || entity.links.some((l) => isRelationshipTo(l, link.target!.id))) return entity
+  return createMessage(EntitySchema, { ...entity, links: [...entity.links, link] })
+}
+
+// Drops the `@related` link to `targetId`, leaving the entity's other links to it. No such
+// relationship returns `entity` itself.
+function withRelationshipRemoved(entity: Entity, targetId: string): Entity {
+  if (!entity.links.some((l) => isRelationshipTo(l, targetId))) return entity
+  return createMessage(EntitySchema, { ...entity, links: entity.links.filter((l) => !isRelationshipTo(l, targetId)) })
 }
 
 // --- Imperative (non-hook) helpers: delete, the editor mention flow, cleanup ---

@@ -10,18 +10,20 @@ import {
   getEntity,
   propertyValueOf,
   relationsValue,
+  useAddRelationship,
   useAddRelationTarget,
   useAllEntities,
   useEntitiesByIds,
   useEntitiesOfType,
   useEntitiesWithFacet,
   useEntity,
+  useRemoveRelationship,
   useRemoveRelationTarget,
   useRenameEntity,
   useSetProperty,
 } from '~/model/store'
 import { applyWatchEvent } from '~/model/sync'
-import { entity, watch } from '~/model/testing'
+import { entity, link, watch, withLinks } from '~/model/testing'
 
 vi.mock('~/model/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/model/api')>()),
@@ -30,6 +32,8 @@ vi.mock('~/model/api', async (importOriginal) => ({
     setEntityProperty: vi.fn(),
     addRelationTarget: vi.fn(),
     removeRelationTarget: vi.fn(),
+    addRelationship: vi.fn(),
+    removeRelationship: vi.fn(),
   },
   richTextClient: {},
   structureClient: {},
@@ -72,6 +76,11 @@ function withTags(e: Entity, ...ids: string[]): Entity {
 function tagIdsOf(id: string): string[] | null {
   const value = propertyValueOf(getEntity(id)!, 'tags')
   return value?.case === 'relations' ? value.value.refs.map((ref) => ref.id) : null
+}
+
+// The entity's links as `<scope>><target id>`, in order.
+function linksOf(id: string): string[] {
+  return getEntity(id)!.links.map((l) => `${l.sourcePropertyId}>${l.target?.id}`)
 }
 
 // A promise the test settles by hand.
@@ -309,5 +318,97 @@ describe('relation target writers', () => {
 
     await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
     expect(tagIdsOf('a')).toEqual(['a-tag'])
+  })
+})
+
+describe('relationship writers', () => {
+  it('adds a relationship optimistically and rolls back only that link on error', async () => {
+    applyWatchEvent(watch.snapshot(withLinks(entity('a'), link('x', 'content'))))
+    const add = deferred<never>()
+    vi.mocked(entityClient.addRelationship).mockReturnValue(add.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useAddRelationship({ onError }), { wrapper })
+
+    act(() => result.current(getEntity('a')!, { id: 'b', structureType: 'Note' }))
+
+    await vi.waitFor(() => expect(linksOf('a')).toEqual(['content>x', '@related>b']))
+    expect(vi.mocked(entityClient.addRelationship).mock.calls[0][0]).toEqual({ entityId: 'a', targetId: 'b' })
+    const added = getEntity('a')!.links[1]
+    expect(added.target?.structureType).toBe('Note')
+    expect(added.createdAt).toBeDefined()
+
+    // Another writer relates `a` to `c` before this one fails.
+    act(() => replica.patch('a', (e) => withLinks(e, ...e.links, link('c', '@related'))))
+    await act(async () => add.reject(new Error('add failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(linksOf('a')).toEqual(['content>x', '@related>c'])
+  })
+
+  it('on a successful add replaces the optimistic link with the server entity', async () => {
+    applyWatchEvent(watch.snapshot(entity('a')))
+    const server = withLinks(entity('a'), link('b', '@related', 5_000))
+    vi.mocked(entityClient.addRelationship).mockResolvedValue({ entity: server } as never)
+    const { result } = renderHook(() => useAddRelationship(), { wrapper })
+
+    act(() => result.current(getEntity('a')!, { id: 'b', structureType: 'Note' }))
+
+    await vi.waitFor(() => expect(getEntity('a')).toBe(server))
+  })
+
+  it('adding a relationship that is already there changes nothing on error', async () => {
+    applyWatchEvent(watch.snapshot(withLinks(entity('a'), link('b', '@related'))))
+    const add = deferred<never>()
+    vi.mocked(entityClient.addRelationship).mockReturnValue(add.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useAddRelationship({ onError }), { wrapper })
+
+    const before = getEntity('a')
+    act(() => result.current(getEntity('a')!, { id: 'b', structureType: 'Note' }))
+    await vi.waitFor(() => expect(entityClient.addRelationship).toHaveBeenCalledOnce())
+    expect(getEntity('a')).toBe(before)
+    await act(async () => add.reject(new Error('add failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(linksOf('a')).toEqual(['@related>b'])
+  })
+
+  it('removes a relationship optimistically and restores it on error', async () => {
+    const original = link('b', '@related', 5_000)
+    applyWatchEvent(
+      watch.snapshot(withLinks(entity('a'), original, link('b', 'content', 6_000), link('c', '@related', 7_000))),
+    )
+    const remove = deferred<never>()
+    vi.mocked(entityClient.removeRelationship).mockReturnValue(remove.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useRemoveRelationship({ onError }), { wrapper })
+
+    act(() => result.current(getEntity('a')!, 'b'))
+
+    // The mention of `b` stays: only the relationship goes.
+    await vi.waitFor(() => expect(linksOf('a')).toEqual(['content>b', '@related>c']))
+    expect(vi.mocked(entityClient.removeRelationship).mock.calls[0][0]).toEqual({ entityId: 'a', targetId: 'b' })
+    await act(async () => remove.reject(new Error('remove failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(linksOf('a').toSorted()).toEqual(['@related>b', '@related>c', 'content>b'])
+    expect(getEntity('a')!.links).toContain(original)
+  })
+
+  it('removing a relationship that is not there changes nothing on error', async () => {
+    applyWatchEvent(watch.snapshot(withLinks(entity('a'), link('b', 'content'))))
+    const remove = deferred<never>()
+    vi.mocked(entityClient.removeRelationship).mockReturnValue(remove.promise)
+    const onError = vi.fn()
+    const { result } = renderHook(() => useRemoveRelationship({ onError }), { wrapper })
+
+    const before = getEntity('a')
+    act(() => result.current(getEntity('a')!, 'b'))
+    await vi.waitFor(() => expect(entityClient.removeRelationship).toHaveBeenCalledOnce())
+    expect(getEntity('a')).toBe(before)
+    await act(async () => remove.reject(new Error('remove failed')))
+
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce())
+    expect(getEntity('a')).toBe(before)
   })
 })

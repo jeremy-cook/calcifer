@@ -58,6 +58,14 @@ export function useStructure(structureType: string): StructureDef | undefined {
   return findStructure(useStructures(), structureType)
 }
 
+const NO_STRUCTURE_TYPES: readonly string[] = []
+
+// The structure types an entity of `structureType` may hold relationships to (ADR 12).
+// Empty: it can't hold any, or the registry doesn't know the type.
+export function useRelatesTo(structureType: string): readonly string[] {
+  return useStructure(structureType)?.relatesTo ?? NO_STRUCTURE_TYPES
+}
+
 export function getFacet(id: string): FacetDef | undefined {
   return getFacets().find((f) => f.id === id)
 }
