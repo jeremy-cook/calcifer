@@ -132,24 +132,9 @@ retried and `whenRichTextSaved` resolving only after it succeeds.
 
 ---
 
-### I-78 · `get_backlinks` reports a missing note as a result, not an error · low · confirmed
-
-**Where:** `server/src/mcp/tools.rs` (`get_backlinks`)
-
-**Problem:** `get_backlinks {name}` for a note that doesn't exist returns "No note named …"
-with `isError: false`, the pattern I-75 removed from `get_note`. An agent checking
-`isError` treats the missing note as found, with no backlinks. Found in T02 of the
-small-fixes plan, confirmed by reading.
-
-**Fix:** Look the note up with `existing_note_id` (or `existing_doc`) so a missing note is a
-tool error, and update the test that asserts the plain result.
-
-**Done when:** `get_backlinks` for a missing note returns `isError: true`.
-
----
-
 ## Resolved
 
+- **I-78 · `get_backlinks` reports a missing note as a result, not an error.** Fixed 2026-10-25 (2a2e3bb). `get_backlinks` finds the note with `existing_note_id`, so a missing note is `isError: true` with the shared "No note named …" text; a note nobody links to still gets "Nothing links to …". Covered by `get_backlinks_missing_note_is_an_error`; checked over MCP on a scratch DB.
 - **I-77 · Stale backlinks references after direct relationships.** Fixed 2026-10-24 (5aa136b). The `list_backlinks` comment names the relationships section, `LINK_SYNTAX` says `link_notes` relates notes without writing a link, and `LinkRef.source_property_id`'s proto comment mentions `@related`.
 - **I-75 · `get_note` reports a missing note as a result, not an error.** Fixed 2026-10-24 (e767d43). `get_note` goes through `existing_doc` for both keys, so a missing note and a missing day are both `isError: true`. Covered by `get_note_missing_note_is_an_error`; checked over MCP on a scratch DB.
 - **I-74 · `pnpm format` rewrites generated stubs and `vite.config.ts`.** Fixed 2026-10-24 (1025715, 1146d5a). `gen/` is in `.prettierignore` and `vite.config.ts` was formatted once; `prettier --check .` passes and `pnpm format` leaves the tree clean.
