@@ -62,9 +62,9 @@ that isn't `application/json` gets 415. Claude Code sends no `Origin`, and brows
 `localhost` such as the MCP Inspector pass.
 
 Tools: `search_notes`, `get_note`, `query_text_location`, `edit_note`, `create_note`,
-`append_to_note`, `tag_entity`, `link_notes`, `get_backlinks`, `create_daily_note`,
-`append_to_daily_note`, `list_structures`. Their tests run with the rest of the server's:
-`cd server && cargo test`.
+`append_to_note`, `tag_entity`, `link_notes`, `unlink_notes`, `get_backlinks`,
+`create_daily_note`, `append_to_daily_note`, `list_structures`. Their tests run with the
+rest of the server's: `cd server && cargo test`.
 
 After editing anything under `proto/`, lint it and regenerate the TS bindings:
 
@@ -97,7 +97,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
   (above). Note the `ref` field generates as `r#ref` in Rust.
 - **MCP (Rust):** tool ops in `server/src/mcp/tools.rs`, the JSON-RPC transport and tool
   schemas in `server/src/mcp/mod.rs`, markdown <-> TipTap in `server/src/mcp/markdown.rs`.
-- **FE (React):** hooks in `calcifer/src/model/{api,store,richtext,backlinks}.ts`;
+- **FE (React):** hooks in `calcifer/src/model/{api,store,richtext,relationships}.ts`;
   connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules
   live in [`CLAUDE.md`](CLAUDE.md).
 - **Commits:** one per unit, clear message, ending with the `Co-Authored-By` trailer.

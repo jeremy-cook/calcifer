@@ -56,8 +56,9 @@ message Entity {
 
 `Entity` is only ever returned. Clients write through intent-shaped RPCs (`CreateEntity`,
 `RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `ResolveEntity`, `AttachFacet`,
-`DetachFacet`, `AddRelationTarget`, `RemoveRelationTarget`) and the server owns the id, links,
-referenced dates and timestamps ([ADR 8](../adr/0008-server-builds-entities.md)).
+`DetachFacet`, `AddRelationTarget`, `RemoveRelationTarget`, `AddRelationship`,
+`RemoveRelationship`) and the server owns the id, links, referenced dates and timestamps
+([ADR 8](../adr/0008-server-builds-entities.md)).
 
 `facets` lists the facets attached to the entity (see Facets under Structures), and
 their values are in `properties` under the facet's namespaced ids (`todo.status`). Which
@@ -70,6 +71,25 @@ CREATE TABLE entity_facets (
   PRIMARY KEY (entity_id, facet)
 );
 ```
+
+Direct relationships ([ADR 12](../adr/0012-direct-relationships.md)) are one-way
+associations from an entity to another, one row each, in their own table. Deleting either
+end cascades:
+
+```sql
+CREATE TABLE relationships (
+  entity_id  TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,  -- the source
+  target_id  TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (entity_id, target_id)
+);
+CREATE INDEX relationships_target ON relationships(target_id);
+```
+
+A relationship is a row and not a property value: it never appears in `Entity.properties`
+and `SetEntityProperty` can't write it. It reaches clients as a `LinkRef` in `Entity.links`
+whose `source_property_id` is the reserved scope `@related` (see Graph derivation).
+`AddRelationship` and `RemoveRelationship` write it, one target at a time.
 
 Rich text lives in a parallel slice, so list and metadata reads never pull document
 bodies. A document is addressed by declared property: a `RichTextRef` is the entity's
@@ -127,6 +147,7 @@ message StructureDef {
   repeated PropertyDef properties = 5; // in display order
   bool creatable = 6;  bool mentionable = 7;  bool unique_names = 8;  bool name_editable = 9;
   repeated string facets = 10;         // facet ids this structure accepts, e.g. 'todo'
+  repeated string relates_to = 11;     // structure types its entities may hold relationships to (ADR 12); empty = none
 }
 
 message FacetDef {
@@ -145,6 +166,7 @@ message FacetDef {
 | `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Not authored: derived from the structure declaring a `name` key (see Natural keys below), and enforced by `entity_keys` (`ALREADY_EXISTS`). Other names can repeat; see `ResolveEntity` for which one a name lookup returns. |
 | `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. Enforced: `RenameEntity` of a structure with `name_editable: false` is `FAILED_PRECONDITION`. |
 | `facets` | The facets an entity of this structure can have attached. `["todo"]` for `Note`, empty for the others. Enforced: attaching any other facet is `FAILED_PRECONDITION`. |
+| `relates_to` | The structures an entity of this one may hold direct relationships to ([ADR 12](../adr/0012-direct-relationships.md)). `["Note"]` for `Note`, empty for the others. Enforced by `AddRelationship` only: an empty list is `FAILED_PRECONDITION`, a target of a structure not in the list is `INVALID_ARGUMENT`. It never limits content: a document can mention anything, and every mention is still a link. |
 
 The server derives what its write paths need from the same table: `richtext_properties`
 (which property ids `RichTextService` addresses), `select_defaults` (what `new_entity`
@@ -218,18 +240,56 @@ of `target_structure` (any structure when it's empty) and offer "Create" when th
 target has `unique_names`. No structure declares a `text`, `number` or `relation`
 property today; they are rendered so one can be added in `structures.rs` alone.
 
+Below the properties, a relationships section
+(`calcifer/src/components/relationships/RelationshipsPanel.tsx`) replaces the former
+Backlinks panel. It's collapsible, closed by default, headed "Relationships (N)", and
+Cmd/Ctrl+Shift+B toggles it. Its rows come from the replica, not an RPC
+(`selectRelationshipRows` in `calcifer/src/model/relationships.ts`):
+
+- One row per other entity and direction, each with the reasons it's there. An outgoing
+  row (a link the entity holds) reads *related* for a direct relationship and *mentioned*
+  for a link from a rich-text document, which includes a `#tag` chip. An incoming row (a
+  link another entity holds to this one) reads *related to this*, *mentions this*, or
+  *via <label>* for a relation property such as a Note's `tags`, with the property's
+  label from the registry, the id if it has none. The entity's own relation-property
+  links (`tags`) stay in their property fields, referenced dates aren't listed (they
+  belong to the calendar), and a self-link or a link to an entity the replica doesn't
+  hold gets no row.
+- Order: outgoing rows with *related* first, then incoming rows with it, then the rest;
+  within each group the newest link `created_at` first, ties by entity id. After 20 rows
+  the rest collapse behind "Show all (N)". With no rows it reads "No relationships."
+- Only an outgoing row with *related* has a remove control (`RemoveRelationship`). An
+  outgoing row that is only *mentioned* has a jump control instead, since removing a
+  mention means editing the author's text: it scrolls to the first mention or hashtag
+  chip (`data-type="mention"` or `"hashtag"`, with `data-id` the row's entity id) inside
+  `main`, in document order, and rings it for a second. A row with both has the remove
+  control only; incoming rows have neither.
+- "Add" opens an entity picker limited to the structure's `relates_to` (`useRelatesTo`
+  in `model/structures.ts`), excluding the entity itself and what it's already related
+  to, and calls `AddRelationship`. It's hidden when `relates_to` is empty. Both writers
+  (`useAddRelationship`, `useRemoveRelationship` in `model/store.ts`) update
+  `Entity.links` optimistically and roll back on an error.
+
 Current shape:
 
 - **`Note`** — properties: `tags` (relations → `Tag`), `content` (richtext); accepts the
-  `todo` facet. `tags` is what the note is tagged with. A `#tag` in its body only
-  references the Tag (the link shows in the Tag's backlinks) and doesn't set `tags`.
+  `todo` facet; `relates_to: Note`. `tags` is what the note is tagged with. A `#tag` in
+  its body only references the Tag (the link shows in the Tag's backlinks) and doesn't
+  set `tags`. A note is related to another note through a direct relationship, not
+  through either's text or properties.
 - **`Tag`** — no properties; `mentionable: false` (reached via `#`), a `name` key, so
-  `unique_names: true`.
+  `unique_names: true`. `relates_to` is empty: a Tag holds no relationships.
 - **`DailyNote`** — properties: `date` (date), `content` (richtext); `creatable: false`,
   `mentionable: false`, `name_editable: false`. The server names it for its date (see
   the DailyNote name rule under RPC surface); the entity page moves a note by setting
   `date` through `DailyNoteDateField`. Uniqueness per day is enforced by its `date`
-  key in `entity_keys`.
+  key in `entity_keys`. `relates_to` is empty.
+
+Registry tests check that every `relates_to` entry names a structure, and that no
+declared property id, of a structure or a facet, starts with `@` (reserved; see Graph
+derivation). Widening a `relates_to` list is a registry edit with no migration. Narrowing
+one leaves existing relationships that break the new rule; they are kept, and
+`RemoveRelationship` still removes them.
 
 **Facets** ([ADR 11](../adr/0011-facets.md)). A facet is a fixed group of properties,
 declared in `FACETS` next to the structures, that an entity can have attached or not
@@ -267,7 +327,11 @@ must be restarted and clients pick the change up on next load.
 ## Graph derivation
 
 All of this is recomputed server-side on write; none of it is client-authored. See
-[ADR 3](../adr/0003-server-authoritative-link-graph.md).
+[ADR 3](../adr/0003-server-authoritative-link-graph.md). A link comes from one of three
+stored sources: a rich-text document's chips, a `relation`/`relations` property value, or a
+direct relationship row ([ADR 12](../adr/0012-direct-relationships.md) amends ADR 3 with
+the third). Each source owns its own `source_property_id` scope and the server replaces
+only that scope when the source changes, so the sources reconcile independently.
 
 - **`Entity.links`** — the full outgoing set, re-derived from document content on every
   save by `extract_doc_references` (`server/src/tiptap/references.rs`) walking the TipTap JSON (see
@@ -285,21 +349,42 @@ All of this is recomputed server-side on write; none of it is client-authored. S
   entities' `relation`/`relations` values in its transaction (a `relation`, or a
   `relations` left empty, is cleared) and publishes `upserted` for each entity it
   changed. Dead refs stored before this change aren't cleaned up.
+- **Relationships** — the `relationships` table is the source and its links are derived:
+  after every `AddRelationship` or `RemoveRelationship` that changes a row, the server
+  runs `replace_scoped_links` for the source's `@related` scope in the same transaction,
+  with every target in the table (real structure type, oldest row first, ties by target
+  id). A target that stays keeps its link id and `created_at`. So `links` is still the
+  one index that backlinks, the replica and the agent read, and it could be rebuilt from
+  documents, property values and relationship rows. Because each scope reconciles alone,
+  a rich-text save or a property write never touches `@related` links, and a relationship
+  write never touches content links. The same pair can be linked twice, once by a mention
+  and once by a relationship; they are two link rows, and removing one leaves the other.
+  `Entity.links` stays in `link_id` order, so a link's position says nothing about when it
+  was made; read `created_at`.
+- **Reserved `@` ids** — property ids beginning with `@` are reserved for the link scopes
+  the server derives. `CreateEntity` (a key of `properties`), `SetEntityProperty`,
+  `AddRelationTarget`, `RemoveRelationTarget`, `GetRichText` and `PutRichText` return
+  `INVALID_ARGUMENT` (`property ids starting with @ are reserved`) for one, before any
+  lookup; clearing a value on one is refused too. `ResolveEntity` takes no property ids.
+  A property id starting with `@` that was accepted as an ad-hoc id before is now refused.
 - **`referenced_dates`** — entity-scoped; the union of date chips across all of the
   entity's richtext documents, recomputed per save.
 - **Backlinks** — never stored. Derived by `EntityService.ListBacklinks` from the
-  `links` rows whose `target_id` is the entity, one `Backlink` per row. A source
-  linking to itself is excluded, on the server and in the frontend's backlinks panel
-  (`calcifer/src/model/backlinks.ts`) alike.
+  `links` rows whose `target_id` is the entity, one `Backlink` per row; a relationship
+  to the entity is one whose `source_property_id` is `@related`. A source linking to
+  itself is excluded, on the server and in the frontend's relationships section
+  (`calcifer/src/model/relationships.ts`) alike.
 - **Deletion** — `DeleteEntity` removes everything the entity owns in one transaction.
-  `properties`, `links`, `referenced_dates`, `entity_keys`, `entity_facets`, `richtext` and
-  `chunks` all
+  `properties`, `links`, `relationships` (on either end), `referenced_dates`,
+  `entity_keys`, `entity_facets`, `richtext` and `chunks` all
   reference `entities(id) ON DELETE CASCADE`. `entity_vec` is a `vec0` virtual table
   keyed by `chunks.id` and can't cascade, so the server deletes the entity's
   embeddings first, while its chunks still name them. Mention chips in other
   documents survive as clickable tombstones; the server sweeps `links WHERE target_id
   = ?` to keep the relational index clean, and strips the id from other entities'
-  relation values (see above).
+  relation values (see above). A relationship to a deleted target doesn't survive as a
+  tombstone: its row and link go, the source's `updated_at` moves, and the source is
+  republished (see Watch contract).
 
 ---
 
@@ -314,7 +399,8 @@ document wraps it (`GetEntityResponse { Entity entity = 1; }`). `pnpm proto:lint
 ```proto
 service EntityService {
   rpc GetEntity(GetEntityRequest) returns (GetEntityResponse);            // id -> entity
-  // Also strips the id from other entities' relation values (see Graph derivation).
+  // Also strips the id from other entities' relation values and drops the
+  // relationships to it (see Graph derivation).
   rpc DeleteEntity(DeleteEntityRequest) returns (DeleteEntityResponse);   // id -> {}
   // For the agent; the frontend's replica comes from WatchEntities (ADR 9).
   rpc ListEntities(ListEntitiesRequest) returns (ListEntitiesResponse);  // structure_type filter
@@ -338,6 +424,9 @@ service EntityService {
   // Add or remove one target of a `relations` property; see Relations targets below.
   rpc AddRelationTarget(AddRelationTargetRequest) returns (AddRelationTargetResponse);  // entity_id, property_id, target_id -> entity
   rpc RemoveRelationTarget(RemoveRelationTargetRequest) returns (RemoveRelationTargetResponse);  // entity_id, property_id, target_id -> entity
+  // Relate an entity to another, or remove that relationship (ADR 12); see Relationships below.
+  rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse);  // entity_id, target_id -> entity
+  rpc RemoveRelationship(RemoveRelationshipRequest) returns (RemoveRelationshipResponse);  // entity_id, target_id -> entity
 }
 
 message CreateEntityRequest {
@@ -354,10 +443,14 @@ message AddRelationTargetRequest     { string entity_id = 1; string property_id 
 message AddRelationTargetResponse    { Entity entity = 1; }
 message RemoveRelationTargetRequest  { string entity_id = 1; string property_id = 2; string target_id = 3; }
 message RemoveRelationTargetResponse { Entity entity = 1; }
+message AddRelationshipRequest     { string entity_id = 1; string target_id = 2; }
+message AddRelationshipResponse    { Entity entity = 1; }
+message RemoveRelationshipRequest  { string entity_id = 1; string target_id = 2; }
+message RemoveRelationshipResponse { Entity entity = 1; }
 
 message ListBacklinksRequest { string entity_id = 1; }
 message Backlink {
-  Entity source = 1;                          // the entity whose content/relations link here
+  Entity source = 1;                          // the entity whose content/relations/relationships link here
   string source_property_id = 2;              // which property the link came from
   google.protobuf.Timestamp created_at = 3;   // when that link was first derived
 }
@@ -490,6 +583,26 @@ property`), and for an Add target whose structure isn't the property's `target_s
 `FAILED_PRECONDITION` for a property of a facet that isn't attached. Remove checks neither
 the target's existence nor its structure, so a stale ref can always be removed.
 
+**Relationships.** `AddRelationship` and `RemoveRelationship` add or remove one direct
+relationship ([ADR 12](../adr/0012-direct-relationships.md)) from `entity_id` to
+`target_id`: one `relationships` row, and the source's `@related` links re-derived from the
+table, in one transaction. Two writers adding different targets both keep theirs, which
+the whole-list `SetEntityProperty` can't promise. A relationship is one-way: B sees A's
+relationship to it as a backlink, and nothing is written on B's side. An empty `entity_id`
+or `target_id` is `INVALID_ARGUMENT`, checked first. `AddRelationship` then checks, in
+this order, and stops at the first failure: the source exists (`NOT_FOUND`); its
+structure's `relates_to` isn't empty (`FAILED_PRECONDITION`, `a Tag can't hold
+relationships`); the target exists (`NOT_FOUND`); the target isn't the source
+(`INVALID_ARGUMENT`, `an entity can't be related to itself`); the target's structure is in
+`relates_to` (`INVALID_ARGUMENT`, `a Note can't relate to a Tag`). Only then is a
+relationship that already exists a no-op, so the current registry decides whether A may
+relate to B, whatever it allowed when the row was written. `RemoveRelationship` checks
+only that the source exists (`NOT_FOUND`); it never reads `relates_to`, so a row left by a
+narrowed list, even one narrowed to empty, can always be removed, and a missing
+relationship or target is a no-op. A change bumps the source's `updated_at`, publishes
+`upserted` and returns the source entity; a no-op returns it unchanged with no write and no
+event. The row's `created_at` is when it was added.
+
 `ResolveEntity` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
 server). The `name` key trims the name and matches it case-insensitively within
@@ -554,9 +667,11 @@ and the filtered `ListEntities`, `ListBacklinks` and `Search` are there for the 
 
 Every write publishes after its transaction commits: `CreateEntity`, `RenameEntity`,
 `SetEntityProperty`, a creating `ResolveEntity` and a changing `AttachFacet`,
-`DetachFacet`, `AddRelationTarget` or `RemoveRelationTarget` publish `upserted`,
-`DeleteEntity` publishes `deleted_id` then one `upserted` per entity whose relation values
-it stripped (in id order), and `PutRichText` publishes `rich_text_changed` then `upserted`. The
+`DetachFacet`, `AddRelationTarget`, `RemoveRelationTarget`, `AddRelationship` or
+`RemoveRelationship` publish `upserted`, `DeleteEntity` publishes `deleted_id` then one
+`upserted` per entity whose relation values it stripped or that held a relationship to
+the deleted one (once each, in id order, with `updated_at` bumped), and `PutRichText`
+publishes `rich_text_changed` then `upserted`. The
 server reads the current revision before loading a snapshot and skips queued events at
 or below it, which the snapshot already includes.
 
@@ -609,11 +724,11 @@ could forge: a `Host` that isn't this machine (403, against DNS rebinding), an `
 that isn't loopback (403), and a POST body that isn't `application/json` (415, so a
 cross-site `no-cors` `text/plain` POST can't run a tool). Agents like Claude Code send no
 `Origin`; browser tools on `localhost`, such as the MCP Inspector, pass.
-It exposes twelve tools:
+It exposes thirteen tools:
 
 `search_notes` · `get_note` · `query_text_location` · `edit_note` · `create_note` ·
-`append_to_note` · `tag_entity` · `link_notes` · `get_backlinks` · `create_daily_note` ·
-`append_to_daily_note` · `list_structures`
+`append_to_note` · `tag_entity` · `link_notes` · `unlink_notes` · `get_backlinks` ·
+`create_daily_note` · `append_to_daily_note` · `list_structures`
 
 `search_notes` makes one `Search` call in its `mode` (default hybrid) and writes each
 hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
@@ -623,18 +738,44 @@ hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
 with `ResolveEntity` by date and never created: a missing day is an error that points at
 `append_to_daily_note`, and a malformed one fails with the server's `INVALID_ARGUMENT`
 message. They read and write the body of whichever they find, and their messages name it by
-kind: `Note "X"` or `Daily note "October 24, 2026"`. `append_to_note`, `tag_entity`,
-`get_backlinks` and `link_notes` stay Note-only, by name.
+kind: `Note "X"` or `Daily note "October 24, 2026"`. `append_to_note`, `tag_entity` and
+`get_backlinks` stay Note-only, by name; `link_notes` and `unlink_notes` are Note-only, by
+name or id.
 
-`get_note` returns the note's markdown under a frontmatter block of `name`, `version` and
-`tags`, each a JSON value on its own line. `tags` is the names of the note's Tags in the
-property's stored order, `[]` when it has none; a ref whose Tag no longer exists is
-skipped. A daily note's block is `name`, `version` and `date` (the ISO day) and no `tags`,
-since only Notes have them.
+`get_note` returns the note's markdown under a frontmatter block of `name`, `version`,
+`tags` and `related`, each a JSON value on its own line. `tags` is the names of the note's
+Tags in the property's stored order, `[]` when it has none; a ref whose Tag no longer
+exists is skipped. `related` is the names of the notes it holds direct relationships to,
+oldest first by the link's `created_at` (ties by target id), `[]` when it has none; change
+it with `link_notes` and `unlink_notes`. `create_note` ignores a `related:` line, so a
+`get_note` result copied into `create_note` keeps its tags but relates the copy to nothing.
+A daily note's block is `name`, `version` and `date` (the ISO day) and neither `tags` nor
+`related`, since only Notes have them.
+
+`link_notes(from, to)` relates one note to another through `AddRelationship` and writes no
+text into either; `unlink_notes(from, to)` removes that relationship through
+`RemoveRelationship`. Each argument is a note's name or id, and nothing is created: a
+value that parses as a UUID and names an existing Note is used as an id; otherwise it's
+matched against every Note's name, case-insensitively with the registry's Unicode
+folding. No match is a tool error, pointing at `search_notes`. Several matches is a tool
+error listing each as `- name (id)`, since Notes have no name key (ADR 11); the agent calls
+again with the id. `from` is resolved first, so its error is the one reported, and the
+server's own errors (a note related to itself, say) come through. The result is `Related
+"A" -> "B".` or, when it already was, `"A" was already related to "B".`; `unlink_notes`
+says `Unrelated "A" -> "B".` or `"A" wasn't related to "B".`. A relationship is one-way,
+so `link_notes("A", "B")` shows in A's `related` and in B's `get_backlinks`, not in B's
+`related`. A `[[wikilink]]` in a note's text isn't a relationship, and `unlink_notes`
+doesn't remove it.
+
+`get_backlinks` lists each source note once, however many links it has. A source with a
+direct relationship to the note is labelled `(related)`; one that links from a
+non-rich-text property is labelled `via <property ids>`, and one with both
+`(related, via tags)`. A source that links only from its documents is bare.
 
 `list_structures` formats the structure registry (`structures.rs`): each structure's type,
-description, properties (kinds, select options and defaults, relation targets) and the
-facets it accepts (`facets: todo`), then each facet as `- facet todo (To-do):
+description, properties (kinds, select options and defaults, relation targets), the
+facets it accepts (`facets: todo`) and, when it has any, the structures it may relate to
+(`relates_to: Note`), then each facet as `- facet todo (To-do):
 <description>` with its properties and the structures that accept it (`accepted by:
 Note`). No tool attaches or detaches a facet.
 
