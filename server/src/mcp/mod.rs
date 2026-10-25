@@ -582,8 +582,8 @@ mod tests {
             "Nothing links to \"Transformers\" yet."
         );
         assert_eq!(
-            f.k.get_backlinks("Nowhere").await.unwrap(),
-            "No note named \"Nowhere\"."
+            err(f.k.get_backlinks("Nowhere").await),
+            "No note named \"Nowhere\". Use search_notes or create_note."
         );
 
         let note = f.k.get_note(NoteKey::Name("Transformers")).await.unwrap();
@@ -1434,6 +1434,26 @@ mod tests {
                 "{arguments}"
             );
         }
+        assert_eq!(f.entity_count().await, before, "nothing was created");
+    }
+
+    #[tokio::test]
+    async fn get_backlinks_missing_note_is_an_error() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+
+        let reply = handle_message(
+            &f.k,
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "get_backlinks", "arguments": { "name": "Ghost" } } }),
+        )
+        .await
+        .unwrap();
+        assert!(reply.get("error").is_none(), "{reply}");
+        assert_eq!(reply["result"]["isError"], true, "{reply}");
+        assert_eq!(
+            reply["result"]["content"][0]["text"],
+            "No note named \"Ghost\". Use search_notes or create_note."
+        );
         assert_eq!(f.entity_count().await, before, "nothing was created");
     }
 

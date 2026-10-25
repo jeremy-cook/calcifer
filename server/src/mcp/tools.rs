@@ -1023,14 +1023,8 @@ impl Knowledge {
     }
 
     pub async fn get_backlinks(&self, name: &str) -> ToolResult {
-        let entity = match self.resolve_name("Note", name, false).await {
-            Ok(res) => res.entity.unwrap_or_default(),
-            Err(e) if is_code(&e, Code::NotFound) => {
-                return Ok(format!("No note named \"{name}\"."))
-            }
-            Err(e) => return Err(e.into()),
-        };
-        let sources = self.backlink_sources(&entity.id).await?;
+        let id = self.existing_note_id(name).await?;
+        let sources = self.backlink_sources(&id).await?;
         if sources.is_empty() {
             return Ok(format!("Nothing links to \"{name}\" yet."));
         }
