@@ -16,7 +16,7 @@ import {
   MinusIcon,
 } from '@phosphor-icons/react'
 import type { SlashCommandItem } from '~/lib/tiptap-extension-slash-command'
-import { showDatePicker } from '../date/showDatePicker'
+import { showDatePicker } from '../date/show-date-picker'
 import { shiftIso, todayIso } from '~/model/dates'
 
 export const SLASH_ITEMS: SlashCommandItem[] = [

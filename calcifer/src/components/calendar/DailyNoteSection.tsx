@@ -17,7 +17,7 @@ import { PlusIcon } from '@phosphor-icons/react'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { deleteEntity, useReplicaReady, useResolveDailyNote, type Entity } from '~/model/store'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
-import { dailyNoteContentRef, useDailyNotePrune } from '~/model/dailyNotes'
+import { dailyNoteContentRef, useDailyNotePrune } from '~/model/daily-notes'
 
 interface DailyNoteSectionProps {
   iso: string

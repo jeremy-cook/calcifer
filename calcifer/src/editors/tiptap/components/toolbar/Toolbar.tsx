@@ -23,7 +23,7 @@ import {
   CheckIcon,
 } from '@phosphor-icons/react'
 import { ColorPickerPopover } from './ColorPickerPopover'
-import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formattingOptions'
+import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formatting-options'
 import { InsertPopover, type InsertSection } from './InsertPopover'
 
 export type ToolbarSize = 'sm' | 'md' | 'lg'

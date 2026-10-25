@@ -1,7 +1,7 @@
 import { NodeViewWrapper, type NodeViewProps } from '@tiptap/react'
 import { useNavigate } from '@tanstack/react-router'
 import { formatDate } from '~/lib/tiptap-extension-date'
-import { showDatePicker } from './showDatePicker'
+import { showDatePicker } from './show-date-picker'
 
 export function DateChipView({ node, updateAttributes, editor }: NodeViewProps) {
   const { date } = node.attrs as { date: string }

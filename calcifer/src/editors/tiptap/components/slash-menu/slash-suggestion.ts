@@ -1,7 +1,7 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
 import type { SlashCommandItem } from '~/lib/tiptap-extension-slash-command'
-import { SLASH_ITEMS } from './slashItems'
-import { createSuggestionPopup } from '~/editors/tiptap/components/suggestionPopup'
+import { SLASH_ITEMS } from './slash-items'
+import { createSuggestionPopup } from '~/editors/tiptap/components/suggestion-popup'
 import { SlashCommandMenu } from './SlashCommandMenu'
 
 export const slashSuggestion: Omit<SuggestionOptions<SlashCommandItem>, 'editor'> = {

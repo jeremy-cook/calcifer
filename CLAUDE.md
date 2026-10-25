@@ -1,5 +1,12 @@
 # Calcifer — Development Guidelines
 
+## File naming
+
+kebab-case for every file and directory (`daily-notes.ts`, `slash-menu/`). The one exception is a
+file named after the React component it exports, which keeps the component's PascalCase
+(`CalendarPage.tsx`). Names a tool fixes are exempt: TanStack route files, `*.gen.ts`.
+Rust files are snake_case, as the language expects.
+
 ## React Component Style
 
 ### Named interfaces for props

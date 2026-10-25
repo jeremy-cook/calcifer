@@ -106,7 +106,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
 - **FE (React):** `calcifer/src/model/` is the data layer: `api.ts` (client and query
   cache), `sync.ts` and `replica.ts` (the Watch-fed replica), `store.ts` (the hooks and
   mutations components use), and one module per domain (`richtext`, `relationships`,
-  `todos`, `calendar`, `dailyNotes`, `dates`, `structures`); connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules
+  `todos`, `calendar`, `daily-notes`, `dates`, `structures`); connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules
   live in [`CLAUDE.md`](CLAUDE.md).
 - **Commits:** one per unit, clear message, ending with the `Co-Authored-By` trailer.
 

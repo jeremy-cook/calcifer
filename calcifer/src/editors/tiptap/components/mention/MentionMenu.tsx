@@ -1,7 +1,7 @@
 import { forwardRef, useImperativeHandle, useMemo, useState } from 'react'
 import { PlusIcon } from '@phosphor-icons/react'
 import { Command } from 'cmdk'
-import type { SuggestionMenuHandle } from '~/editors/tiptap/components/suggestionPopup'
+import type { SuggestionMenuHandle } from '~/editors/tiptap/components/suggestion-popup'
 import type { EntitySuggestionItem } from './types'
 
 interface MentionMenuProps {

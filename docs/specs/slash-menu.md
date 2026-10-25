@@ -5,7 +5,7 @@ with mentions. Prior-art research is in
 [`../research/blocknote-vs-tiptap.md`](../research/blocknote-vs-tiptap.md).
 
 **Code:** `calcifer/src/lib/tiptap-extension-slash-command/`,
-`editors/tiptap/components/slash-menu/*`, `components/suggestionPopup.ts`.
+`editors/tiptap/components/slash-menu/*`, `components/suggestion-popup.ts`.
 
 ---
 
@@ -86,7 +86,7 @@ empty query shows the full list.
 
 ## Popup
 
-`createSuggestionPopup(MenuComponent)` in `components/suggestionPopup.ts` is shared by
+`createSuggestionPopup(MenuComponent)` in `components/suggestion-popup.ts` is shared by
 the slash menu (`SlashCommandMenu`) and both mention triggers (`MentionMenu`). It
 returns a `render` implementing the TipTap suggestion lifecycle.
 

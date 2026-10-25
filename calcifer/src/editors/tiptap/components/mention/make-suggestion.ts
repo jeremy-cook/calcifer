@@ -1,9 +1,9 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
 import { getEntitiesSnapshot, getOrCreateEntityForMention } from '~/model/store'
 import { getStructure, isMentionable, structurePresentation } from '~/model/structures'
-import { createSuggestionPopup } from '~/editors/tiptap/components/suggestionPopup'
+import { createSuggestionPopup } from '~/editors/tiptap/components/suggestion-popup'
 import { MentionMenu } from './MentionMenu'
-import { parseQuery } from './parseQuery'
+import { parseQuery } from './parse-query'
 import { CREATE_ITEM_ID, type EntitySuggestionItem } from './types'
 
 interface SuggestionConfig {

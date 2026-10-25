@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
 import { Button } from '~/components/ui/button'
-import { COLOR_SWATCHES } from '../formattingOptions'
+import { COLOR_SWATCHES } from '../formatting-options'
 
 interface ColorPickerPopoverProps {
   color: string
