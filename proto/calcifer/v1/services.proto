@@ -89,6 +89,19 @@ service EntityService {
   // entity; INVALID_ARGUMENT and FAILED_PRECONDITION for the property as in
   // AddRelationTarget.
   rpc RemoveRelationTarget(RemoveRelationTargetRequest) returns (RemoveRelationTargetResponse);
+  // Relate an entity to another (ADR 12): a row in `relationships`, from which the
+  // server derives a link under the reserved scope "@related". Checks, in order:
+  // the source exists (NOT_FOUND); its structure's relates_to isn't empty
+  // (FAILED_PRECONDITION); the target exists (NOT_FOUND); the target isn't the
+  // source (INVALID_ARGUMENT); the target's structure is in relates_to
+  // (INVALID_ARGUMENT). An existing relationship is then a no-op: the entity
+  // unchanged, no write, no event. An empty entity_id or target_id is
+  // INVALID_ARGUMENT, checked first.
+  rpc AddRelationship(AddRelationshipRequest) returns (AddRelationshipResponse);
+  // Remove a relationship. NOT_FOUND only for an unknown source; relates_to isn't
+  // consulted, and a missing relationship (or target) is a no-op. An empty
+  // entity_id or target_id is INVALID_ARGUMENT.
+  rpc RemoveRelationship(RemoveRelationshipRequest) returns (RemoveRelationshipResponse);
 }
 
 service RichTextService {
@@ -196,6 +209,10 @@ message AddRelationTargetRequest    { string entity_id = 1; string property_id =
 message AddRelationTargetResponse   { Entity entity = 1; }
 message RemoveRelationTargetRequest { string entity_id = 1; string property_id = 2; string target_id = 3; }
 message RemoveRelationTargetResponse { Entity entity = 1; }
+message AddRelationshipRequest     { string entity_id = 1; string target_id = 2; }
+message AddRelationshipResponse    { Entity entity = 1; }
+message RemoveRelationshipRequest  { string entity_id = 1; string target_id = 2; }
+message RemoveRelationshipResponse { Entity entity = 1; }
 
 message ListStructuresRequest  {}
 message ListStructuresResponse {

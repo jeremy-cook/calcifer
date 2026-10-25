@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/services.proto.
  */
 export const file_calcifer_v1_services: GenFile = /*@__PURE__*/
-  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiVAoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDRIlCgRtb2RlGAMgASgOMhcuY2FsY2lmZXIudjEuU2VhcmNoTW9kZSI2Cg5TZWFyY2hSZXNwb25zZRIkCgRoaXRzGAEgAygLMhYuY2FsY2lmZXIudjEuU2VhcmNoSGl0IigKCk1hdGNoUmFuZ2USDQoFc3RhcnQYASABKA0SCwoDZW5kGAIgASgNInoKCVNlYXJjaEhpdBIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSDwoHc25pcHBldBgCIAEoCRINCgVzY29yZRgDIAEoARIoCgdtYXRjaGVzGAQgAygLMhcuY2FsY2lmZXIudjEuTWF0Y2hSYW5nZSIeChBHZXRFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIjgKEUdldEVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5Iu4BChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARJECgpwcm9wZXJ0aWVzGAQgAygLMjAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdC5Qcm9wZXJ0aWVzRW50cnkSDgoGZmFjZXRzGAUgAygJGk0KD1Byb3BlcnRpZXNFbnRyeRILCgNrZXkYASABKAkSKQoFdmFsdWUYAiABKAsyGi5jYWxjaWZlci52MS5Qcm9wZXJ0eVZhbHVlOgI4AUIHCgVfbmFtZSI7ChRDcmVhdGVFbnRpdHlSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiLwoTUmVuYW1lRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIjsKFFJlbmFtZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSIhChNEZWxldGVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIhYKFERlbGV0ZUVudGl0eVJlc3BvbnNlIm0KGFNldEVudGl0eVByb3BlcnR5UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkSKQoFdmFsdWUYAyABKAsyGi5jYWxjaWZlci52MS5Qcm9wZXJ0eVZhbHVlIkAKGVNldEVudGl0eVByb3BlcnR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IhYKFFdhdGNoRW50aXRpZXNSZXF1ZXN0IikKFExpc3RCYWNrbGlua3NSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCSJ7CghCYWNrbGluaxIjCgZzb3VyY2UYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSGgoSc291cmNlX3Byb3BlcnR5X2lkGAIgASgJEi4KCmNyZWF0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkEKFUxpc3RCYWNrbGlua3NSZXNwb25zZRIoCgliYWNrbGlua3MYASADKAsyFS5jYWxjaWZlci52MS5CYWNrbGluayI2ChJBdHRhY2hGYWNldFJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEg0KBWZhY2V0GAIgASgJIjoKE0F0dGFjaEZhY2V0UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjYKEkRldGFjaEZhY2V0UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSDQoFZmFjZXQYAiABKAkiOgoTRGV0YWNoRmFjZXRSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiVQoYQWRkUmVsYXRpb25UYXJnZXRSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIRCgl0YXJnZXRfaWQYAyABKAkiQAoZQWRkUmVsYXRpb25UYXJnZXRSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiWAobUmVtb3ZlUmVsYXRpb25UYXJnZXRSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIRCgl0YXJnZXRfaWQYAyABKAkiQwocUmVtb3ZlUmVsYXRpb25UYXJnZXRSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiFwoVTGlzdFN0cnVjdHVyZXNSZXF1ZXN0Im4KFkxpc3RTdHJ1Y3R1cmVzUmVzcG9uc2USLQoKc3RydWN0dXJlcxgBIAMoCzIZLmNhbGNpZmVyLnYxLlN0cnVjdHVyZURlZhIlCgZmYWNldHMYAiADKAsyFS5jYWxjaWZlci52MS5GYWNldERlZiJwChRSZXNvbHZlRW50aXR5UmVxdWVzdBIWCg5zdHJ1Y3R1cmVfdHlwZRgBIAEoCRIOCgRuYW1lGAIgASgJSAASDgoEZGF0ZRgDIAEoCUgAEhkKEWNyZWF0ZV9pZl9taXNzaW5nGAQgASgIQgUKA2tleSJNChVSZXNvbHZlRW50aXR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5Eg8KB2NyZWF0ZWQYAiABKAgiNwoORW50aXR5U25hcHNob3QSJQoIZW50aXRpZXMYASADKAsyEy5jYWxjaWZlci52MS5FbnRpdHki1gEKFVdhdGNoRW50aXRpZXNSZXNwb25zZRInCgh1cHNlcnRlZBgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eUgAEhQKCmRlbGV0ZWRfaWQYAiABKAlIABIyChFyaWNoX3RleHRfY2hhbmdlZBgDIAEoCzIVLmNhbGNpZmVyLnYxLlJpY2hUZXh0SAASLwoIc25hcHNob3QYBCABKAsyGy5jYWxjaWZlci52MS5FbnRpdHlTbmFwc2hvdEgAEhAKCHJldmlzaW9uGA8gASgEQgcKBWV2ZW50IjwKEkdldFJpY2hUZXh0UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkiPwoTR2V0UmljaFRleHRSZXNwb25zZRIoCglyaWNoX3RleHQYASABKAsyFS5jYWxjaWZlci52MS5SaWNoVGV4dCKCAQoSUHV0UmljaFRleHRSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRILCgNkb2MYAyABKAkSNwoTZXhwZWN0ZWRfdXBkYXRlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPwoTUHV0UmljaFRleHRSZXNwb25zZRIoCglyaWNoX3RleHQYASABKAsyFS5jYWxjaWZlci52MS5SaWNoVGV4dCp0CgpTZWFyY2hNb2RlEhsKF1NFQVJDSF9NT0RFX1VOU1BFQ0lGSUVEEAASFwoTU0VBUkNIX01PREVfTEVYSUNBTBABEhgKFFNFQVJDSF9NT0RFX1NFTUFOVElDEAISFgoSU0VBUkNIX01PREVfSFlCUklEEAMykgkKDUVudGl0eVNlcnZpY2USSgoJR2V0RW50aXR5Eh0uY2FsY2lmZXIudjEuR2V0RW50aXR5UmVxdWVzdBoeLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlc3BvbnNlElMKDExpc3RFbnRpdGllcxIgLmNhbGNpZmVyLnYxLkxpc3RFbnRpdGllc1JlcXVlc3QaIS5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXNwb25zZRJTCgxDcmVhdGVFbnRpdHkSIC5jYWxjaWZlci52MS5DcmVhdGVFbnRpdHlSZXF1ZXN0GiEuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVzcG9uc2USUwoMUmVuYW1lRW50aXR5EiAuY2FsY2lmZXIudjEuUmVuYW1lRW50aXR5UmVxdWVzdBohLmNhbGNpZmVyLnYxLlJlbmFtZUVudGl0eVJlc3BvbnNlEmIKEVNldEVudGl0eVByb3BlcnR5EiUuY2FsY2lmZXIudjEuU2V0RW50aXR5UHJvcGVydHlSZXF1ZXN0GiYuY2FsY2lmZXIudjEuU2V0RW50aXR5UHJvcGVydHlSZXNwb25zZRJTCgxEZWxldGVFbnRpdHkSIC5jYWxjaWZlci52MS5EZWxldGVFbnRpdHlSZXF1ZXN0GiEuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVzcG9uc2USWAoNV2F0Y2hFbnRpdGllcxIhLmNhbGNpZmVyLnYxLldhdGNoRW50aXRpZXNSZXF1ZXN0GiIuY2FsY2lmZXIudjEuV2F0Y2hFbnRpdGllc1Jlc3BvbnNlMAESVgoNUmVzb2x2ZUVudGl0eRIhLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXF1ZXN0GiIuY2FsY2lmZXIudjEuUmVzb2x2ZUVudGl0eVJlc3BvbnNlElYKDUxpc3RCYWNrbGlua3MSIS5jYWxjaWZlci52MS5MaXN0QmFja2xpbmtzUmVxdWVzdBoiLmNhbGNpZmVyLnYxLkxpc3RCYWNrbGlua3NSZXNwb25zZRJQCgtBdHRhY2hGYWNldBIfLmNhbGNpZmVyLnYxLkF0dGFjaEZhY2V0UmVxdWVzdBogLmNhbGNpZmVyLnYxLkF0dGFjaEZhY2V0UmVzcG9uc2USUAoLRGV0YWNoRmFjZXQSHy5jYWxjaWZlci52MS5EZXRhY2hGYWNldFJlcXVlc3QaIC5jYWxjaWZlci52MS5EZXRhY2hGYWNldFJlc3BvbnNlEmIKEUFkZFJlbGF0aW9uVGFyZ2V0EiUuY2FsY2lmZXIudjEuQWRkUmVsYXRpb25UYXJnZXRSZXF1ZXN0GiYuY2FsY2lmZXIudjEuQWRkUmVsYXRpb25UYXJnZXRSZXNwb25zZRJrChRSZW1vdmVSZWxhdGlvblRhcmdldBIoLmNhbGNpZmVyLnYxLlJlbW92ZVJlbGF0aW9uVGFyZ2V0UmVxdWVzdBopLmNhbGNpZmVyLnYxLlJlbW92ZVJlbGF0aW9uVGFyZ2V0UmVzcG9uc2UytQEKD1JpY2hUZXh0U2VydmljZRJQCgtHZXRSaWNoVGV4dBIfLmNhbGNpZmVyLnYxLkdldFJpY2hUZXh0UmVxdWVzdBogLmNhbGNpZmVyLnYxLkdldFJpY2hUZXh0UmVzcG9uc2USUAoLUHV0UmljaFRleHQSHy5jYWxjaWZlci52MS5QdXRSaWNoVGV4dFJlcXVlc3QaIC5jYWxjaWZlci52MS5QdXRSaWNoVGV4dFJlc3BvbnNlMlIKDVNlYXJjaFNlcnZpY2USQQoGU2VhcmNoEhouY2FsY2lmZXIudjEuU2VhcmNoUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlMm0KEFN0cnVjdHVyZVNlcnZpY2USWQoOTGlzdFN0cnVjdHVyZXMSIi5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1JlcXVlc3QaIy5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1Jlc3BvbnNlYgZwcm90bzM", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_timestamp]);
+  fileDesc("ChpjYWxjaWZlci92MS9zZXJ2aWNlcy5wcm90bxILY2FsY2lmZXIudjEiVAoNU2VhcmNoUmVxdWVzdBINCgVxdWVyeRgBIAEoCRINCgVsaW1pdBgCIAEoDRIlCgRtb2RlGAMgASgOMhcuY2FsY2lmZXIudjEuU2VhcmNoTW9kZSI2Cg5TZWFyY2hSZXNwb25zZRIkCgRoaXRzGAEgAygLMhYuY2FsY2lmZXIudjEuU2VhcmNoSGl0IigKCk1hdGNoUmFuZ2USDQoFc3RhcnQYASABKA0SCwoDZW5kGAIgASgNInoKCVNlYXJjaEhpdBIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSDwoHc25pcHBldBgCIAEoCRINCgVzY29yZRgDIAEoARIoCgdtYXRjaGVzGAQgAygLMhcuY2FsY2lmZXIudjEuTWF0Y2hSYW5nZSIeChBHZXRFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIjgKEUdldEVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSItChNMaXN0RW50aXRpZXNSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAEgASgJIj0KFExpc3RFbnRpdGllc1Jlc3BvbnNlEiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5Iu4BChNDcmVhdGVFbnRpdHlSZXF1ZXN0EhYKDnN0cnVjdHVyZV90eXBlGAIgASgJEhEKBG5hbWUYAyABKAlIAIgBARJECgpwcm9wZXJ0aWVzGAQgAygLMjAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdC5Qcm9wZXJ0aWVzRW50cnkSDgoGZmFjZXRzGAUgAygJGk0KD1Byb3BlcnRpZXNFbnRyeRILCgNrZXkYASABKAkSKQoFdmFsdWUYAiABKAsyGi5jYWxjaWZlci52MS5Qcm9wZXJ0eVZhbHVlOgI4AUIHCgVfbmFtZSI7ChRDcmVhdGVFbnRpdHlSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiLwoTUmVuYW1lRW50aXR5UmVxdWVzdBIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJIjsKFFJlbmFtZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSIhChNEZWxldGVFbnRpdHlSZXF1ZXN0EgoKAmlkGAEgASgJIhYKFERlbGV0ZUVudGl0eVJlc3BvbnNlIm0KGFNldEVudGl0eVByb3BlcnR5UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkSKQoFdmFsdWUYAyABKAsyGi5jYWxjaWZlci52MS5Qcm9wZXJ0eVZhbHVlIkAKGVNldEVudGl0eVByb3BlcnR5UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IhYKFFdhdGNoRW50aXRpZXNSZXF1ZXN0IikKFExpc3RCYWNrbGlua3NSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCSJ7CghCYWNrbGluaxIjCgZzb3VyY2UYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkSGgoSc291cmNlX3Byb3BlcnR5X2lkGAIgASgJEi4KCmNyZWF0ZWRfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkEKFUxpc3RCYWNrbGlua3NSZXNwb25zZRIoCgliYWNrbGlua3MYASADKAsyFS5jYWxjaWZlci52MS5CYWNrbGluayI2ChJBdHRhY2hGYWNldFJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEg0KBWZhY2V0GAIgASgJIjoKE0F0dGFjaEZhY2V0UmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IjYKEkRldGFjaEZhY2V0UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSDQoFZmFjZXQYAiABKAkiOgoTRGV0YWNoRmFjZXRSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiVQoYQWRkUmVsYXRpb25UYXJnZXRSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIRCgl0YXJnZXRfaWQYAyABKAkiQAoZQWRkUmVsYXRpb25UYXJnZXRSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiWAobUmVtb3ZlUmVsYXRpb25UYXJnZXRSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRITCgtwcm9wZXJ0eV9pZBgCIAEoCRIRCgl0YXJnZXRfaWQYAyABKAkiQwocUmVtb3ZlUmVsYXRpb25UYXJnZXRSZXNwb25zZRIjCgZlbnRpdHkYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHkiPgoWQWRkUmVsYXRpb25zaGlwUmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSEQoJdGFyZ2V0X2lkGAIgASgJIj4KF0FkZFJlbGF0aW9uc2hpcFJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eSJBChlSZW1vdmVSZWxhdGlvbnNoaXBSZXF1ZXN0EhEKCWVudGl0eV9pZBgBIAEoCRIRCgl0YXJnZXRfaWQYAiABKAkiQQoaUmVtb3ZlUmVsYXRpb25zaGlwUmVzcG9uc2USIwoGZW50aXR5GAEgASgLMhMuY2FsY2lmZXIudjEuRW50aXR5IhcKFUxpc3RTdHJ1Y3R1cmVzUmVxdWVzdCJuChZMaXN0U3RydWN0dXJlc1Jlc3BvbnNlEi0KCnN0cnVjdHVyZXMYASADKAsyGS5jYWxjaWZlci52MS5TdHJ1Y3R1cmVEZWYSJQoGZmFjZXRzGAIgAygLMhUuY2FsY2lmZXIudjEuRmFjZXREZWYicAoUUmVzb2x2ZUVudGl0eVJlcXVlc3QSFgoOc3RydWN0dXJlX3R5cGUYASABKAkSDgoEbmFtZRgCIAEoCUgAEg4KBGRhdGUYAyABKAlIABIZChFjcmVhdGVfaWZfbWlzc2luZxgEIAEoCEIFCgNrZXkiTQoVUmVzb2x2ZUVudGl0eVJlc3BvbnNlEiMKBmVudGl0eRgBIAEoCzITLmNhbGNpZmVyLnYxLkVudGl0eRIPCgdjcmVhdGVkGAIgASgIIjcKDkVudGl0eVNuYXBzaG90EiUKCGVudGl0aWVzGAEgAygLMhMuY2FsY2lmZXIudjEuRW50aXR5ItYBChVXYXRjaEVudGl0aWVzUmVzcG9uc2USJwoIdXBzZXJ0ZWQYASABKAsyEy5jYWxjaWZlci52MS5FbnRpdHlIABIUCgpkZWxldGVkX2lkGAIgASgJSAASMgoRcmljaF90ZXh0X2NoYW5nZWQYAyABKAsyFS5jYWxjaWZlci52MS5SaWNoVGV4dEgAEi8KCHNuYXBzaG90GAQgASgLMhsuY2FsY2lmZXIudjEuRW50aXR5U25hcHNob3RIABIQCghyZXZpc2lvbhgPIAEoBEIHCgVldmVudCI8ChJHZXRSaWNoVGV4dFJlcXVlc3QSEQoJZW50aXR5X2lkGAEgASgJEhMKC3Byb3BlcnR5X2lkGAIgASgJIj8KE0dldFJpY2hUZXh0UmVzcG9uc2USKAoJcmljaF90ZXh0GAEgASgLMhUuY2FsY2lmZXIudjEuUmljaFRleHQiggEKElB1dFJpY2hUZXh0UmVxdWVzdBIRCgllbnRpdHlfaWQYASABKAkSEwoLcHJvcGVydHlfaWQYAiABKAkSCwoDZG9jGAMgASgJEjcKE2V4cGVjdGVkX3VwZGF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIj8KE1B1dFJpY2hUZXh0UmVzcG9uc2USKAoJcmljaF90ZXh0GAEgASgLMhUuY2FsY2lmZXIudjEuUmljaFRleHQqdAoKU2VhcmNoTW9kZRIbChdTRUFSQ0hfTU9ERV9VTlNQRUNJRklFRBAAEhcKE1NFQVJDSF9NT0RFX0xFWElDQUwQARIYChRTRUFSQ0hfTU9ERV9TRU1BTlRJQxACEhYKElNFQVJDSF9NT0RFX0hZQlJJRBADMtcKCg1FbnRpdHlTZXJ2aWNlEkoKCUdldEVudGl0eRIdLmNhbGNpZmVyLnYxLkdldEVudGl0eVJlcXVlc3QaHi5jYWxjaWZlci52MS5HZXRFbnRpdHlSZXNwb25zZRJTCgxMaXN0RW50aXRpZXMSIC5jYWxjaWZlci52MS5MaXN0RW50aXRpZXNSZXF1ZXN0GiEuY2FsY2lmZXIudjEuTGlzdEVudGl0aWVzUmVzcG9uc2USUwoMQ3JlYXRlRW50aXR5EiAuY2FsY2lmZXIudjEuQ3JlYXRlRW50aXR5UmVxdWVzdBohLmNhbGNpZmVyLnYxLkNyZWF0ZUVudGl0eVJlc3BvbnNlElMKDFJlbmFtZUVudGl0eRIgLmNhbGNpZmVyLnYxLlJlbmFtZUVudGl0eVJlcXVlc3QaIS5jYWxjaWZlci52MS5SZW5hbWVFbnRpdHlSZXNwb25zZRJiChFTZXRFbnRpdHlQcm9wZXJ0eRIlLmNhbGNpZmVyLnYxLlNldEVudGl0eVByb3BlcnR5UmVxdWVzdBomLmNhbGNpZmVyLnYxLlNldEVudGl0eVByb3BlcnR5UmVzcG9uc2USUwoMRGVsZXRlRW50aXR5EiAuY2FsY2lmZXIudjEuRGVsZXRlRW50aXR5UmVxdWVzdBohLmNhbGNpZmVyLnYxLkRlbGV0ZUVudGl0eVJlc3BvbnNlElgKDVdhdGNoRW50aXRpZXMSIS5jYWxjaWZlci52MS5XYXRjaEVudGl0aWVzUmVxdWVzdBoiLmNhbGNpZmVyLnYxLldhdGNoRW50aXRpZXNSZXNwb25zZTABElYKDVJlc29sdmVFbnRpdHkSIS5jYWxjaWZlci52MS5SZXNvbHZlRW50aXR5UmVxdWVzdBoiLmNhbGNpZmVyLnYxLlJlc29sdmVFbnRpdHlSZXNwb25zZRJWCg1MaXN0QmFja2xpbmtzEiEuY2FsY2lmZXIudjEuTGlzdEJhY2tsaW5rc1JlcXVlc3QaIi5jYWxjaWZlci52MS5MaXN0QmFja2xpbmtzUmVzcG9uc2USUAoLQXR0YWNoRmFjZXQSHy5jYWxjaWZlci52MS5BdHRhY2hGYWNldFJlcXVlc3QaIC5jYWxjaWZlci52MS5BdHRhY2hGYWNldFJlc3BvbnNlElAKC0RldGFjaEZhY2V0Eh8uY2FsY2lmZXIudjEuRGV0YWNoRmFjZXRSZXF1ZXN0GiAuY2FsY2lmZXIudjEuRGV0YWNoRmFjZXRSZXNwb25zZRJiChFBZGRSZWxhdGlvblRhcmdldBIlLmNhbGNpZmVyLnYxLkFkZFJlbGF0aW9uVGFyZ2V0UmVxdWVzdBomLmNhbGNpZmVyLnYxLkFkZFJlbGF0aW9uVGFyZ2V0UmVzcG9uc2USawoUUmVtb3ZlUmVsYXRpb25UYXJnZXQSKC5jYWxjaWZlci52MS5SZW1vdmVSZWxhdGlvblRhcmdldFJlcXVlc3QaKS5jYWxjaWZlci52MS5SZW1vdmVSZWxhdGlvblRhcmdldFJlc3BvbnNlElwKD0FkZFJlbGF0aW9uc2hpcBIjLmNhbGNpZmVyLnYxLkFkZFJlbGF0aW9uc2hpcFJlcXVlc3QaJC5jYWxjaWZlci52MS5BZGRSZWxhdGlvbnNoaXBSZXNwb25zZRJlChJSZW1vdmVSZWxhdGlvbnNoaXASJi5jYWxjaWZlci52MS5SZW1vdmVSZWxhdGlvbnNoaXBSZXF1ZXN0GicuY2FsY2lmZXIudjEuUmVtb3ZlUmVsYXRpb25zaGlwUmVzcG9uc2UytQEKD1JpY2hUZXh0U2VydmljZRJQCgtHZXRSaWNoVGV4dBIfLmNhbGNpZmVyLnYxLkdldFJpY2hUZXh0UmVxdWVzdBogLmNhbGNpZmVyLnYxLkdldFJpY2hUZXh0UmVzcG9uc2USUAoLUHV0UmljaFRleHQSHy5jYWxjaWZlci52MS5QdXRSaWNoVGV4dFJlcXVlc3QaIC5jYWxjaWZlci52MS5QdXRSaWNoVGV4dFJlc3BvbnNlMlIKDVNlYXJjaFNlcnZpY2USQQoGU2VhcmNoEhouY2FsY2lmZXIudjEuU2VhcmNoUmVxdWVzdBobLmNhbGNpZmVyLnYxLlNlYXJjaFJlc3BvbnNlMm0KEFN0cnVjdHVyZVNlcnZpY2USWQoOTGlzdFN0cnVjdHVyZXMSIi5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1JlcXVlc3QaIy5jYWxjaWZlci52MS5MaXN0U3RydWN0dXJlc1Jlc3BvbnNlYgZwcm90bzM", [file_calcifer_v1_entities, file_calcifer_v1_structures, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message calcifer.v1.SearchRequest
@@ -621,6 +621,84 @@ export const RemoveRelationTargetResponseSchema: GenMessage<RemoveRelationTarget
   messageDesc(file_calcifer_v1_services, 27);
 
 /**
+ * @generated from message calcifer.v1.AddRelationshipRequest
+ */
+export type AddRelationshipRequest = Message<"calcifer.v1.AddRelationshipRequest"> & {
+  /**
+   * @generated from field: string entity_id = 1;
+   */
+  entityId: string;
+
+  /**
+   * @generated from field: string target_id = 2;
+   */
+  targetId: string;
+};
+
+/**
+ * Describes the message calcifer.v1.AddRelationshipRequest.
+ * Use `create(AddRelationshipRequestSchema)` to create a new message.
+ */
+export const AddRelationshipRequestSchema: GenMessage<AddRelationshipRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 28);
+
+/**
+ * @generated from message calcifer.v1.AddRelationshipResponse
+ */
+export type AddRelationshipResponse = Message<"calcifer.v1.AddRelationshipResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.AddRelationshipResponse.
+ * Use `create(AddRelationshipResponseSchema)` to create a new message.
+ */
+export const AddRelationshipResponseSchema: GenMessage<AddRelationshipResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 29);
+
+/**
+ * @generated from message calcifer.v1.RemoveRelationshipRequest
+ */
+export type RemoveRelationshipRequest = Message<"calcifer.v1.RemoveRelationshipRequest"> & {
+  /**
+   * @generated from field: string entity_id = 1;
+   */
+  entityId: string;
+
+  /**
+   * @generated from field: string target_id = 2;
+   */
+  targetId: string;
+};
+
+/**
+ * Describes the message calcifer.v1.RemoveRelationshipRequest.
+ * Use `create(RemoveRelationshipRequestSchema)` to create a new message.
+ */
+export const RemoveRelationshipRequestSchema: GenMessage<RemoveRelationshipRequest> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 30);
+
+/**
+ * @generated from message calcifer.v1.RemoveRelationshipResponse
+ */
+export type RemoveRelationshipResponse = Message<"calcifer.v1.RemoveRelationshipResponse"> & {
+  /**
+   * @generated from field: calcifer.v1.Entity entity = 1;
+   */
+  entity?: Entity | undefined;
+};
+
+/**
+ * Describes the message calcifer.v1.RemoveRelationshipResponse.
+ * Use `create(RemoveRelationshipResponseSchema)` to create a new message.
+ */
+export const RemoveRelationshipResponseSchema: GenMessage<RemoveRelationshipResponse> = /*@__PURE__*/
+  messageDesc(file_calcifer_v1_services, 31);
+
+/**
  * @generated from message calcifer.v1.ListStructuresRequest
  */
 export type ListStructuresRequest = Message<"calcifer.v1.ListStructuresRequest"> & {
@@ -631,7 +709,7 @@ export type ListStructuresRequest = Message<"calcifer.v1.ListStructuresRequest">
  * Use `create(ListStructuresRequestSchema)` to create a new message.
  */
 export const ListStructuresRequestSchema: GenMessage<ListStructuresRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 28);
+  messageDesc(file_calcifer_v1_services, 32);
 
 /**
  * @generated from message calcifer.v1.ListStructuresResponse
@@ -655,7 +733,7 @@ export type ListStructuresResponse = Message<"calcifer.v1.ListStructuresResponse
  * Use `create(ListStructuresResponseSchema)` to create a new message.
  */
 export const ListStructuresResponseSchema: GenMessage<ListStructuresResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 29);
+  messageDesc(file_calcifer_v1_services, 33);
 
 /**
  * @generated from message calcifer.v1.ResolveEntityRequest
@@ -702,7 +780,7 @@ export type ResolveEntityRequest = Message<"calcifer.v1.ResolveEntityRequest"> &
  * Use `create(ResolveEntityRequestSchema)` to create a new message.
  */
 export const ResolveEntityRequestSchema: GenMessage<ResolveEntityRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 30);
+  messageDesc(file_calcifer_v1_services, 34);
 
 /**
  * @generated from message calcifer.v1.ResolveEntityResponse
@@ -726,7 +804,7 @@ export type ResolveEntityResponse = Message<"calcifer.v1.ResolveEntityResponse">
  * Use `create(ResolveEntityResponseSchema)` to create a new message.
  */
 export const ResolveEntityResponseSchema: GenMessage<ResolveEntityResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 31);
+  messageDesc(file_calcifer_v1_services, 35);
 
 /**
  * Every entity, sent by WatchEntities at the start of a stream and after a lag.
@@ -745,7 +823,7 @@ export type EntitySnapshot = Message<"calcifer.v1.EntitySnapshot"> & {
  * Use `create(EntitySnapshotSchema)` to create a new message.
  */
 export const EntitySnapshotSchema: GenMessage<EntitySnapshot> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 32);
+  messageDesc(file_calcifer_v1_services, 36);
 
 /**
  * @generated from message calcifer.v1.WatchEntitiesResponse
@@ -798,7 +876,7 @@ export type WatchEntitiesResponse = Message<"calcifer.v1.WatchEntitiesResponse">
  * Use `create(WatchEntitiesResponseSchema)` to create a new message.
  */
 export const WatchEntitiesResponseSchema: GenMessage<WatchEntitiesResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 33);
+  messageDesc(file_calcifer_v1_services, 37);
 
 /**
  * @generated from message calcifer.v1.GetRichTextRequest
@@ -822,7 +900,7 @@ export type GetRichTextRequest = Message<"calcifer.v1.GetRichTextRequest"> & {
  * Use `create(GetRichTextRequestSchema)` to create a new message.
  */
 export const GetRichTextRequestSchema: GenMessage<GetRichTextRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 34);
+  messageDesc(file_calcifer_v1_services, 38);
 
 /**
  * @generated from message calcifer.v1.GetRichTextResponse
@@ -839,7 +917,7 @@ export type GetRichTextResponse = Message<"calcifer.v1.GetRichTextResponse"> & {
  * Use `create(GetRichTextResponseSchema)` to create a new message.
  */
 export const GetRichTextResponseSchema: GenMessage<GetRichTextResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 35);
+  messageDesc(file_calcifer_v1_services, 39);
 
 /**
  * @generated from message calcifer.v1.PutRichTextRequest
@@ -882,7 +960,7 @@ export type PutRichTextRequest = Message<"calcifer.v1.PutRichTextRequest"> & {
  * Use `create(PutRichTextRequestSchema)` to create a new message.
  */
 export const PutRichTextRequestSchema: GenMessage<PutRichTextRequest> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 36);
+  messageDesc(file_calcifer_v1_services, 40);
 
 /**
  * @generated from message calcifer.v1.PutRichTextResponse
@@ -899,7 +977,7 @@ export type PutRichTextResponse = Message<"calcifer.v1.PutRichTextResponse"> & {
  * Use `create(PutRichTextResponseSchema)` to create a new message.
  */
 export const PutRichTextResponseSchema: GenMessage<PutRichTextResponse> = /*@__PURE__*/
-  messageDesc(file_calcifer_v1_services, 37);
+  messageDesc(file_calcifer_v1_services, 41);
 
 /**
  * How Search ranks. With embeddings off (the model failed to load), SEMANTIC and
@@ -1130,6 +1208,35 @@ export const EntityService: GenService<{
     methodKind: "unary";
     input: typeof RemoveRelationTargetRequestSchema;
     output: typeof RemoveRelationTargetResponseSchema;
+  },
+  /**
+   * Relate an entity to another (ADR 12): a row in `relationships`, from which the
+   * server derives a link under the reserved scope "@related". Checks, in order:
+   * the source exists (NOT_FOUND); its structure's relates_to isn't empty
+   * (FAILED_PRECONDITION); the target exists (NOT_FOUND); the target isn't the
+   * source (INVALID_ARGUMENT); the target's structure is in relates_to
+   * (INVALID_ARGUMENT). An existing relationship is then a no-op: the entity
+   * unchanged, no write, no event. An empty entity_id or target_id is
+   * INVALID_ARGUMENT, checked first.
+   *
+   * @generated from rpc calcifer.v1.EntityService.AddRelationship
+   */
+  addRelationship: {
+    methodKind: "unary";
+    input: typeof AddRelationshipRequestSchema;
+    output: typeof AddRelationshipResponseSchema;
+  },
+  /**
+   * Remove a relationship. NOT_FOUND only for an unknown source; relates_to isn't
+   * consulted, and a missing relationship (or target) is a no-op. An empty
+   * entity_id or target_id is INVALID_ARGUMENT.
+   *
+   * @generated from rpc calcifer.v1.EntityService.RemoveRelationship
+   */
+  removeRelationship: {
+    methodKind: "unary";
+    input: typeof RemoveRelationshipRequestSchema;
+    output: typeof RemoveRelationshipResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_calcifer_v1_services, 0);

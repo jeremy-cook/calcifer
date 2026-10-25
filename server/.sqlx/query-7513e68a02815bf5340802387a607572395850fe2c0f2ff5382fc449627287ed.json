@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT r.target_id AS \"target_id!\", e.structure_type AS \"structure_type!\"\n               FROM relationships r JOIN entities e ON e.id = r.target_id\n               WHERE r.entity_id = ? ORDER BY r.created_at, r.target_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "target_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "relationships",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "name": "structure_type!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "structure_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "7513e68a02815bf5340802387a607572395850fe2c0f2ff5382fc449627287ed"
+}
