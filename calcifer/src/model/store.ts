@@ -201,7 +201,7 @@ interface SetPropertyVars {
 }
 
 // A property's current value on `entity`: `null` when it has no such property.
-// `entity.properties` is a plain-object map, so an ad-hoc id such as
+// `entity.properties` is a plain-object map, so an id such as
 // `constructor` would otherwise read an `Object.prototype` member.
 export function propertyValueOf(entity: Entity, propertyId: string): PropertyValue['value'] | null {
   return Object.hasOwn(entity.properties, propertyId) ? entity.properties[propertyId].value : null
@@ -473,8 +473,7 @@ export function relationsValue(targets: readonly RelationTarget[]): PropertyValu
 // --- Pure edit builders (the optimistic apply of useSetProperty(), the relation target writers and the relationship writers) ---
 
 // `null` removes the property. The server still clears links for declared
-// relation properties that are absent (SetEntityProperty also for ad-hoc ones), so
-// removing the last ref is safe.
+// relation properties that are absent, so removing the last ref is safe.
 function withProperty(entity: Entity, propertyId: string, value: PropertyValue['value'] | null): Entity {
   const properties = { ...entity.properties }
   if (value === null) delete properties[propertyId]

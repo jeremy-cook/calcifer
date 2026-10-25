@@ -11,10 +11,10 @@ use crate::structures::{self, relation_properties};
 /// Each existing target is checked by `check_relation_targets` first, so a bad
 /// ref fails the whole write.
 ///
-/// Iterates the structure's and the attached facets' *declared* relation
-/// properties as well as any present on the entity, so a relation property that
-/// was removed or emptied still has its old link rows cleared (otherwise the
-/// target keeps a stale backlink).
+/// Iterates the structure's and the attached facets' declared relation
+/// properties, the only ones that can hold a value (I-79), so an emptied one
+/// still has its old link rows cleared (otherwise the target keeps a stale
+/// backlink).
 pub(crate) async fn sync_relation_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     entity: &Entity,
@@ -24,17 +24,6 @@ pub(crate) async fn sync_relation_links(
     for facet in entity.facets.iter().filter_map(|f| structures::facet(f)) {
         property_ids.extend(structures::facet_relation_properties(facet));
     }
-    // Ad-hoc relation properties in id order, so the map's order doesn't leak.
-    let mut ad_hoc: Vec<&str> = entity
-        .properties
-        .iter()
-        .filter(|(id, v)| {
-            is_relation_value(v.value.as_ref()) && !property_ids.contains(&id.as_str())
-        })
-        .map(|(id, _)| id.as_str())
-        .collect();
-    ad_hoc.sort_unstable();
-    property_ids.extend(ad_hoc);
 
     for property_id in property_ids {
         let value = entity
@@ -88,8 +77,8 @@ pub(crate) async fn sync_relation_property(
 /// ref), so the stored value and its links never disagree. Rejects a ref whose
 /// claimed type (when non-empty) isn't the target's, or whose target isn't the
 /// property's declared `target_structure` (a structure property, or a facet
-/// property by its namespace). Ad-hoc properties have no declared target to
-/// check. Refs to ids with no `entities` row are dropped, not
+/// property by its namespace). A property with no `target_structure` takes any
+/// structure. Refs to ids with no `entities` row are dropped, not
 /// rejected: a deleted target stays in other entities' stored values, and
 /// rejecting it would block every later write of those relation values.
 async fn check_relation_targets(

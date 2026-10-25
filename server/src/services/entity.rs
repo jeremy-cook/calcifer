@@ -1196,11 +1196,11 @@ fn validate_properties(entity: &Entity) -> Result<(), AppError> {
 /// addressed by (entity id, property id) through `RichTextService` (I-22); any
 /// other declared property must hold a value of its declared `PropertyKind`
 /// (I-16), a declared select one of its options, and a `select` value is only
-/// allowed on a declared select (I-9).
-/// Other undeclared (ad-hoc) properties take any value. Structures missing from
-/// the registry (rows written before unknown types were rejected, I-24) have no
-/// schema and pass unchecked. Any `date` value, declared or not and whatever
-/// the structure, must be an ISO day (I-52). Shared by Create and Resolve (via
+/// allowed on a declared select (I-9). A value on an undeclared property is
+/// refused (I-79): a new property is a registry edit and a server restart.
+/// Structures missing from the registry (rows written before unknown types were
+/// rejected, I-24) declare nothing, so they take no values. A `date` value must
+/// be an ISO day (I-52). Shared by Create and Resolve (via
 /// `validate_properties`) and SetProperty.
 ///
 /// `facets` are the entity's attached facets (ADR 11): a facet property is
@@ -1214,13 +1214,6 @@ fn validate_property(
     property_id: &str,
     value: Option<&property_value::Value>,
 ) -> Result<(), AppError> {
-    if let Some(property_value::Value::Date(d)) = value {
-        if !is_iso_day(d) {
-            return Err(AppError::Invalid(format!(
-                "{structure_type}.{property_id} must be an ISO calendar day (yyyy-MM-dd), got {d:?}"
-            )));
-        }
-    }
     if let Some(facet) = structures::facet_of_property(property_id) {
         if value.is_some() && !facets.contains(&facet.id) {
             return Err(AppError::FailedPrecondition(format!(
@@ -1229,17 +1222,18 @@ fn validate_property(
             )));
         }
     }
-    if structures::structure(structure_type).is_none() {
-        return Ok(());
-    }
     let Some(def) = structures::property_for(structure_type, facets, property_id) else {
-        return match value {
-            Some(property_value::Value::Select(key)) => Err(AppError::Invalid(format!(
-                "{structure_type}.{property_id} is not a select property (got select {key:?})"
-            ))),
-            _ => Ok(()),
-        };
+        return Err(AppError::Invalid(format!(
+            "{structure_type}.{property_id} isn't a declared property"
+        )));
     };
+    if let Some(property_value::Value::Date(d)) = value {
+        if !is_iso_day(d) {
+            return Err(AppError::Invalid(format!(
+                "{structure_type}.{property_id} must be an ISO calendar day (yyyy-MM-dd), got {d:?}"
+            )));
+        }
+    }
     // Exhaustive, so a new kind must decide how it's checked.
     let expected = match def.kind {
         PropertyKind::Richtext => {
@@ -1707,9 +1701,10 @@ impl EntityServiceTrait for EntityService {
             }
         }
 
-        // Only this property's links. The old value counts too, so replacing or
-        // clearing an ad-hoc relation property drops its links. Richtext-derived
-        // links live under their own source_property_id and aren't touched.
+        // Only this property's links. The old value counts too, so clearing a
+        // relation value stored before undeclared properties were refused (I-79)
+        // drops its links. Richtext-derived links live under their own
+        // source_property_id and aren't touched.
         let value = value.as_ref().and_then(|v| v.value.as_ref());
         let was_relation = is_relation_value(previous.as_ref().and_then(|v| v.value.as_ref()));
         let declared_relation =
@@ -2918,7 +2913,6 @@ mod tests {
     async fn relation_ref_with_wrong_claimed_type_is_rejected() {
         let svc = entity_service(memory_pool().await);
         let target = create(&svc, note("Target")).await;
-        let source = create(&svc, note("Source")).await;
 
         // Claims a Tag in a declared Tag-only property, but the target is a Note.
         let todo = create(&svc, todo("Water plants")).await;
@@ -2926,31 +2920,129 @@ mod tests {
             .await
             .expect_err("lying claimed type should be rejected");
         assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    }
 
-        // Ad-hoc properties have no declared target, but the claim is still checked...
-        let err = set_property(
-            &svc,
-            &source.id,
-            "related",
-            tags_value(&[(&target.id, "Tag")]),
-        )
-        .await
-        .expect_err("lying claimed type on an ad-hoc property should be rejected");
-        assert_eq!(err.code(), tonic::Code::InvalidArgument);
+    // I-79: a property is declared in the registry before it takes a value, on
+    // Create and SetProperty, whatever the value's kind.
+    #[tokio::test]
+    async fn undeclared_properties_are_invalid() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let target = create(&svc, note("Target")).await;
+        let memo = create(&svc, note("Memo")).await;
+        let mut rx = svc.hub.subscribe();
 
-        // ...and a truthful one links with the real type.
-        let updated = set_property(
-            &svc,
-            &source.id,
-            "related",
-            tags_value(&[(&target.id, "Note")]),
-        )
-        .await
-        .expect("ad-hoc relation to any structure");
+        let values = [
+            property_value::Value::Text("kept".to_string()),
+            property_value::Value::Number(3.0),
+            property_value::Value::Date("2026-02-03".to_string()),
+            property_value::Value::Select("open".to_string()),
+            property_value::Value::Relation(EntityRef {
+                id: target.id.clone(),
+                structure_type: "Note".to_string(),
+            }),
+            tags_value(&[(&target.id, "Note")]).expect("relations value"),
+        ];
+        // `TODO.note` only looks like the todo facet's namespace: ids are
+        // case-sensitive, so it's undeclared, not an unattached facet property.
+        for property_id in ["mood", "TODO.note"] {
+            for value in &values {
+                let err = try_create(&svc, with_value(note("M"), property_id, value.clone()))
+                    .await
+                    .expect_err("undeclared on create");
+                assert_eq!(err.code(), tonic::Code::InvalidArgument, "{err:?}");
+                assert!(
+                    err.message().contains("isn't a declared property"),
+                    "{}",
+                    err.message()
+                );
+
+                let err = set_property(&svc, &memo.id, property_id, Some(value.clone()))
+                    .await
+                    .expect_err("undeclared on set");
+                assert_eq!(err.code(), tonic::Code::InvalidArgument, "{err:?}");
+            }
+        }
+
+        assert_eq!(entity_count(&pool).await, 2);
+        assert!(stored_property_ids(&pool, &memo.id).await.is_empty());
+        assert_eq!(svc.load_entity(&memo.id).await.expect("load"), memo);
+        assert!(rx.try_recv().is_err(), "no event");
+    }
+
+    // A value stored before undeclared properties were refused (I-79) can still
+    // be cleared, and clearing a relation value drops its links.
+    #[tokio::test]
+    async fn an_undeclared_value_can_be_cleared() {
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
+        let target = create(&svc, note("Target")).await;
+        let memo = create(&svc, note("Memo")).await;
+        store_legacy_relations(&pool, &memo.id, "related", &target).await;
         assert_eq!(
-            link_targets(&updated, "related"),
-            [(target.id.clone(), "Note".to_string())]
+            link_targets(&svc.load_entity(&memo.id).await.expect("load"), "related").len(),
+            1
         );
+
+        let cleared = set_property(&svc, &memo.id, "related", None)
+            .await
+            .expect("clear");
+
+        assert!(!cleared.properties.contains_key("related"));
+        assert!(link_targets(&cleared, "related").is_empty());
+        assert!(stored_property_ids(&pool, &memo.id).await.is_empty());
+    }
+
+    /// Store `value` under `property_id` directly, as a write before I-79 could
+    /// have left an undeclared one. Derives no links.
+    async fn store_legacy_value(
+        pool: &SqlitePool,
+        entity_id: &str,
+        property_id: &str,
+        value: property_value::Value,
+    ) {
+        let value = PropertyValue { value: Some(value) };
+        sqlx::query("INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)")
+            .bind(entity_id)
+            .bind(property_id)
+            .bind(prost::Message::encode_to_vec(&value))
+            .execute(pool)
+            .await
+            .expect("store property");
+    }
+
+    /// Store a `relations` value naming `target` under `property_id`, with its
+    /// link row, as `store_legacy_value` does.
+    async fn store_legacy_relations(
+        pool: &SqlitePool,
+        entity_id: &str,
+        property_id: &str,
+        target: &Entity,
+    ) {
+        let value = tags_value(&[(&target.id, &target.structure_type)]).expect("relations value");
+        store_legacy_value(pool, entity_id, property_id, value).await;
+        store_legacy_link(pool, entity_id, property_id, target).await;
+    }
+
+    /// The link row a relation value naming `target` under `property_id` derives.
+    async fn store_legacy_link(
+        pool: &SqlitePool,
+        entity_id: &str,
+        property_id: &str,
+        target: &Entity,
+    ) {
+        sqlx::query(
+            "INSERT INTO links (entity_id, link_id, target_id, target_structure, source_property_id, created_at)
+             VALUES (?, ?, ?, ?, ?, 0)",
+        )
+        .bind(entity_id)
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&target.id)
+        .bind(&target.structure_type)
+        .bind(property_id)
+        .execute(pool)
+        .await
+        .expect("store link");
     }
 
     // A client may resend a stale tag list that still holds a deleted Tag (Delete
@@ -3051,22 +3143,26 @@ mod tests {
         assert!(millis(stored.updated_at) > millis(todo.updated_at));
     }
 
+    // No structure declares a single `relation` property, so the value is one
+    // stored before I-79.
     #[tokio::test]
     async fn delete_clears_a_single_relation_value() {
-        let svc = entity_service(memory_pool().await);
+        let pool = memory_pool().await;
+        let svc = entity_service(pool.clone());
         let target = create(&svc, note("Target")).await;
         let source = create(&svc, note("Source")).await;
-        let source = set_property(
-            &svc,
+        store_legacy_value(
+            &pool,
             &source.id,
             "parent",
-            Some(property_value::Value::Relation(EntityRef {
+            property_value::Value::Relation(EntityRef {
                 id: target.id.clone(),
                 structure_type: String::new(),
-            })),
+            }),
         )
-        .await
-        .expect("set ad-hoc relation");
+        .await;
+        store_legacy_link(&pool, &source.id, "parent", &target).await;
+        let source = svc.load_entity(&source.id).await.expect("load");
         assert_eq!(link_targets(&source, "parent").len(), 1);
         tokio::time::sleep(std::time::Duration::from_millis(5)).await;
 
@@ -3287,19 +3383,10 @@ mod tests {
         assert_eq!(stored.links, entity.links);
         assert_eq!(entity_count(&pool).await, 1);
 
-        // The matching kinds are accepted: a date on `due`, and anything on an
-        // undeclared id.
+        // The matching kind is accepted: a date on `due`.
         set_property(&svc, &entity.id, "todo.due", date("2026-06-13"))
             .await
             .expect("date on due");
-        set_property(
-            &svc,
-            &entity.id,
-            "mood",
-            Some(property_value::Value::Number(3.0)),
-        )
-        .await
-        .expect("undeclared property is unchecked");
     }
 
     // I-22: a rich-text property's document is addressed by (entity id, declared
@@ -3564,20 +3651,15 @@ mod tests {
         assert_eq!(day.name, "June 13, 2026");
     }
 
-    // I-52: a date value is a real day in canonical form, declared (todo.due,
-    // DailyNote.date) or ad hoc (a Note's `when`), on Create and SetProperty.
+    // I-52: a date value is a real day in canonical form (todo.due,
+    // DailyNote.date), on Create and SetProperty.
     #[tokio::test]
     async fn date_values_must_be_iso_days() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
         let task = create(&svc, todo("Task")).await;
-        let memo = create(&svc, note("Memo")).await;
         let day = daily_note(&svc, "2026-06-13").await;
-        let targets = [
-            (&task, "todo.due", todo("T")),
-            (&memo, "when", note("M")),
-            (&day, "date", note("D")),
-        ];
+        let targets = [(&task, "todo.due", todo("T")), (&day, "date", note("D"))];
 
         for bad in ["2026-13-45", "2026-2-3", "June 13", ""] {
             let value = property_value::Value::Date(bad.to_string());
@@ -3594,7 +3676,7 @@ mod tests {
                 assert_eq!(err.code(), tonic::Code::InvalidArgument, "set {bad:?}");
             }
         }
-        assert_eq!(entity_count(&pool).await, 3);
+        assert_eq!(entity_count(&pool).await, 2);
         assert_eq!(
             stored_date_key(&pool, &day.id).await.as_deref(),
             Some("2026-06-13")
@@ -3604,9 +3686,6 @@ mod tests {
         try_create(&svc, with_value(todo("T"), "todo.due", good.clone()))
             .await
             .expect("declared date on create");
-        try_create(&svc, with_value(note("M"), "when", good.clone()))
-            .await
-            .expect("ad-hoc date on create");
         for (entity, property_id, _) in &targets {
             set_property(&svc, &entity.id, property_id, Some(good.clone()))
                 .await
@@ -4205,18 +4284,18 @@ mod tests {
     async fn list_backlinks_reports_property_and_time_newest_first() {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
-        let target = create(&svc, note("Target")).await;
+        let target = create(&svc, tag("target")).await;
         let source = create(&svc, note("Source")).await;
         put_content(&pool, &source.id, &[mention("mention", &target)]).await;
         let chore = create(
             &svc,
-            with_relations(todo("Chore"), "related", &[(&target.id, "Note")]),
+            with_relations(todo("Chore"), "tags", &[(&target.id, "Tag")]),
         )
         .await;
         // The chore also mentions the target in its content: a second row.
         put_content(&pool, &chore.id, &[mention("mention", &target)]).await;
         set_link_created_at(&pool, &source.id, "content", 1_000).await;
-        set_link_created_at(&pool, &chore.id, "related", 2_000).await;
+        set_link_created_at(&pool, &chore.id, "tags", 2_000).await;
         set_link_created_at(&pool, &chore.id, "content", 3_000).await;
 
         let backlinks = list_backlinks_of(&svc, &target.id)
@@ -4227,7 +4306,7 @@ mod tests {
             backlink_rows(&backlinks),
             [
                 (chore.id.clone(), "content".to_string(), 3_000),
-                (chore.id.clone(), "related".to_string(), 2_000),
+                (chore.id.clone(), "tags".to_string(), 2_000),
                 (source.id.clone(), "content".to_string(), 1_000),
             ]
         );
@@ -4238,7 +4317,7 @@ mod tests {
         // Equal times: the lower source id first.
         set_link_created_at(&pool, &source.id, "content", 5_000).await;
         set_link_created_at(&pool, &chore.id, "content", 5_000).await;
-        set_link_created_at(&pool, &chore.id, "related", 5_000).await;
+        set_link_created_at(&pool, &chore.id, "tags", 5_000).await;
         let backlinks = list_backlinks_of(&svc, &target.id)
             .await
             .expect("backlinks");
@@ -4629,15 +4708,15 @@ mod tests {
             &[(&urgent.id, "Tag")],
         );
         let ship = create(&svc, req).await;
-        // An ad-hoc id that only looks like the namespace, in another case.
-        let ship = set_property(
-            &svc,
+        // An id stored before I-79 that only looks like the namespace, in another case.
+        store_legacy_value(
+            &pool,
             &ship.id,
             "TODO.note",
-            Some(property_value::Value::Text("kept".to_string())),
+            property_value::Value::Text("kept".to_string()),
         )
-        .await
-        .expect("set ad-hoc");
+        .await;
+        let ship = svc.load_entity(&ship.id).await.expect("load");
 
         let detached = detach(&svc, &ship.id, "todo").await.expect("detach");
 
@@ -5272,13 +5351,11 @@ mod tests {
         let pool = memory_pool().await;
         let svc = entity_service(pool.clone());
         let b = create(&svc, note("B")).await;
-        // `a` also holds a `related` property value naming B, so `strip_relation_refs`
+        // `a` also holds a `related` property value naming B, stored before I-79
+        // (no structure declares a relation to a Note), so `strip_relation_refs`
         // changes it too: it's published once, not twice.
-        let a = create(
-            &svc,
-            with_relations(todo("A"), "related", &[(&b.id, "Note")]),
-        )
-        .await;
+        let a = create(&svc, todo("A")).await;
+        store_legacy_relations(&pool, &a.id, "related", &b).await;
         let c = create(&svc, note("C")).await;
         let other = create(&svc, note("Other")).await;
         add_rel(&svc, &a.id, &b.id).await.expect("a -> b");
