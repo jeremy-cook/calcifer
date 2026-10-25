@@ -69,7 +69,7 @@ rest of the server's: `cd server && cargo test`.
 After editing anything under `proto/`, lint it and regenerate the TS bindings:
 
 ```bash
-cd calcifer && pnpm proto:lint   # buf lint, default rules; must exit 0 (nothing in CI runs it)
+cd calcifer && pnpm proto:lint   # buf lint, default rules; must exit 0
 cd calcifer && pnpm proto:gen
 ```
 
@@ -81,24 +81,32 @@ Rust regen is automatic on `cargo build` (tonic-build).
 
 ## Conventions
 
-- **Node version trap:** fresh shells may resolve Node 16 and break pnpm. Prefix
-  node/pnpm commands with
+- **Node version trap:** fresh shells may resolve Node 16 and break pnpm. The version
+  wanted is in `calcifer/.nvmrc` (`nvm use` there); `scripts/calcifer` falls back to the
+  newest nvm Node by itself. For other commands, prefix with
   `export PATH="/Users/bebop/.nvm/versions/node/v24.12.0/bin:$PATH"`.
+- **Rust toolchain:** `server/rust-toolchain.toml` pins it; rustfmt and the extra clippy
+  lints are configured in `server/rustfmt.toml` and `server/Cargo.toml`.
 - **Server (Rust):** services in `server/src/services/*.rs`, registered in
   `server/src/main.rs`. Migrations in `server/migrations/` (timestamp-prefixed).
   `sqlx::query!` checks SQL at compile time against the committed cache in `server/.sqlx/`,
   never the live database; the binary runs `migrate!` on boot. After changing a query or
-  the schema, refresh the cache against a scratch database built from `server/migrations/`
-  with `SQLX_OFFLINE=false DATABASE_URL=sqlite://<scratch> cargo sqlx prepare -- --all-targets`,
-  and commit `.sqlx/`.
+  the schema, refresh the cache against a scratch database and commit `.sqlx/`. Make the
+  scratch database by starting the server once with `DATABASE_URL=sqlite://<scratch>` (and
+  other ports, `CALCIFER_ADDR` / `CALCIFER_MCP_ADDR`), because the migrations create a
+  `vec0` table that `cargo sqlx migrate run` can't load. Then run
+  `SQLX_OFFLINE=false DATABASE_URL=sqlite://<scratch> cargo sqlx prepare -- --all-targets`
+  (`prepare --check -- --all-targets` verifies the committed cache).
   `server/src/tiptap/` reads TipTap JSON; `server/src/links/` writes the link graph. Timestamps via
   `ts_from_millis`.
 - **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen both TS consumers
   (above). Note the `ref` field generates as `r#ref` in Rust.
 - **MCP (Rust):** tool ops in `server/src/mcp/tools.rs`, the JSON-RPC transport and tool
   schemas in `server/src/mcp/mod.rs`, markdown <-> TipTap in `server/src/mcp/markdown.rs`.
-- **FE (React):** hooks in `calcifer/src/model/{api,store,richtext,relationships}.ts`;
-  connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules
+- **FE (React):** `calcifer/src/model/` is the data layer: `api.ts` (client and query
+  cache), `sync.ts` and `replica.ts` (the Watch-fed replica), `store.ts` (the hooks and
+  mutations components use), and one module per domain (`richtext`, `relationships`,
+  `todos`, `calendar`, `dailyNotes`, `dates`, `structures`); connect-es **v2** (`createClient`, not `createPromiseClient`). Component style rules
   live in [`CLAUDE.md`](CLAUDE.md).
 - **Commits:** one per unit, clear message, ending with the `Co-Authored-By` trailer.
 

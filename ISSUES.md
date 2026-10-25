@@ -231,5 +231,5 @@ Fixed on 2026-09-24 from the to-do / calendar review.
 - **R-8 · Entity page special-cased DailyNote and Todo status by name.** Replaced with an
   override map in `EntityProperties`.
 - **R-9 · Link persistence lived in `services/entity.rs`.** Moved to
-  `server/src/link_store.rs`.
+  `server/src/links/store.rs`.
 - **R-10 · `/s/Todo` silently overrode `/s/$structureType`.** Comment added.
