@@ -111,43 +111,6 @@ transaction, and its tests still pass.
 
 ---
 
-### I-74 · `pnpm format` rewrites generated stubs and `vite.config.ts` · low · confirmed
-
-**Where:** `calcifer/package.json` (`"format": "prettier --write ."`), `calcifer/.prettierignore`
-
-**Problem:** `pnpm format` runs prettier over the whole package, including the generated
-proto stubs in `calcifer/gen/ts/` and `vite.config.ts`, which aren't prettier-formatted.
-A format run then fills a diff with unrelated changes, and the stubs change back on the
-next `pnpm proto:gen`. `pnpm format:check` covers only `src`, so it doesn't notice. Found
-in T02 of the I-34 plan, when an engineer ran `pnpm format` by accident; reproduced by
-that run.
-
-**Fix:** Add `gen/` to `.prettierignore`. Then either format `vite.config.ts` once, or
-scope `format` to `src` to match `format:check`.
-
-**Done when:** `cd calcifer && pnpm format` leaves `gen/` and `vite.config.ts` unchanged
-(or `vite.config.ts` changes only in a formatting commit), and `git status` is clean after it.
-
----
-
-### I-75 · `get_note` reports a missing note as a result, not an error · low · confirmed
-
-**Where:** `server/src/mcp/tools.rs` (`get_note`, `find_doc`)
-
-**Problem:** `get_note {name}` for a note that doesn't exist returns "No note named …" as
-an ordinary result (`isError: false`), while `get_note {date}` for a missing day, and
-`query_text_location` / `edit_note` for either, return `isError: true`. An agent that
-checks `isError` treats the missing note as found. Kept as it was when the date form was
-added; found in T01 of the agent-daily-notes plan, confirmed by reading.
-
-**Fix:** Have `get_note` by name fail through `existing_doc` like the others, and update
-the tests that assert the plain-result text.
-
-**Done when:** a missing note and a missing day both come back from `get_note` with
-`isError: true`.
-
----
-
 ### I-76 · A failed reload after a save conflict ends the save loop with the doc unsaved · low · confirmed
 
 **Where:** `calcifer/src/model/richtext.ts` (`reloadAfterConflict`, called from `putOnce`)
@@ -169,26 +132,27 @@ retried and `whenRichTextSaved` resolving only after it succeeds.
 
 ---
 
-### I-77 · Stale backlinks references after direct relationships · low · confirmed
+### I-78 · `get_backlinks` reports a missing note as a result, not an error · low · confirmed
 
-**Where:** `server/src/services/entity.rs` (`list_backlinks` comment, "matching the frontend's backlinks panel"), `server/src/mcp/mod.rs` (`LINK_SYNTAX`), `proto/calcifer/v1/entities.proto` (`LinkRef.source_property_id` comment)
+**Where:** `server/src/mcp/tools.rs` (`get_backlinks`)
 
-**Problem:** After direct relationships, a few comments and texts still describe the old
-world. The `list_backlinks` comment names the Backlinks panel, which is now the
-relationships section. `LINK_SYNTAX` doesn't say that `link_notes` relates two notes
-without touching their text (the tool descriptions do). The `source_property_id` comment
-gives only `'content'` as an example and doesn't mention `@related`. Found in T07 of the
-direct-relationships plan, confirmed by reading.
+**Problem:** `get_backlinks {name}` for a note that doesn't exist returns "No note named …"
+with `isError: false`, the pattern I-75 removed from `get_note`. An agent checking
+`isError` treats the missing note as found, with no backlinks. Found in T02 of the
+small-fixes plan, confirmed by reading.
 
-**Fix:** Reword the three comments and texts. Comments and an MCP string only.
+**Fix:** Look the note up with `existing_note_id` (or `existing_doc`) so a missing note is a
+tool error, and update the test that asserts the plain result.
 
-**Done when:** `grep -rn "backlinks panel" server/src` matches nothing, and the
-`LinkRef.source_property_id` comment mentions `@related`.
+**Done when:** `get_backlinks` for a missing note returns `isError: true`.
 
 ---
 
 ## Resolved
 
+- **I-77 · Stale backlinks references after direct relationships.** Fixed 2026-10-24 (5aa136b). The `list_backlinks` comment names the relationships section, `LINK_SYNTAX` says `link_notes` relates notes without writing a link, and `LinkRef.source_property_id`'s proto comment mentions `@related`.
+- **I-75 · `get_note` reports a missing note as a result, not an error.** Fixed 2026-10-24 (e767d43). `get_note` goes through `existing_doc` for both keys, so a missing note and a missing day are both `isError: true`. Covered by `get_note_missing_note_is_an_error`; checked over MCP on a scratch DB.
+- **I-74 · `pnpm format` rewrites generated stubs and `vite.config.ts`.** Fixed 2026-10-24 (1025715, 1146d5a). `gen/` is in `.prettierignore` and `vite.config.ts` was formatted once; `prettier --check .` passes and `pnpm format` leaves the tree clean.
 - **I-61 · Names containing `|` or `]]` can't be written in MCP link syntax.** Fixed 2026-10-24 (8a53ebd, 243cab9, 5bfd190). The server refuses `|` and `]]` in a name on `CreateEntity`, `RenameEntity` and a creating `ResolveEntity` (user's choice over an escape syntax; no existing names needed migrating), and `create_note` checks the name before writing anything. The `link_notes` half went with direct relationships. Verified over MCP on a scratch DB (`A|B` and `x]]y` refused with nothing left behind, `a[b]c` accepted, a Note named `Tag/X` round-trips and `link_notes` to it relates the Note) and in the browser (a rename to `A|B` reverts).
 - **I-42 · A rich-text save that fails for a non-conflict reason is dropped silently.** Fixed 2026-10-24 (e00b852). A save that fails for a reason that can pass is kept and retried with backoff (1 s doubling to 30 s, and at once when the Watch stream turns live), and the editor shows "Not saved yet. Retrying…" until it lands. The retry keeps the doc's outstanding save open, so a daily-note prune waits for it. Covered by eight `usePutRichText` tests; in the browser, text typed with the server down saved by itself when it returned, and an empty daily note typed in offline and then left was saved, not pruned.
 - **I-72 · The agent can't see or change an existing note's tags.** Fixed 2026-10-24 (70155a8). `get_note`'s frontmatter has a `tags` line, `create_note` reads it back when given no `tags` argument, and the new `tag_entity(name, add, remove)` tool tags and untags an existing note one target at a time. Covered by `tag_entity_adds_and_removes`, `tag_entity_keeps_a_concurrent_tag` and the extended `get_note_copied_into_create_note_links_the_same_targets`; checked over MCP on a scratch DB.
