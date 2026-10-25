@@ -1,10 +1,10 @@
 use tonic::{Request, Response, Status};
 
 use crate::proto::{
-    structure_service_server::StructureService as StructureServiceTrait, ListStructuresRequest,
-    ListStructuresResponse,
+    self, structure_service_server::StructureService as StructureServiceTrait,
+    ListStructuresRequest, ListStructuresResponse,
 };
-use crate::structures::{FACETS, STRUCTURES};
+use crate::structures::{FacetDef, PropertyDef, PropertyKind, StructureDef, FACETS, STRUCTURES};
 
 /// Serves the static registry in `structures.rs`. No state: the registry never
 /// changes while the server runs.
@@ -21,6 +21,80 @@ impl StructureServiceTrait for StructureService {
             structures: STRUCTURES.iter().map(Into::into).collect(),
             facets: FACETS.iter().map(Into::into).collect(),
         }))
+    }
+}
+
+// The registry holds plain Rust types; the wire shapes are built here, where they
+// are served.
+impl From<PropertyKind> for proto::PropertyKind {
+    fn from(kind: PropertyKind) -> Self {
+        match kind {
+            PropertyKind::Richtext => proto::PropertyKind::Richtext,
+            PropertyKind::Text => proto::PropertyKind::Text,
+            PropertyKind::Number => proto::PropertyKind::Number,
+            PropertyKind::Date => proto::PropertyKind::Date,
+            PropertyKind::Select => proto::PropertyKind::Select,
+            PropertyKind::Relation => proto::PropertyKind::Relation,
+            PropertyKind::Relations => proto::PropertyKind::Relations,
+        }
+    }
+}
+
+impl From<&PropertyDef> for proto::PropertyDef {
+    fn from(def: &PropertyDef) -> Self {
+        proto::PropertyDef {
+            id: def.id.to_string(),
+            kind: proto::PropertyKind::from(def.kind).into(),
+            label: def.label.to_string(),
+            options: def
+                .options
+                .iter()
+                .map(|o| proto::SelectOption {
+                    key: o.key.to_string(),
+                    label: o.label.to_string(),
+                })
+                .collect(),
+            default_option: def.default_option.unwrap_or_default().to_string(),
+            target_structure: def.target_structure.unwrap_or_default().to_string(),
+        }
+    }
+}
+
+impl From<&StructureDef> for proto::StructureDef {
+    fn from(def: &StructureDef) -> Self {
+        proto::StructureDef {
+            r#type: def.type_.to_string(),
+            name: def.name.to_string(),
+            plural: def.plural.to_string(),
+            description: def.description.to_string(),
+            properties: def.properties.iter().map(Into::into).collect(),
+            creatable: def.creatable,
+            mentionable: def.mentionable,
+            unique_names: def.unique_names(),
+            name_editable: def.name_editable,
+            facets: def
+                .facets
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+            relates_to: def
+                .relates_to
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
+        }
+    }
+}
+
+impl From<&FacetDef> for proto::FacetDef {
+    fn from(def: &FacetDef) -> Self {
+        proto::FacetDef {
+            id: def.id.to_string(),
+            name: def.name.to_string(),
+            plural: def.plural.to_string(),
+            description: def.description.to_string(),
+            properties: def.properties.iter().map(Into::into).collect(),
+        }
     }
 }
 

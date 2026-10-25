@@ -4,8 +4,6 @@
 //! A structure's natural keys (`keys`) are enforced by the `entity_keys` table
 //! (ADR 10): the registry declares them, the write paths fill the table.
 
-use crate::proto;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropertyKind {
     Richtext,
@@ -291,8 +289,7 @@ pub fn facet_relation_properties(facet: &FacetDef) -> Vec<&'static str> {
 
 fn properties_of(structure_type: &str) -> impl Iterator<Item = &'static PropertyDef> {
     structure(structure_type)
-        .map(|s| s.properties)
-        .unwrap_or(&[])
+        .map_or(&[][..], |s| s.properties)
         .iter()
 }
 
@@ -323,70 +320,6 @@ pub fn relation_properties(structure_type: &str) -> Vec<&'static str> {
         .filter(|p| matches!(p.kind, PropertyKind::Relation | PropertyKind::Relations))
         .map(|p| p.id)
         .collect()
-}
-
-impl From<PropertyKind> for proto::PropertyKind {
-    fn from(kind: PropertyKind) -> Self {
-        match kind {
-            PropertyKind::Richtext => proto::PropertyKind::Richtext,
-            PropertyKind::Text => proto::PropertyKind::Text,
-            PropertyKind::Number => proto::PropertyKind::Number,
-            PropertyKind::Date => proto::PropertyKind::Date,
-            PropertyKind::Select => proto::PropertyKind::Select,
-            PropertyKind::Relation => proto::PropertyKind::Relation,
-            PropertyKind::Relations => proto::PropertyKind::Relations,
-        }
-    }
-}
-
-impl From<&PropertyDef> for proto::PropertyDef {
-    fn from(def: &PropertyDef) -> Self {
-        proto::PropertyDef {
-            id: def.id.to_string(),
-            kind: proto::PropertyKind::from(def.kind).into(),
-            label: def.label.to_string(),
-            options: def
-                .options
-                .iter()
-                .map(|o| proto::SelectOption {
-                    key: o.key.to_string(),
-                    label: o.label.to_string(),
-                })
-                .collect(),
-            default_option: def.default_option.unwrap_or_default().to_string(),
-            target_structure: def.target_structure.unwrap_or_default().to_string(),
-        }
-    }
-}
-
-impl From<&StructureDef> for proto::StructureDef {
-    fn from(def: &StructureDef) -> Self {
-        proto::StructureDef {
-            r#type: def.type_.to_string(),
-            name: def.name.to_string(),
-            plural: def.plural.to_string(),
-            description: def.description.to_string(),
-            properties: def.properties.iter().map(Into::into).collect(),
-            creatable: def.creatable,
-            mentionable: def.mentionable,
-            unique_names: def.unique_names(),
-            name_editable: def.name_editable,
-            facets: def.facets.iter().map(|f| f.to_string()).collect(),
-            relates_to: def.relates_to.iter().map(|t| t.to_string()).collect(),
-        }
-    }
-}
-
-impl From<&FacetDef> for proto::FacetDef {
-    fn from(def: &FacetDef) -> Self {
-        proto::FacetDef {
-            id: def.id.to_string(),
-            name: def.name.to_string(),
-            plural: def.plural.to_string(),
-            description: def.description.to_string(),
-            properties: def.properties.iter().map(Into::into).collect(),
-        }
-    }
 }
 
 #[cfg(test)]
