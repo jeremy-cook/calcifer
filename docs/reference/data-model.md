@@ -618,10 +618,19 @@ It exposes twelve tools:
 `search_notes` makes one `Search` call in its `mode` (default hybrid) and writes each
 hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
 
+`get_note`, `query_text_location` and `edit_note` take exactly one of `name` (a Note) or
+`date` (a DailyNote, `yyyy-MM-dd`); both or neither is a tool error. A date is looked up
+with `ResolveEntity` by date and never created: a missing day is an error that points at
+`append_to_daily_note`, and a malformed one fails with the server's `INVALID_ARGUMENT`
+message. They read and write the body of whichever they find, and their messages name it by
+kind: `Note "X"` or `Daily note "October 24, 2026"`. `append_to_note`, `tag_entity`,
+`get_backlinks` and `link_notes` stay Note-only, by name.
+
 `get_note` returns the note's markdown under a frontmatter block of `name`, `version` and
 `tags`, each a JSON value on its own line. `tags` is the names of the note's Tags in the
 property's stored order, `[]` when it has none; a ref whose Tag no longer exists is
-skipped.
+skipped. A daily note's block is `name`, `version` and `date` (the ISO day) and no `tags`,
+since only Notes have them.
 
 `list_structures` formats the structure registry (`structures.rs`): each structure's type,
 description, properties (kinds, select options and defaults, relation targets) and the
