@@ -917,12 +917,7 @@ mod tests {
             body(&f.k.get_note(NoteKey::Name("Existing")).await.unwrap()),
             "Body."
         );
-        assert!(f
-            .k
-            .get_note(NoteKey::Name("New"))
-            .await
-            .unwrap()
-            .starts_with("No note named"));
+        assert!(err(f.k.get_note(NoteKey::Name("New")).await).starts_with("No note named"));
     }
 
     #[tokio::test]
@@ -1408,6 +1403,38 @@ mod tests {
         };
         let lookup = f.entity.resolve_entity(Request::new(req)).await;
         assert_eq!(lookup.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn get_note_missing_note_is_an_error() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+        let call = |arguments: Value| {
+            handle_message(
+                &f.k,
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "get_note", "arguments": arguments } }),
+            )
+        };
+
+        for (arguments, expected) in [
+            (
+                json!({ "name": "Ghost" }),
+                "No note named \"Ghost\". Use search_notes or create_note.",
+            ),
+            (
+                json!({ "date": "2026-10-24" }),
+                "No daily note for 2026-10-24. Use append_to_daily_note to start one.",
+            ),
+        ] {
+            let reply = call(arguments.clone()).await.unwrap();
+            assert!(reply.get("error").is_none(), "{arguments}: {reply}");
+            assert_eq!(reply["result"]["isError"], true, "{arguments}: {reply}");
+            assert_eq!(
+                reply["result"]["content"][0]["text"], expected,
+                "{arguments}"
+            );
+        }
+        assert_eq!(f.entity_count().await, before, "nothing was created");
     }
 
     #[tokio::test]
@@ -1937,12 +1964,7 @@ mod tests {
             );
         }
         assert_eq!(f.entity_count().await, before, "not even the #x Tag exists");
-        assert!(f
-            .k
-            .get_note(NoteKey::Name("Bad"))
-            .await
-            .unwrap()
-            .starts_with("No note named"));
+        assert!(err(f.k.get_note(NoteKey::Name("Bad")).await).starts_with("No note named"));
     }
 
     fn tag_args(names: &[&str]) -> Vec<String> {

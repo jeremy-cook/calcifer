@@ -645,9 +645,10 @@ impl Knowledge {
         Ok(())
     }
 
-    /// The document `key` names, or None when there isn't one. Nothing is
-    /// created: a missing note or day is the caller's to report.
-    async fn find_doc(&self, key: &NoteKey<'_>) -> Result<Option<Found>, ToolError> {
+    /// The existing document `key` names. A missing note or day is an error, and
+    /// so is writing to one that isn't there, not a create: create_note makes a
+    /// note and append_to_daily_note starts a day.
+    async fn existing_doc(&self, key: &NoteKey<'_>) -> Result<Found, ToolError> {
         let resolved = match key {
             NoteKey::Name(name) => self.resolve_name("Note", name, false).await,
             NoteKey::Date(date) => {
@@ -663,19 +664,12 @@ impl Knowledge {
             }
         };
         match resolved {
-            Ok(res) => Ok(res.entity.map(Found::from_entity)),
-            Err(e) if is_code(&e, Code::NotFound) => Ok(None),
+            Ok(res) => match res.entity {
+                Some(entity) => Ok(Found::from_entity(entity)),
+                None => fail(key.missing()),
+            },
+            Err(e) if is_code(&e, Code::NotFound) => fail(key.missing()),
             Err(e) => Err(e.into()),
-        }
-    }
-
-    /// The existing document `key` names. Writing to one that isn't there is an
-    /// error, not a create: create_note makes a note and append_to_daily_note
-    /// starts a day.
-    async fn existing_doc(&self, key: &NoteKey<'_>) -> Result<Found, ToolError> {
-        match self.find_doc(key).await? {
-            Some(found) => Ok(found),
-            None => fail(key.missing()),
         }
     }
 
@@ -974,15 +968,9 @@ impl Knowledge {
     /// property, `[]` when it has none, and what create_note reads back; `related`
     /// is the names of the notes it holds direct relationships to, oldest first,
     /// `[]` when none, and create_note ignores it; `date` is the day's ISO date.
-    /// A note that isn't there is reported as text, a day that isn't there as an
-    /// error: nothing is created either way.
+    /// A note or a day that isn't there is an error: nothing is created.
     pub async fn get_note(&self, key: NoteKey<'_>) -> ToolResult {
-        let Some(found) = self.find_doc(&key).await? else {
-            return match key {
-                NoteKey::Name(_) => Ok(key.missing()),
-                NoteKey::Date(_) => fail(key.missing()),
-            };
-        };
+        let found = self.existing_doc(&key).await?;
         let (doc, updated_at) = self
             .get_doc(&doc_ref(&found.structure_type, &found.id)?)
             .await?;
