@@ -6,19 +6,36 @@ import { useAllEntities, getOrCreateEntityForMention, type RelationTarget } from
 import { hasUniqueNames } from '~/model/structures'
 
 export interface EntityPickerProps {
-  // Empty: any structure (and no create option).
-  targetStructure: string
+  // One structure to pick from; empty or omitted: any (and no create option). Ignored
+  // while `targetStructures` is non-empty.
+  targetStructure?: string
+  // Several structures to pick from; empty or omitted: `targetStructure` decides.
+  targetStructures?: readonly string[]
   excludeIds: readonly string[]
   onPick: (target: RelationTarget) => void
   // The popover trigger; must accept a ref (e.g. a Button).
   children: React.ReactNode
 }
 
+const ANY_STRUCTURE: readonly string[] = []
+
 // A searchable popover of entities to pick one relation target from, with a
-// "Create" option for target structures whose names are unique.
-export function EntityPicker({ targetStructure, excludeIds, onPick, children }: EntityPickerProps) {
+// "Create" option when the only structure on offer has unique names.
+export function EntityPicker({
+  targetStructure = '',
+  targetStructures = ANY_STRUCTURE,
+  excludeIds,
+  onPick,
+  children,
+}: EntityPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+
+  // Empty: any structure.
+  const structures =
+    targetStructures.length > 0 ? targetStructures : targetStructure ? [targetStructure] : ANY_STRUCTURE
+  // The structure "Create" makes an entity of; empty: none (any, or more than one).
+  const createStructure = structures.length === 1 ? structures[0] : ''
 
   const pick = (target: RelationTarget) => {
     onPick(target)
@@ -29,7 +46,7 @@ export function EntityPicker({ targetStructure, excludeIds, onPick, children }: 
   const handleCreate = async () => {
     const name = query.trim()
     if (!name) return
-    const entity = await getOrCreateEntityForMention(targetStructure, name)
+    const entity = await getOrCreateEntityForMention(createStructure, name)
     pick({ id: entity.id, structureType: entity.structureType })
   }
 
@@ -46,7 +63,8 @@ export function EntityPicker({ targetStructure, excludeIds, onPick, children }: 
             className="border-b border-border bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
           <EntityPickerList
-            targetStructure={targetStructure}
+            structures={structures}
+            createStructure={createStructure}
             excludeIds={excludeIds}
             query={query}
             onPick={pick}
@@ -59,7 +77,8 @@ export function EntityPicker({ targetStructure, excludeIds, onPick, children }: 
 }
 
 interface EntityPickerListProps {
-  targetStructure: string
+  structures: readonly string[]
+  createStructure: string
   excludeIds: readonly string[]
   query: string
   onPick: (target: RelationTarget) => void
@@ -68,14 +87,14 @@ interface EntityPickerListProps {
 
 // The picker's results. Mounted only while the popover is open, so a closed
 // picker doesn't re-render on every write to the replica.
-function EntityPickerList({ targetStructure, excludeIds, query, onPick, onCreate }: EntityPickerListProps) {
+function EntityPickerList({ structures, createStructure, excludeIds, query, onPick, onCreate }: EntityPickerListProps) {
   const entities = useAllEntities()
 
   const candidates = entities.filter(
-    (e) => (!targetStructure || e.structureType === targetStructure) && !excludeIds.includes(e.id),
+    (e) => (structures.length === 0 || structures.includes(e.structureType)) && !excludeIds.includes(e.id),
   )
 
-  const canCreate = hasUniqueNames(targetStructure) && query.trim().length > 0
+  const canCreate = hasUniqueNames(createStructure) && query.trim().length > 0
 
   const itemClassName =
     'flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground'

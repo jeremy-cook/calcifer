@@ -22,7 +22,7 @@ import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
 import { EntityTextField } from '~/components/entity/EntityTextField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
-import { BacklinksPanel } from '~/components/backlinks/BacklinksPanel'
+import { RelationshipsPanel } from '~/components/relationships/RelationshipsPanel'
 import {
   deleteEntity,
   hasFacet,
@@ -57,7 +57,7 @@ export const Route = createFileRoute('/e/$id')({
         <div className="min-h-0 flex-1 overflow-y-auto">
           <EntityProperties entity={entity} />
           <div className="border-t border-border px-12 py-6">
-            <BacklinksPanel entityId={entity.id} />
+            <RelationshipsPanel entity={entity} />
           </div>
         </div>
       </div>

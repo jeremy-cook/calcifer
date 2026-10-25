@@ -23,9 +23,13 @@ export function MentionNodeView({ node, extension }: NodeViewProps) {
   }
 
   return (
+    // `data-type` (the node's name: `mention` or `hashtag`) and `data-id` let the
+    // relationships section find a chip to jump to.
     <NodeViewWrapper
       as="span"
       className={className}
+      data-type={node.type.name}
+      data-id={id}
       data-structure-type={structureType}
       data-broken={missing || undefined}
       onClick={handleClick}
