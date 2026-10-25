@@ -21,7 +21,7 @@ use serde_json::{json, Value};
 
 use crate::proto::SearchMode;
 pub use tools::Knowledge;
-use tools::ToolError;
+use tools::{NoteKey, ToolError};
 
 /// How note markdown refers to other entities; shared by the tools that read or write it.
 const LINK_SYNTAX: &str = "[[Name]] links an existing note; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); it doesn't tag the note. Pass `tags` to create_note, or use tag_entity, to tag it. A link to anything that doesn't exist fails the call and writes nothing, so create the target first. These become real graph links automatically.";
@@ -164,14 +164,28 @@ struct NameArgs {
 }
 
 #[derive(Deserialize)]
+struct GetNoteArgs {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    date: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct QueryTextArgs {
-    name: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    date: Option<String>,
     query: String,
 }
 
 #[derive(Deserialize)]
 struct EditArgs {
-    name: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    date: Option<String>,
     start: usize,
     end: usize,
     markdown: String,
@@ -240,15 +254,29 @@ async fn dispatch(
                 limit => k.search_notes(&a.query, limit.unwrap_or(10), mode).await,
             }
         }
-        "get_note" => k.get_note(&parse_args::<NameArgs>(name, args)?.name).await,
+        "get_note" => {
+            let a: GetNoteArgs = parse_args(name, args)?;
+            match NoteKey::from_args(a.name.as_deref(), a.date.as_deref()) {
+                Ok(key) => k.get_note(key).await,
+                Err(e) => Err(e),
+            }
+        }
         "query_text_location" => {
             let a: QueryTextArgs = parse_args(name, args)?;
-            k.query_text_location(&a.name, &a.query).await
+            match NoteKey::from_args(a.name.as_deref(), a.date.as_deref()) {
+                Ok(key) => k.query_text_location(key, &a.query).await,
+                Err(e) => Err(e),
+            }
         }
         "edit_note" => {
             let a: EditArgs = parse_args(name, args)?;
-            k.edit_note(&a.name, a.start, a.end, &a.markdown, a.version)
-                .await
+            match NoteKey::from_args(a.name.as_deref(), a.date.as_deref()) {
+                Ok(key) => {
+                    k.edit_note(key, a.start, a.end, &a.markdown, a.version)
+                        .await
+                }
+                Err(e) => Err(e),
+            }
         }
         "create_note" => {
             let a: CreateNoteArgs = parse_args(name, args)?;
@@ -306,27 +334,28 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "get_note",
-            format!("Read a note by name. The result is YAML frontmatter (name, version, tags) followed by the note's markdown body. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note reads the frontmatter's tags when given no `tags` argument, so the result can be copied into a new note."),
-            json!({ "name": string }),
-            &["name"],
+            format!("Read a note by name, or a daily note by date (yyyy-MM-dd); give one of the two. The result is YAML frontmatter followed by the markdown body: name, version and tags for a note; name, version and date for a daily note, which has no tags. A day with no daily note is an error: use append_to_daily_note to start one. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note reads the frontmatter's tags when given no `tags` argument, so the result can be copied into a new note."),
+            json!({ "name": string, "date": string }),
+            &[],
         ),
         tool(
             "query_text_location",
-            "Find where text occurs in an existing note. Returns the note's version and, for each block containing a match, its line range and text. The ranges are whole blocks, ready to pass to edit_note as start and end, so you never have to count lines. The match is exact and case-sensitive against the markdown get_note shows (links as [[Name]]); quote enough text to be unique.".into(),
-            json!({ "name": string, "query": string }),
-            &["name", "query"],
+            "Find where text occurs in an existing note (by name) or daily note (by date, yyyy-MM-dd); give one of the two. Returns the note's version and, for each block containing a match, its line range and text. The ranges are whole blocks, ready to pass to edit_note as start and end, so you never have to count lines. The match is exact and case-sensitive against the markdown get_note shows (links as [[Name]]); quote enough text to be unique.".into(),
+            json!({ "name": string, "date": string, "query": string }),
+            &["query"],
         ),
         tool(
             "edit_note",
-            format!("Replace a range of lines in an existing note's body. Get the lines and version from query_text_location, or read the note with get_note: lines are counted in the body only, from 1 at the first line after the closing --- of the frontmatter, and version is the frontmatter's version. A paragraph, a heading, a whole list and a whole code block are each one block, and blocks are separated by a blank line; start and end must not fall inside a block. Lines start..end (inclusive) are replaced by the markdown; empty markdown deletes them; end = start - 1 inserts before line start (start = last line + 1 appends). A <!-- calcifer:<type> --> line stands for content markdown can't express (a table, say), and formatting markdown can't express (underline, colour, alignment, ...) is shown as plain text: a range that covers either is refused, so edit around it. Fails if the note changed since you read it: read again and redo the edit. In the markdown, {LINK_SYNTAX}"),
+            format!("Replace a range of lines in the body of an existing note (by name) or daily note (by date, yyyy-MM-dd); give one of the two. Get the lines and version from query_text_location, or read the note with get_note: lines are counted in the body only, from 1 at the first line after the closing --- of the frontmatter, and version is the frontmatter's version. A paragraph, a heading, a whole list and a whole code block are each one block, and blocks are separated by a blank line; start and end must not fall inside a block. Lines start..end (inclusive) are replaced by the markdown; empty markdown deletes them; end = start - 1 inserts before line start (start = last line + 1 appends). A <!-- calcifer:<type> --> line stands for content markdown can't express (a table, say), and formatting markdown can't express (underline, colour, alignment, ...) is shown as plain text: a range that covers either is refused, so edit around it. Fails if the note changed since you read it: read again and redo the edit. In the markdown, {LINK_SYNTAX}"),
             json!({
                 "name": string,
+                "date": string,
                 "start": { "type": "integer", "exclusiveMinimum": 0 },
                 "end": { "type": "integer", "minimum": 0 },
                 "markdown": string,
                 "version": { "type": "integer", "minimum": 0 },
             }),
-            &["name", "start", "end", "markdown", "version"],
+            &["start", "end", "markdown", "version"],
         ),
         tool(
             "create_note",
@@ -530,7 +559,7 @@ mod tests {
             "No note named \"Nowhere\"."
         );
 
-        let note = f.k.get_note("Transformers").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Transformers")).await.unwrap();
         assert!(
             note.contains("[[Attention]]") && note.contains("#ml"),
             "{note}"
@@ -539,7 +568,7 @@ mod tests {
         f.k.append_to_note("Transformers", "They use [[Positional Encoding]] too.")
             .await
             .unwrap();
-        let note = f.k.get_note("Transformers").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Transformers")).await.unwrap();
         assert!(
             note.contains("[[Positional Encoding]]") && note.contains("[[Attention]]"),
             "{note}"
@@ -576,8 +605,8 @@ mod tests {
         for failure in [
             err(f.k.append_to_note("Ghost", "x").await),
             err(f.k.link_notes("Ghost", "Attention").await),
-            err(f.k.query_text_location("Ghost", "x").await),
-            err(f.k.edit_note("Ghost", 1, 1, "x", 0).await),
+            err(f.k.query_text_location(NoteKey::Name("Ghost"), "x").await),
+            err(f.k.edit_note(NoteKey::Name("Ghost"), 1, 1, "x", 0).await),
         ] {
             assert!(failure.contains("No note named"), "{failure}");
         }
@@ -623,7 +652,7 @@ mod tests {
             name: "New Name".into(),
         };
         f.entity.rename_entity(Request::new(rename)).await.unwrap();
-        let note = f.k.get_note("Source").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Source")).await.unwrap();
         assert!(
             note.contains("[[New Name]]") && !note.contains("Old Name"),
             "{note}"
@@ -652,7 +681,7 @@ mod tests {
         );
 
         let count = f.entity_count().await;
-        let note = f.k.get_note("Round Trip").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Round Trip")).await.unwrap();
         assert!(
             note.contains("[[Tag/ship]]") && note.contains("[[DailyNote/June 13, 2026]]"),
             "{note}"
@@ -684,7 +713,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            body(&f.k.get_note("Round Trip Copy").await.unwrap()),
+            body(
+                &f.k.get_note(NoteKey::Name("Round Trip Copy"))
+                    .await
+                    .unwrap()
+            ),
             body(&note)
         );
         assert_eq!(
@@ -713,7 +746,7 @@ mod tests {
             .await
             .unwrap();
 
-        let note = f.k.get_note("Target").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Target")).await.unwrap();
         let frontmatter = note
             .strip_prefix("---\n")
             .and_then(|rest| rest.split_once("\n---\n"))
@@ -741,7 +774,10 @@ mod tests {
             err(f.k.create_note("existing", "Case.", None).await).contains("already exists"),
             "names match case-insensitively"
         );
-        assert_eq!(body(&f.k.get_note("Existing").await.unwrap()), "Original.");
+        assert_eq!(
+            body(&f.k.get_note(NoteKey::Name("Existing")).await.unwrap()),
+            "Original."
+        );
 
         f.k.create_note("Blank", "", None).await.unwrap();
         assert!(
@@ -763,11 +799,11 @@ mod tests {
             err(f
                 .k
                 .edit_note(
-                    "Existing",
+                    NoteKey::Name("Existing"),
                     1,
                     1,
                     md,
-                    version(&f.k.get_note("Existing").await.unwrap()),
+                    version(&f.k.get_note(NoteKey::Name("Existing")).await.unwrap()),
                 )
                 .await),
         ] {
@@ -786,10 +822,13 @@ mod tests {
             before,
             "not even append_to_daily_note's day"
         );
-        assert_eq!(body(&f.k.get_note("Existing").await.unwrap()), "Body.");
+        assert_eq!(
+            body(&f.k.get_note(NoteKey::Name("Existing")).await.unwrap()),
+            "Body."
+        );
         assert!(f
             .k
-            .get_note("New")
+            .get_note(NoteKey::Name("New"))
             .await
             .unwrap()
             .starts_with("No note named"));
@@ -813,7 +852,7 @@ mod tests {
             .unwrap();
         let id = f.note_id("Selfie").await;
         assert_eq!(
-            body(&f.k.get_note("Selfie").await.unwrap()),
+            body(&f.k.get_note(NoteKey::Name("Selfie")).await.unwrap()),
             "I am [[Selfie]]."
         );
         assert_eq!(f.link_targets(&id).await, [format!("Note:{id}")]);
@@ -825,7 +864,7 @@ mod tests {
         f.k.create_note("Rule", "---\nplain text\n---", None)
             .await
             .unwrap();
-        assert!(body(&f.k.get_note("Rule").await.unwrap()).contains("plain text"));
+        assert!(body(&f.k.get_note(NoteKey::Name("Rule")).await.unwrap()).contains("plain text"));
     }
 
     #[tokio::test]
@@ -839,32 +878,41 @@ mod tests {
         )
         .await
         .unwrap();
-        let note = f.k.get_note("Subject").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Subject")).await.unwrap();
         assert_eq!(
             body(&note),
             "Alpha.\n\n## Heading\n\n- one\n- two\n\nLast [[Link]]."
         );
         let v = version(&note);
 
-        let found = f.k.query_text_location("Subject", "two").await.unwrap();
+        let found =
+            f.k.query_text_location(NoteKey::Name("Subject"), "two")
+                .await
+                .unwrap();
         assert_eq!(
             found,
             format!("version: {v}\n\nlines 5-6 (1 match):\n- one\n- two")
         );
         let found =
-            f.k.query_text_location("Subject", "Alpha.\n\n## Heading")
+            f.k.query_text_location(NoteKey::Name("Subject"), "Alpha.\n\n## Heading")
                 .await
                 .unwrap();
         assert!(
             found.contains("lines 1-1 (1 match):\nAlpha.\n\nlines 3-3 (1 match):\n## Heading"),
             "{found}"
         );
-        let found = f.k.query_text_location("Subject", "o").await.unwrap();
+        let found =
+            f.k.query_text_location(NoteKey::Name("Subject"), "o")
+                .await
+                .unwrap();
         assert!(
             found.ends_with("lines 5-6 (2 matches):\n- one\n- two"),
             "{found}"
         );
-        let found = f.k.query_text_location("Subject", "n").await.unwrap();
+        let found =
+            f.k.query_text_location(NoteKey::Name("Subject"), "n")
+                .await
+                .unwrap();
         let (a, b, c) = (
             found.find("lines 3-3").unwrap(),
             found.find("lines 5-6").unwrap(),
@@ -873,11 +921,14 @@ mod tests {
         assert!(a < b && b < c, "{found}");
         assert!(f
             .k
-            .query_text_location("Subject", "nowhere in the note")
+            .query_text_location(NoteKey::Name("Subject"), "nowhere in the note")
             .await
             .unwrap()
             .starts_with("No match"));
-        assert!(err(f.k.query_text_location("Subject", "").await).contains("query is empty"));
+        assert!(
+            err(f.k.query_text_location(NoteKey::Name("Subject"), "").await)
+                .contains("query is empty")
+        );
     }
 
     #[tokio::test]
@@ -893,12 +944,12 @@ mod tests {
         .unwrap();
         let id = f.note_id("Subject").await;
         let read = || async {
-            let note = f.k.get_note("Subject").await.unwrap();
+            let note = f.k.get_note(NoteKey::Name("Subject")).await.unwrap();
             (body(&note).to_string(), version(&note))
         };
 
         let (_, v) = read().await;
-        f.k.edit_note("Subject", 3, 3, "## Renamed heading", v)
+        f.k.edit_note(NoteKey::Name("Subject"), 3, 3, "## Renamed heading", v)
             .await
             .unwrap();
         let (text, v) = read().await;
@@ -907,22 +958,30 @@ mod tests {
             "Alpha.\n\n## Renamed heading\n\n- one\n- two\n\nLast [[Link]]."
         );
 
-        let stale = err(f.k.edit_note("Subject", 1, 1, "Stale", v - 1).await);
+        let stale = err(f
+            .k
+            .edit_note(NoteKey::Name("Subject"), 1, 1, "Stale", v - 1)
+            .await);
         assert!(stale.contains("changed since you read"), "{stale}");
         assert!(!read().await.0.contains("Stale"));
 
-        let inside_start = err(f.k.edit_note("Subject", 6, 6, "x", v).await);
+        let inside_start = err(f.k.edit_note(NoteKey::Name("Subject"), 6, 6, "x", v).await);
         assert!(
             inside_start.contains("line 6 is inside the block at lines 5-6")
                 && inside_start.contains("start at 5"),
             "{inside_start}"
         );
-        let inside_end = err(f.k.edit_note("Subject", 5, 5, "x", v).await);
+        let inside_end = err(f.k.edit_note(NoteKey::Name("Subject"), 5, 5, "x", v).await);
         assert!(inside_end.contains("end at 6"), "{inside_end}");
-        assert!(err(f.k.edit_note("Subject", 2, 2, "x", v).await).contains("contain no block"));
+        assert!(
+            err(f.k.edit_note(NoteKey::Name("Subject"), 2, 2, "x", v).await)
+                .contains("contain no block")
+        );
         assert_eq!(read().await.0, text, "a rejected range writes nothing");
 
-        f.k.edit_note("Subject", 1, 0, "First.", v).await.unwrap();
+        f.k.edit_note(NoteKey::Name("Subject"), 1, 0, "First.", v)
+            .await
+            .unwrap();
         let (text, v) = read().await;
         assert!(
             text.starts_with("First.\n\nAlpha.\n\n## Renamed heading"),
@@ -930,7 +989,7 @@ mod tests {
         );
 
         // Blank lines at either edge of a range are fine.
-        f.k.edit_note("Subject", 2, 4, "Alpha two.", v)
+        f.k.edit_note(NoteKey::Name("Subject"), 2, 4, "Alpha two.", v)
             .await
             .unwrap();
         let (text, v) = read().await;
@@ -941,7 +1000,7 @@ mod tests {
 
         // Now: First. 1, Alpha two. 3, heading 5, list 7-8, Last 10.
         assert_eq!(f.link_targets(&id).await.len(), 1);
-        f.k.edit_note("Subject", 10, 10, "Last, rewritten.", v)
+        f.k.edit_note(NoteKey::Name("Subject"), 10, 10, "Last, rewritten.", v)
             .await
             .unwrap();
         assert!(
@@ -950,11 +1009,13 @@ mod tests {
         );
 
         let (_, v) = read().await;
-        f.k.edit_note("Subject", 5, 8, "", v).await.unwrap();
+        f.k.edit_note(NoteKey::Name("Subject"), 5, 8, "", v)
+            .await
+            .unwrap();
         let (text, v) = read().await;
         assert_eq!(text, "First.\n\nAlpha two.\n\nLast, rewritten.");
 
-        f.k.edit_note("Subject", 6, 5, "Appended.", v)
+        f.k.edit_note(NoteKey::Name("Subject"), 6, 5, "Appended.", v)
             .await
             .unwrap();
         let (text, v) = read().await;
@@ -963,18 +1024,36 @@ mod tests {
             "First.\n\nAlpha two.\n\nLast, rewritten.\n\nAppended."
         );
 
-        assert!(err(f.k.edit_note("Subject", 99, 99, "x", v).await).contains("start 99 is outside"));
-        assert!(err(f.k.edit_note("Subject", 1, 99, "x", v).await).contains("end 99 is outside"));
+        assert!(err(f
+            .k
+            .edit_note(NoteKey::Name("Subject"), 99, 99, "x", v)
+            .await)
+        .contains("start 99 is outside"));
         assert!(
-            err(f.k.edit_note("Subject", 0, 0, "x", v).await).contains("start must be at least 1")
+            err(f.k.edit_note(NoteKey::Name("Subject"), 1, 99, "x", v).await)
+                .contains("end 99 is outside")
         );
-        assert!(err(f.k.edit_note("Subject", 1, 1, "x", -1).await).contains("version at least 0"));
-        assert!(err(f.k.edit_note("Subject", 3, 1, "x", v).await).contains("end 1 is outside"));
+        assert!(
+            err(f.k.edit_note(NoteKey::Name("Subject"), 0, 0, "x", v).await)
+                .contains("start must be at least 1")
+        );
+        assert!(
+            err(f.k.edit_note(NoteKey::Name("Subject"), 1, 1, "x", -1).await)
+                .contains("version at least 0")
+        );
+        assert!(
+            err(f.k.edit_note(NoteKey::Name("Subject"), 3, 1, "x", v).await)
+                .contains("end 1 is outside")
+        );
 
-        f.k.edit_note("Subject", 1, 7, "", v).await.unwrap();
+        f.k.edit_note(NoteKey::Name("Subject"), 1, 7, "", v)
+            .await
+            .unwrap();
         let (text, v) = read().await;
         assert_eq!(text, "", "deleting every block leaves an empty body");
-        f.k.edit_note("Subject", 1, 0, "Fresh.", v).await.unwrap();
+        f.k.edit_note(NoteKey::Name("Subject"), 1, 0, "Fresh.", v)
+            .await
+            .unwrap();
         assert_eq!(read().await.0, "Fresh.");
         let (doc, _) =
             f.k.get_doc(&tools::doc_ref("Note", &id).unwrap())
@@ -1027,12 +1106,18 @@ mod tests {
         let f = fixture().await;
         let image = json!({ "type": "image", "attrs": { "src": "data:image/png;base64,AAAA", "width": "40%" } });
         let r = note_with_blocks(&f, "Picture", json!([image])).await;
-        let note = f.k.get_note("Picture").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Picture")).await.unwrap();
         assert_eq!(body(&note), "<!-- calcifer:image -->");
 
-        f.k.edit_note("Picture", 1, 0, "Caption first.", version(&note))
-            .await
-            .unwrap();
+        f.k.edit_note(
+            NoteKey::Name("Picture"),
+            1,
+            0,
+            "Caption first.",
+            version(&note),
+        )
+        .await
+        .unwrap();
         let (doc, _) = f.k.get_doc(&r).await.unwrap();
         assert_eq!(doc["content"][0]["content"][0]["text"], "Caption first.");
         assert_eq!(doc["content"][1], image, "the image survives the insert");
@@ -1049,13 +1134,19 @@ mod tests {
             json!([para("Intro."), table, para("Outro.")]),
         )
         .await;
-        let note = f.k.get_note("Tabular").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Tabular")).await.unwrap();
         assert_eq!(body(&note), "Intro.\n\n<!-- calcifer:table -->\n\nOutro.");
         let (before, _) = f.k.get_doc(&r).await.unwrap();
 
         let refused = err(f
             .k
-            .edit_note("Tabular", 1, 5, "Everything, rewritten.", version(&note))
+            .edit_note(
+                NoteKey::Name("Tabular"),
+                1,
+                5,
+                "Everything, rewritten.",
+                version(&note),
+            )
             .await);
         assert!(
             refused.contains(
@@ -1070,9 +1161,15 @@ mod tests {
         );
 
         // Ranges beside it are fine.
-        f.k.edit_note("Tabular", 5, 5, "Outro, rewritten.", version(&note))
-            .await
-            .unwrap();
+        f.k.edit_note(
+            NoteKey::Name("Tabular"),
+            5,
+            5,
+            "Outro, rewritten.",
+            version(&note),
+        )
+        .await
+        .unwrap();
         let (after, _) = f.k.get_doc(&r).await.unwrap();
         assert_eq!(after["content"][1], table);
     }
@@ -1096,7 +1193,7 @@ mod tests {
                 { "type": "text", "text": "." },
             ] },
         ])).await;
-        let note = f.k.get_note("Styled").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Styled")).await.unwrap();
         assert_eq!(
             body(&note),
             "An underlined word.\n\n## Centred\n\nSee [the site](https://example.com)."
@@ -1105,7 +1202,7 @@ mod tests {
 
         let underline = err(f
             .k
-            .edit_note("Styled", 1, 1, "Rewritten.", version(&note))
+            .edit_note(NoteKey::Name("Styled"), 1, 1, "Rewritten.", version(&note))
             .await);
         assert!(
             underline.contains("lines 1-1 hold underline formatting that markdown can't express"),
@@ -1113,7 +1210,13 @@ mod tests {
         );
         let centred = err(f
             .k
-            .edit_note("Styled", 3, 3, "## Rewritten", version(&note))
+            .edit_note(
+                NoteKey::Name("Styled"),
+                3,
+                3,
+                "## Rewritten",
+                version(&note),
+            )
             .await);
         assert!(
             centred.contains("lines 3-3 hold a heading's textAlign that markdown can't express"),
@@ -1126,7 +1229,7 @@ mod tests {
         );
 
         f.k.edit_note(
-            "Styled",
+            NoteKey::Name("Styled"),
             5,
             5,
             "Now see [the docs](https://docs.rs/x_(y)).",
@@ -1144,6 +1247,221 @@ mod tests {
             "the blocks before it are untouched"
         );
         assert_eq!(after["content"][1], before["content"][1]);
+    }
+
+    /// get_note's frontmatter keys, in order.
+    fn frontmatter_keys(note: &str) -> Vec<&str> {
+        note.strip_prefix("---\n")
+            .and_then(|rest| rest.split_once("\n---\n"))
+            .map(|(front, _)| front)
+            .unwrap()
+            .lines()
+            .map(|l| l.split_once(':').unwrap().0)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn get_note_by_date_reads_the_daily_note() {
+        let f = fixture().await;
+        f.k.append_to_daily_note("2026-10-24", "Met the team.\n\nShipped it.")
+            .await
+            .unwrap();
+
+        let note = f.k.get_note(NoteKey::Date("2026-10-24")).await.unwrap();
+        assert_eq!(
+            frontmatter_keys(&note),
+            ["name", "version", "date"],
+            "{note}"
+        );
+        assert!(
+            note.starts_with("---\nname: \"October 24, 2026\"\nversion: "),
+            "{note}"
+        );
+        assert!(note.contains("\ndate: \"2026-10-24\"\n"), "{note}");
+        assert!(!note.contains("tags"), "{note}");
+        assert!(version(&note) > 0, "{note}");
+        assert_eq!(body(&note), "Met the team.\n\nShipped it.");
+    }
+
+    #[tokio::test]
+    async fn get_note_by_missing_date_creates_nothing() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+
+        let failure = err(f.k.get_note(NoteKey::Date("2026-10-24")).await);
+        assert_eq!(
+            failure,
+            "No daily note for 2026-10-24. Use append_to_daily_note to start one."
+        );
+        for failure in [
+            err(f
+                .k
+                .query_text_location(NoteKey::Date("2026-10-24"), "x")
+                .await),
+            err(f
+                .k
+                .edit_note(NoteKey::Date("2026-10-24"), 1, 0, "x", 0)
+                .await),
+        ] {
+            assert!(failure.contains("append_to_daily_note"), "{failure}");
+        }
+
+        assert_eq!(f.entity_count().await, before);
+        let req = ResolveEntityRequest {
+            structure_type: String::new(),
+            key: Some(resolve_entity_request::Key::Date("2026-10-24".into())),
+            create_if_missing: false,
+        };
+        let lookup = f.entity.resolve_entity(Request::new(req)).await;
+        assert_eq!(lookup.unwrap_err().code(), tonic::Code::NotFound);
+    }
+
+    #[tokio::test]
+    async fn a_malformed_date_fails_with_the_servers_message() {
+        let f = fixture().await;
+        let before = f.entity_count().await;
+
+        for failure in [
+            err(f.k.get_note(NoteKey::Date("tomorrow")).await),
+            err(f
+                .k
+                .query_text_location(NoteKey::Date("tomorrow"), "x")
+                .await),
+            err(f.k.edit_note(NoteKey::Date("tomorrow"), 1, 0, "x", 0).await),
+        ] {
+            assert!(
+                failure.contains("date must be an ISO calendar day (yyyy-MM-dd)"),
+                "{failure}"
+            );
+        }
+        assert_eq!(f.entity_count().await, before);
+    }
+
+    #[tokio::test]
+    async fn query_and_edit_a_daily_note_by_date() {
+        let f = fixture().await;
+        let day = NoteKey::Date;
+        f.k.append_to_daily_note("2026-10-24", "First.\n\nSecond.\n\nThird.")
+            .await
+            .unwrap();
+
+        let found =
+            f.k.query_text_location(day("2026-10-24"), "Second")
+                .await
+                .unwrap();
+        let v = version(&found);
+        assert!(found.contains("lines 3-3 (1 match):\nSecond."), "{found}");
+        assert!(f
+            .k
+            .query_text_location(day("2026-10-24"), "nowhere")
+            .await
+            .unwrap()
+            .ends_with("in Daily note \"October 24, 2026\"."));
+
+        let done =
+            f.k.edit_note(day("2026-10-24"), 3, 3, "Replaced.", v)
+                .await
+                .unwrap();
+        assert!(
+            done.starts_with("Replaced lines 3-3 of Daily note \"October 24, 2026\" ("),
+            "{done}"
+        );
+        let note = f.k.get_note(day("2026-10-24")).await.unwrap();
+        assert_eq!(body(&note), "First.\n\nReplaced.\n\nThird.");
+        assert_eq!(f.entity_count().await, 1, "still the one day");
+    }
+
+    #[tokio::test]
+    async fn edit_note_by_date_refuses_a_stale_version() {
+        let f = fixture().await;
+        f.k.append_to_daily_note("2026-10-24", "First.")
+            .await
+            .unwrap();
+        f.k.create_note("Subject", "First.", None).await.unwrap();
+        let day = f.k.get_note(NoteKey::Date("2026-10-24")).await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("Subject")).await.unwrap();
+
+        let stale = err(f
+            .k
+            .edit_note(
+                NoteKey::Date("2026-10-24"),
+                1,
+                1,
+                "Stale.",
+                version(&day) - 1,
+            )
+            .await);
+        assert!(
+            stale.starts_with("Daily note \"October 24, 2026\" changed since you read it."),
+            "{stale}"
+        );
+        let stale = err(f
+            .k
+            .edit_note(NoteKey::Name("Subject"), 1, 1, "Stale.", version(&note) - 1)
+            .await);
+        assert!(
+            stale.starts_with("Note \"Subject\" changed since you read it."),
+            "{stale}"
+        );
+        let day = f.k.get_note(NoteKey::Date("2026-10-24")).await.unwrap();
+        assert_eq!(body(&day), "First.", "a refused edit writes nothing");
+    }
+
+    #[tokio::test]
+    async fn note_key_needs_exactly_one_of_name_and_date() {
+        let f = fixture().await;
+        f.k.create_note("A", "Body.", None).await.unwrap();
+        let call = |name: &str, arguments: Value| {
+            handle_message(
+                &f.k,
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } }),
+            )
+        };
+        let rest = |tool: &str| match tool {
+            "get_note" => json!({}),
+            "query_text_location" => json!({ "query": "x" }),
+            _ => json!({ "start": 1, "end": 1, "markdown": "x", "version": 0 }),
+        };
+
+        for tool in ["get_note", "query_text_location", "edit_note"] {
+            for key in [json!({ "name": "A", "date": "2026-10-24" }), json!({})] {
+                let mut args = rest(tool);
+                args.as_object_mut()
+                    .unwrap()
+                    .extend(key.as_object().unwrap().clone());
+                let reply = call(tool, args).await.unwrap();
+                assert!(reply.get("error").is_none(), "{tool}: {reply}");
+                assert_eq!(reply["result"]["isError"], true, "{tool}: {reply}");
+                let text = reply["result"]["content"][0]["text"].as_str().unwrap();
+                assert!(
+                    text.starts_with("Give either name (a note) or date (a daily note"),
+                    "{tool}: {text}"
+                );
+            }
+        }
+        assert_eq!(f.entity_count().await, 1, "nothing was created");
+    }
+
+    #[test]
+    fn tools_that_take_a_note_or_a_day_declare_date_and_require_no_name() {
+        let defs = tool_definitions();
+        for tool in ["get_note", "query_text_location", "edit_note"] {
+            let def = defs.iter().find(|t| t["name"] == tool).unwrap();
+            let schema = &def["inputSchema"];
+            assert_eq!(
+                schema["properties"]["date"],
+                json!({ "type": "string" }),
+                "{tool}"
+            );
+            assert_eq!(
+                schema["properties"]["name"],
+                json!({ "type": "string" }),
+                "{tool}"
+            );
+            let required = schema["required"].as_array().unwrap();
+            assert!(!required.contains(&json!("name")), "{tool}: {required:?}");
+            assert!(!required.contains(&json!("date")), "{tool}: {required:?}");
+        }
     }
 
     #[tokio::test]
@@ -1236,12 +1554,12 @@ mod tests {
             .unwrap();
         f.k.create_note("Plain", "Body #ml.", None).await.unwrap();
 
-        let tagged = f.k.get_note("Tagged").await.unwrap();
+        let tagged = f.k.get_note(NoteKey::Name("Tagged")).await.unwrap();
         assert!(
             tagged.contains("\ntags: [\"ml\",\"papers\"]\n---\n"),
             "{tagged}"
         );
-        let plain = f.k.get_note("Plain").await.unwrap();
+        let plain = f.k.get_note(NoteKey::Name("Plain")).await.unwrap();
         assert!(
             plain.contains("\ntags: []\n---\n"),
             "a body #tag is not one of the note's tags: {plain}"
@@ -1291,7 +1609,7 @@ mod tests {
         assert_eq!(f.entity_count().await, before, "not even the #x Tag exists");
         assert!(f
             .k
-            .get_note("Bad")
+            .get_note(NoteKey::Name("Bad"))
             .await
             .unwrap()
             .starts_with("No note named"));
@@ -1324,7 +1642,7 @@ mod tests {
         assert_eq!(f.entity_count().await, count, "removing creates no Tag");
         assert!(f
             .k
-            .get_note("X")
+            .get_note(NoteKey::Name("X"))
             .await
             .unwrap()
             .contains("\ntags: [\"new\"]\n"));
@@ -1503,7 +1821,7 @@ mod tests {
             INVALID_PARAMS
         );
         assert_eq!(
-            call("get_note", json!({})).await.unwrap()["error"]["code"],
+            call("get_note", json!({ "name": 5 })).await.unwrap()["error"]["code"],
             INVALID_PARAMS
         );
         let start_zero = call(

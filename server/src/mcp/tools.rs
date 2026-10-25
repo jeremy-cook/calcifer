@@ -7,7 +7,7 @@ use std::sync::{Arc, LazyLock};
 use futures::future::try_join_all;
 use regex::Regex;
 use serde_json::{json, Value};
-use tonic::{Code, Request, Status};
+use tonic::{Code, Request, Response, Status};
 
 use super::markdown::{self, ChipTarget, Reference};
 use crate::proto::entity_service_server::EntityService as EntityServiceTrait;
@@ -230,6 +230,76 @@ struct BacklinkSource {
     name: String,
     structure_type: String,
     property_ids: Vec<String>,
+}
+
+/// What get_note, query_text_location and edit_note act on: a Note by name or a
+/// DailyNote by ISO day.
+pub enum NoteKey<'a> {
+    Name(&'a str),
+    Date(&'a str),
+}
+
+impl<'a> NoteKey<'a> {
+    /// Exactly one of `name` and `date`.
+    pub fn from_args(name: Option<&'a str>, date: Option<&'a str>) -> Result<Self, ToolError> {
+        match (name, date) {
+            (Some(name), None) => Ok(Self::Name(name)),
+            (None, Some(date)) => Ok(Self::Date(date)),
+            (Some(_), Some(_)) => {
+                fail("Give either name (a note) or date (a daily note, yyyy-MM-dd), not both.")
+            }
+            (None, None) => fail(
+                "Give either name (a note) or date (a daily note, yyyy-MM-dd); neither was given.",
+            ),
+        }
+    }
+
+    /// What the agent is told when nothing is there.
+    fn missing(&self) -> String {
+        match self {
+            Self::Name(name) => {
+                format!("No note named \"{name}\". Use search_notes or create_note.")
+            }
+            Self::Date(date) => format!(
+                "No daily note for {}. Use append_to_daily_note to start one.",
+                date.trim()
+            ),
+        }
+    }
+}
+
+/// A document `NoteKey` found: a Note or a DailyNote.
+struct Found {
+    id: String,
+    name: String,
+    structure_type: String,
+    /// The ISO day of a DailyNote.
+    date: Option<String>,
+    entity: Entity,
+}
+
+impl Found {
+    fn from_entity(entity: Entity) -> Self {
+        let date = match entity.properties.get("date").and_then(|v| v.value.as_ref()) {
+            Some(property_value::Value::Date(d)) => Some(d.clone()),
+            _ => None,
+        };
+        Self {
+            id: entity.id.clone(),
+            name: entity.name.clone(),
+            structure_type: entity.structure_type.clone(),
+            date,
+            entity,
+        }
+    }
+
+    /// How messages name it: `Note "X"` or `Daily note "October 24, 2026"`.
+    fn label(&self) -> String {
+        match self.structure_type.as_str() {
+            "DailyNote" => format!("Daily note \"{}\"", self.name),
+            _ => format!("Note \"{}\"", self.name),
+        }
+    }
 }
 
 impl Knowledge {
@@ -568,6 +638,40 @@ impl Knowledge {
         Ok(())
     }
 
+    /// The document `key` names, or None when there isn't one. Nothing is
+    /// created: a missing note or day is the caller's to report.
+    async fn find_doc(&self, key: &NoteKey<'_>) -> Result<Option<Found>, ToolError> {
+        let resolved = match key {
+            NoteKey::Name(name) => self.resolve_name("Note", name, false).await,
+            NoteKey::Date(date) => {
+                let req = ResolveEntityRequest {
+                    structure_type: String::new(),
+                    key: Some(resolve_entity_request::Key::Date(date.to_string())),
+                    create_if_missing: false,
+                };
+                self.entity
+                    .resolve_entity(Request::new(req))
+                    .await
+                    .map(Response::into_inner)
+            }
+        };
+        match resolved {
+            Ok(res) => Ok(res.entity.map(Found::from_entity)),
+            Err(e) if is_code(&e, Code::NotFound) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// The existing document `key` names. Writing to one that isn't there is an
+    /// error, not a create: create_note makes a note and append_to_daily_note
+    /// starts a day.
+    async fn existing_doc(&self, key: &NoteKey<'_>) -> Result<Found, ToolError> {
+        match self.find_doc(key).await? {
+            Some(found) => Ok(found),
+            None => fail(key.missing()),
+        }
+    }
+
     /// The id of the existing note called `name`. Writing to a note that isn't
     /// there is an error, not a create: create_note is how a note comes to exist.
     async fn existing_note_id(&self, name: &str) -> Result<String, ToolError> {
@@ -685,12 +789,14 @@ impl Knowledge {
     /// the version those lines belong to. The match is exact and case-sensitive
     /// against the markdown get_note shows, so the agent quotes text it has read
     /// instead of counting lines.
-    pub async fn query_text_location(&self, name: &str, query: &str) -> ToolResult {
+    pub async fn query_text_location(&self, key: NoteKey<'_>, query: &str) -> ToolResult {
         if query.is_empty() {
             return fail("query is empty: say which text to find.");
         }
-        let id = self.existing_note_id(name).await?;
-        let (doc, updated_at) = self.get_doc(&doc_ref("Note", &id)?).await?;
+        let found = self.existing_doc(&key).await?;
+        let (doc, updated_at) = self
+            .get_doc(&doc_ref(&found.structure_type, &found.id)?)
+            .await?;
         let (body, spans) = self.render_body(&doc).await?;
         let line_at = |offset: usize| body[..offset].matches('\n').count() + 1;
 
@@ -712,7 +818,11 @@ impl Knowledge {
             from = end;
         }
         if hits.is_empty() {
-            return Ok(format!("No match for {} in \"{name}\".", json!(query)));
+            return Ok(format!(
+                "No match for {} in {}.",
+                json!(query),
+                found.label()
+            ));
         }
 
         let lines: Vec<&str> = body.split('\n').collect();
@@ -755,7 +865,7 @@ impl Knowledge {
     /// from, so a changed note is an error, not a retry.
     pub async fn edit_note(
         &self,
-        name: &str,
+        key: NoteKey<'_>,
         start: usize,
         end: usize,
         markdown: &str,
@@ -764,14 +874,15 @@ impl Knowledge {
         if start == 0 || version < 0 {
             return fail("start must be at least 1 and version at least 0; nothing was written.");
         }
-        let id = self.existing_note_id(name).await?;
+        let found = self.existing_doc(&key).await?;
         let stale = || {
             ToolError(format!(
-                "Note \"{name}\" changed since you read it. Call get_note again and redo the edit."
+                "{} changed since you read it. Call get_note again and redo the edit.",
+                found.label()
             ))
         };
 
-        let r = doc_ref("Note", &id)?;
+        let r = doc_ref(&found.structure_type, &found.id)?;
         let (doc, updated_at) = self.get_doc(&r).await?;
         if timestamp_ms(&updated_at) != version {
             return Err(stale());
@@ -806,7 +917,7 @@ impl Knowledge {
             Err(e) => return Err(e.into()),
         }
 
-        let ent = self.entity(&id).await?;
+        let ent = self.entity(&found.id).await?;
         let action = if end + 1 == start {
             format!("Inserted at line {start}")
         } else if replacement.is_empty() {
@@ -815,36 +926,48 @@ impl Knowledge {
             format!("Replaced lines {start}-{end}")
         };
         Ok(format!(
-            "{action} of \"{}\" ({id}); now {} wikilink(s).",
-            ent.name,
+            "{action} of {} ({}); now {} wikilink(s).",
+            found.label(),
+            found.id,
             ent.links.len()
         ))
     }
 
-    /// The note as markdown under a frontmatter block (name, version, tags).
+    /// The note as markdown under a frontmatter block: name, version and tags for
+    /// a note, name, version and date for a daily note (it has no tags).
     /// Values are JSON, which is valid YAML, so a name with a colon or a quote
     /// can't break the block. `version` is what edit_note checks its line numbers
     /// against; `tags` is the names in the note's `tags` property, `[]` when it
-    /// has none, and what create_note reads back.
-    pub async fn get_note(&self, name: &str) -> ToolResult {
-        let found = match self.resolve_name("Note", name, false).await {
-            Ok(res) => res.entity.unwrap_or_default(),
-            Err(e) if is_code(&e, Code::NotFound) => {
-                return Ok(format!(
-                    "No note named \"{name}\". Use search_notes or create_note."
-                ))
-            }
-            Err(e) => return Err(e.into()),
+    /// has none, and what create_note reads back; `date` is the day's ISO date.
+    /// A note that isn't there is reported as text, a day that isn't there as an
+    /// error: nothing is created either way.
+    pub async fn get_note(&self, key: NoteKey<'_>) -> ToolResult {
+        let Some(found) = self.find_doc(&key).await? else {
+            return match key {
+                NoteKey::Name(_) => Ok(key.missing()),
+                NoteKey::Date(_) => fail(key.missing()),
+            };
         };
-        let (doc, updated_at) = self.get_doc(&doc_ref("Note", &found.id)?).await?;
+        let (doc, updated_at) = self
+            .get_doc(&doc_ref(&found.structure_type, &found.id)?)
+            .await?;
         let (body, _) = self.render_body(&doc).await?;
-        let tags = self.tag_names(&found).await?;
-        Ok(format!(
-            "---\nname: {}\nversion: {}\ntags: {}\n---\n{body}",
-            json!(found.name),
-            timestamp_ms(&updated_at),
-            json!(tags),
-        ))
+        let version = timestamp_ms(&updated_at);
+        let frontmatter = if found.structure_type == "DailyNote" {
+            format!(
+                "name: {}\nversion: {version}\ndate: {}",
+                json!(found.name),
+                json!(found.date.as_deref().unwrap_or_default())
+            )
+        } else {
+            let tags = self.tag_names(&found.entity).await?;
+            format!(
+                "name: {}\nversion: {version}\ntags: {}",
+                json!(found.name),
+                json!(tags)
+            )
+        };
+        Ok(format!("---\n{frontmatter}\n---\n{body}"))
     }
 
     pub async fn search_notes(&self, query: &str, limit: u32, mode: SearchMode) -> ToolResult {
