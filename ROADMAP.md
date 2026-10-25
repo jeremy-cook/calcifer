@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `agent-daily-notes` @ `0cdb433`, where the agent reads and edits daily notes by date (stacked on `i-34-tag-edits`).
+**Last reviewed:** 2026-10-24, against `connection-status` @ `e3388ab`, where the connection notice is built (stacked on `agent-daily-notes`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,24 +22,11 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | Connection status (below) | M | Says when the server can't be reached, at load and after a drop, and recovers by itself. |
-| 2 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses Connection status's retrying state. |
-| 3 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
-| 4 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
-| 5 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 6 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
-
-### Connection status · size: M
-
-When the server goes away after load, Watch retries silently and the page keeps showing
-stale data with no sign; at load, the structures registry fails at once (`retry: false`)
-with "Reload to retry". Have the replica track the stream's state (connecting, live,
-retrying) in `model/replica.ts`, set it from `model/sync.ts`, and let the registry query
-retry on its own. Decided 2026-10-24: one message for both, a full-width banner under the
-top bar reading "Can't reach the server. Retrying…", shown whenever the browser has tried
-and failed to reach the server and hidden once it answers. No reload needed.
-
----
+| 1 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses the Watch connection state. |
+| 2 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
+| 3 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
+| 4 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 5 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ## Next up
 
