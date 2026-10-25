@@ -55,7 +55,8 @@ message Entity {
 ```
 
 `Entity` is only ever returned. Clients write through intent-shaped RPCs (`CreateEntity`,
-`RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `ResolveEntity`) and the server owns the id, links,
+`RenameEntity`, `SetEntityProperty`, `DeleteEntity`, `ResolveEntity`, `AttachFacet`,
+`DetachFacet`, `AddRelationTarget`, `RemoveRelationTarget`) and the server owns the id, links,
 referenced dates and timestamps ([ADR 8](../adr/0008-server-builds-entities.md)).
 
 `facets` lists the facets attached to the entity (see Facets under Structures), and
@@ -552,10 +553,10 @@ and the filtered `ListEntities`, `ListBacklinks` and `Search` are there for the 
   an upsert or a delete is idempotent, so clients apply every event in order.
 
 Every write publishes after its transaction commits: `CreateEntity`, `RenameEntity`,
-`SetEntityProperty`, a creating `ResolveEntity` and a changing `AttachFacet` or
-`DetachFacet` publish `upserted`, `DeleteEntity` publishes
-`deleted_id` then one `upserted` per entity whose relation values it stripped (in id
-order), and `PutRichText` publishes `rich_text_changed` then `upserted`. The
+`SetEntityProperty`, a creating `ResolveEntity` and a changing `AttachFacet`,
+`DetachFacet`, `AddRelationTarget` or `RemoveRelationTarget` publish `upserted`,
+`DeleteEntity` publishes `deleted_id` then one `upserted` per entity whose relation values
+it stripped (in id order), and `PutRichText` publishes `rich_text_changed` then `upserted`. The
 server reads the current revision before loading a snapshot and skips queued events at
 or below it, which the snapshot already includes.
 
