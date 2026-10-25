@@ -294,6 +294,10 @@ async fn dispatch(
             let a: LinkArgs = parse_args(name, args)?;
             k.link_notes(&a.from, &a.to).await
         }
+        "unlink_notes" => {
+            let a: LinkArgs = parse_args(name, args)?;
+            k.unlink_notes(&a.from, &a.to).await
+        }
         "get_backlinks" => {
             k.get_backlinks(&parse_args::<NameArgs>(name, args)?.name)
                 .await
@@ -334,7 +338,7 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "get_note",
-            format!("Read a note by name, or a daily note by date (yyyy-MM-dd); give one of the two. The result is YAML frontmatter followed by the markdown body: name, version and tags for a note; name, version and date for a daily note, which has no tags. A day with no daily note is an error: use append_to_daily_note to start one. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note reads the frontmatter's tags when given no `tags` argument, so the result can be copied into a new note."),
+            format!("Read a note by name, or a daily note by date (yyyy-MM-dd); give one of the two. The result is YAML frontmatter followed by the markdown body: name, version, tags and related for a note (`related` lists the notes it's directly related to; change it with link_notes and unlink_notes); name, version and date for a daily note, which has no tags or related. A day with no daily note is an error: use append_to_daily_note to start one. Use get_backlinks for the notes that link to it. Links are written with each target's current name: {LINK_SYNTAX} create_note reads the frontmatter's tags when given no `tags` argument, so the result can be copied into a new note; it ignores `related`, so the copy isn't related to anything."),
             json!({ "name": string, "date": string }),
             &[],
         ),
@@ -381,7 +385,13 @@ fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "link_notes",
-            "Link one note to another by adding a [[wikilink]] reference to the first note.".into(),
+            "Relate one note to another without touching either note's text (a direct relationship). `from` and `to` are each a note's name or id; if several notes share a name, the call fails and lists their ids. Relating twice is harmless. Only notes relate to notes.".into(),
+            json!({ "from": string, "to": string }),
+            &["from", "to"],
+        ),
+        tool(
+            "unlink_notes",
+            "Remove the direct relationship from one note to another (made with link_notes) without touching either note's text. `from` and `to` are each a note's name or id; if several notes share a name, the call fails and lists their ids. Removing a relationship that doesn't exist is harmless. A [[wikilink]] in a note's text isn't a relationship: edit the text to remove it.".into(),
             json!({ "from": string, "to": string }),
             &["from", "to"],
         ),
@@ -461,6 +471,23 @@ mod tests {
                 .entity
                 .unwrap()
                 .id
+        }
+
+        /// The ids of every note called `name`, which no name key keeps unique.
+        async fn notes_named(&self, name: &str) -> Vec<String> {
+            let req = ListEntitiesRequest {
+                structure_type: "Note".into(),
+            };
+            self.entity
+                .list_entities(Request::new(req))
+                .await
+                .unwrap()
+                .into_inner()
+                .entities
+                .into_iter()
+                .filter(|n| n.name == name)
+                .map(|n| n.id)
+                .collect()
         }
 
         async fn entity_count(&self) -> usize {
@@ -701,10 +728,11 @@ mod tests {
             .unwrap();
         let lines: Vec<&str> = frontmatter.lines().collect();
         assert!(
-            lines.len() == 3
+            lines.len() == 4
                 && lines[0].starts_with("name: ")
                 && lines[1].starts_with("version: ")
-                && lines[2] == "tags: [\"rt-a\",\"rt-b\"]",
+                && lines[2] == "tags: [\"rt-a\",\"rt-b\"]"
+                && lines[3] == "related: []",
             "{note}"
         );
 
@@ -739,7 +767,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn get_note_frontmatter_has_name_version_and_tags() {
+    async fn get_note_frontmatter_has_name_version_tags_and_related() {
         let f = fixture().await;
         f.k.create_note("Target", "Body.", None).await.unwrap();
         f.k.create_note("Source", "Points at [[Target]].", None)
@@ -756,7 +784,7 @@ mod tests {
             .lines()
             .map(|l| l.split_once(':').unwrap().0)
             .collect();
-        assert_eq!(keys, ["name", "version", "tags"], "{note}");
+        assert_eq!(keys, ["name", "version", "tags", "related"], "{note}");
 
         let backlinks = f.k.get_backlinks("Target").await.unwrap();
         assert!(backlinks.contains("Source"), "{backlinks}");
@@ -816,7 +844,6 @@ mod tests {
                 "{failure}"
             );
         }
-        assert!(err(f.k.link_notes("Existing", "Nowhere").await).contains("[[Nowhere]]"));
         assert_eq!(
             f.entity_count().await,
             before,
@@ -1278,7 +1305,10 @@ mod tests {
             "{note}"
         );
         assert!(note.contains("\ndate: \"2026-10-24\"\n"), "{note}");
-        assert!(!note.contains("tags"), "{note}");
+        assert!(
+            !note.contains("tags") && !note.contains("related"),
+            "{note}"
+        );
         assert!(version(&note) > 0, "{note}");
         assert_eq!(body(&note), "Met the team.\n\nShipped it.");
     }
@@ -1476,6 +1506,242 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn link_notes_relates_without_writing_text() {
+        let f = fixture().await;
+        f.k.create_note("A", "Body A.", None).await.unwrap();
+        f.k.create_note("B", "Body B.", None).await.unwrap();
+        let before = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+
+        assert_eq!(
+            f.k.link_notes("A", "B").await.unwrap(),
+            "Related \"A\" -> \"B\"."
+        );
+        let after = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert_eq!(body(&after), "Body A.", "{after}");
+        assert_eq!(version(&after), version(&before), "no text was saved");
+        assert!(
+            after.contains("\ntags: []\nrelated: [\"B\"]\n---\n"),
+            "{after}"
+        );
+        let b = f.k.get_note(NoteKey::Name("B")).await.unwrap();
+        assert!(b.contains("\nrelated: []\n"), "one-way: {b}");
+
+        // Names match case-insensitively; the message uses the stored names.
+        assert_eq!(
+            f.k.link_notes("a", "b").await.unwrap(),
+            "\"A\" was already related to \"B\"."
+        );
+        let again = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert_eq!(body(&again), "Body A.");
+        assert!(again.contains("\nrelated: [\"B\"]\n"), "{again}");
+    }
+
+    #[tokio::test]
+    async fn get_note_lists_related_oldest_first() {
+        let f = fixture().await;
+        for name in ["A", "B", "C"] {
+            f.k.create_note(name, "", None).await.unwrap();
+        }
+        f.k.link_notes("A", "C").await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+        f.k.link_notes("A", "B").await.unwrap();
+
+        let note = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert!(note.contains("\nrelated: [\"C\",\"B\"]\n"), "{note}");
+
+        f.k.unlink_notes("A", "C").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert!(note.contains("\nrelated: [\"B\"]\n"), "{note}");
+    }
+
+    #[tokio::test]
+    async fn unlink_notes_removes_the_relationship() {
+        let f = fixture().await;
+        f.k.create_note("A", "Body A.", None).await.unwrap();
+        f.k.create_note("B", "Body B.", None).await.unwrap();
+        f.k.link_notes("A", "B").await.unwrap();
+
+        assert_eq!(
+            f.k.unlink_notes("A", "B").await.unwrap(),
+            "Unrelated \"A\" -> \"B\"."
+        );
+        let note = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert!(note.contains("\nrelated: []\n"), "{note}");
+        assert_eq!(body(&note), "Body A.");
+        assert!(f.link_targets(&f.note_id("A").await).await.is_empty());
+
+        assert_eq!(
+            f.k.unlink_notes("A", "B").await.unwrap(),
+            "\"A\" wasn't related to \"B\"."
+        );
+        assert_eq!(
+            f.k.unlink_notes("b", "a").await.unwrap(),
+            "\"B\" wasn't related to \"A\".",
+            "the other direction was never related"
+        );
+    }
+
+    #[tokio::test]
+    async fn link_notes_takes_an_id_and_refuses_an_ambiguous_name() {
+        let f = fixture().await;
+        f.k.create_note("A", "", None).await.unwrap();
+        f.create("Note", "Dup").await;
+        f.create("Note", "Dup").await;
+        let dups = f.notes_named("Dup").await;
+        assert_eq!(dups.len(), 2);
+
+        for failure in [
+            err(f.k.link_notes("A", "dup").await),
+            err(f.k.link_notes("Dup", "A").await),
+            err(f.k.unlink_notes("A", "Dup").await),
+        ] {
+            assert!(failure.starts_with("Several notes are named"), "{failure}");
+            for id in &dups {
+                assert!(failure.contains(&format!("- Dup ({id})")), "{failure}");
+            }
+            assert!(failure.ends_with("Call again with the id."), "{failure}");
+        }
+        assert!(f.link_targets(&f.note_id("A").await).await.is_empty());
+
+        assert_eq!(
+            f.k.link_notes("A", &dups[0]).await.unwrap(),
+            "Related \"A\" -> \"Dup\"."
+        );
+        assert_eq!(
+            f.link_targets(&f.note_id("A").await).await,
+            [format!("Note:{}", dups[0])]
+        );
+        assert_eq!(
+            f.k.link_notes(&dups[1], "A").await.unwrap(),
+            "Related \"Dup\" -> \"A\"."
+        );
+        assert_eq!(
+            f.k.unlink_notes("A", &dups[0]).await.unwrap(),
+            "Unrelated \"A\" -> \"Dup\"."
+        );
+    }
+
+    #[tokio::test]
+    async fn link_notes_missing_note_is_an_error() {
+        let f = fixture().await;
+        f.k.create_note("A", "", None).await.unwrap();
+        f.create("Tag", "ml").await;
+        let tag = tag_id(&f, "ml").await;
+        let before = f.entity_count().await;
+
+        for failure in [
+            err(f.k.link_notes("A", "Ghost").await),
+            err(f.k.link_notes("Ghost", "A").await),
+            err(f.k.unlink_notes("A", "Ghost").await),
+            err(f.k.unlink_notes("Ghost", "A").await),
+            err(f.k.link_notes("A", &uuid::Uuid::new_v4().to_string()).await),
+            err(f.k.link_notes("A", "[[A]]").await),
+        ] {
+            assert!(
+                failure.starts_with("No note named or with id \"")
+                    && failure.ends_with("\". Use search_notes."),
+                "{failure}"
+            );
+        }
+        assert!(
+            err(f.k.link_notes("A", &tag).await).starts_with("No note named or with id"),
+            "the id of a Tag isn't a note's"
+        );
+        assert!(
+            err(f.k.link_notes("A", "ml").await).starts_with("No note named or with id"),
+            "a Tag's name isn't a note's"
+        );
+        assert_eq!(f.entity_count().await, before, "nothing is created");
+        let note = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert!(note.contains("\nrelated: []\n"), "{note}");
+    }
+
+    #[tokio::test]
+    async fn link_notes_refuses_a_note_related_to_itself() {
+        let f = fixture().await;
+        f.k.create_note("A", "", None).await.unwrap();
+        let failure = err(f.k.link_notes("A", "a").await);
+        assert!(failure.contains("itself"), "{failure}");
+    }
+
+    #[tokio::test]
+    async fn get_backlinks_labels_related_sources() {
+        let f = fixture().await;
+        f.k.create_note("B", "", None).await.unwrap();
+        f.k.create_note("A", "", None).await.unwrap();
+        f.k.create_note("Mentioner", "Points at [[B]].", None)
+            .await
+            .unwrap();
+        f.k.link_notes("A", "B").await.unwrap();
+
+        let backlinks = f.k.get_backlinks("B").await.unwrap();
+        let mut lines: Vec<&str> = backlinks.lines().collect();
+        lines.sort_unstable();
+        assert_eq!(lines, ["- A (related)", "- Mentioner"], "{backlinks}");
+
+        // A mention and a relationship from one source is one line.
+        f.k.append_to_note("A", "Also [[B]].").await.unwrap();
+        let backlinks = f.k.get_backlinks("B").await.unwrap();
+        assert_eq!(
+            backlinks.lines().filter(|l| l.starts_with("- A")).count(),
+            1,
+            "{backlinks}"
+        );
+        assert!(backlinks.contains("- A (related)"), "{backlinks}");
+
+        f.k.unlink_notes("A", "B").await.unwrap();
+        let backlinks = f.k.get_backlinks("B").await.unwrap();
+        assert!(!backlinks.contains("related"), "{backlinks}");
+        assert!(
+            backlinks.contains("- A\n") || backlinks.ends_with("- A"),
+            "{backlinks}"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_note_ignores_frontmatter_related() {
+        let f = fixture().await;
+        f.k.create_note("A", "Body.", None).await.unwrap();
+        f.k.create_note("B", "", None).await.unwrap();
+        f.k.link_notes("A", "B").await.unwrap();
+        let note = f.k.get_note(NoteKey::Name("A")).await.unwrap();
+        assert!(note.contains("\nrelated: [\"B\"]\n"), "{note}");
+
+        f.k.create_note("A Copy", &note, None).await.unwrap();
+        let copy = f.k.get_note(NoteKey::Name("A Copy")).await.unwrap();
+        assert_eq!(body(&copy), "Body.", "{copy}");
+        assert!(copy.contains("\nrelated: []\n"), "{copy}");
+        assert!(f.link_targets(&f.note_id("A Copy").await).await.is_empty());
+        assert_eq!(
+            f.link_targets(&f.note_id("A").await).await.len(),
+            1,
+            "the original keeps its relationship"
+        );
+    }
+
+    #[tokio::test]
+    async fn list_structures_shows_relates_to() {
+        let f = fixture().await;
+        let listed = f.k.list_structures().unwrap();
+        let entries: Vec<&str> = listed.split("\n- ").collect();
+        let entry = |prefix: &str| {
+            entries
+                .iter()
+                .find(|e| e.trim_start_matches("- ").starts_with(prefix))
+                .unwrap_or_else(|| panic!("no {prefix} in {listed}"))
+        };
+        let note = entry("Note: ");
+        assert!(note.lines().any(|l| l == "  relates_to: Note"), "{listed}");
+        assert!(
+            note.find("  facets: ") < note.find("  relates_to: "),
+            "relates_to comes after facets: {listed}"
+        );
+        for other in ["Tag: ", "DailyNote: ", "facet todo "] {
+            assert!(!entry(other).contains("relates_to"), "{listed}");
+        }
+    }
+
+    #[tokio::test]
     async fn list_structures_shows_facets() {
         let f = fixture().await;
         let listed = f.k.list_structures().unwrap();
@@ -1556,12 +1822,12 @@ mod tests {
 
         let tagged = f.k.get_note(NoteKey::Name("Tagged")).await.unwrap();
         assert!(
-            tagged.contains("\ntags: [\"ml\",\"papers\"]\n---\n"),
+            tagged.contains("\ntags: [\"ml\",\"papers\"]\nrelated: []\n---\n"),
             "{tagged}"
         );
         let plain = f.k.get_note(NoteKey::Name("Plain")).await.unwrap();
         assert!(
-            plain.contains("\ntags: []\n---\n"),
+            plain.contains("\ntags: []\nrelated: []\n---\n"),
             "a body #tag is not one of the note's tags: {plain}"
         );
     }
@@ -1768,6 +2034,7 @@ mod tests {
                 "append_to_note",
                 "tag_entity",
                 "link_notes",
+                "unlink_notes",
                 "get_backlinks",
                 "create_daily_note",
                 "append_to_daily_note",
@@ -1882,6 +2149,61 @@ mod tests {
         assert_eq!(no_name["error"]["code"], INVALID_PARAMS);
         let read = call("get_note", json!({ "name": "A" })).await.unwrap();
         assert!(text(&read).contains("\ntags: [\"papers\"]\n"), "{read}");
+    }
+
+    #[tokio::test]
+    async fn json_rpc_unlink_notes_removes_a_relationship() {
+        let f = fixture().await;
+        let call = |name: &str, arguments: Value| {
+            handle_message(
+                &f.k,
+                json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } }),
+            )
+        };
+        let text = |reply: &Value| {
+            reply["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap()
+                .to_string()
+        };
+
+        call("create_note", json!({ "name": "A", "markdown": "Body." }))
+            .await
+            .unwrap();
+        call("create_note", json!({ "name": "B", "markdown": "" }))
+            .await
+            .unwrap();
+        let linked = call("link_notes", json!({ "from": "A", "to": "B" }))
+            .await
+            .unwrap();
+        assert_eq!(linked["result"]["isError"], false, "{linked}");
+        assert_eq!(text(&linked), "Related \"A\" -> \"B\".");
+        let read = call("get_note", json!({ "name": "A" })).await.unwrap();
+        assert!(text(&read).contains("\nrelated: [\"B\"]\n"), "{read}");
+
+        let unlinked = call("unlink_notes", json!({ "from": "A", "to": "B" }))
+            .await
+            .unwrap();
+        assert_eq!(unlinked["result"]["isError"], false, "{unlinked}");
+        assert_eq!(text(&unlinked), "Unrelated \"A\" -> \"B\".");
+        let again = call("unlink_notes", json!({ "from": "A", "to": "B" }))
+            .await
+            .unwrap();
+        assert_eq!(again["result"]["isError"], false, "{again}");
+        assert_eq!(text(&again), "\"A\" wasn't related to \"B\".");
+        let read = call("get_note", json!({ "name": "A" })).await.unwrap();
+        assert!(text(&read).contains("\nrelated: []\n"), "{read}");
+
+        let missing = call("unlink_notes", json!({ "from": "A", "to": "Ghost" }))
+            .await
+            .unwrap();
+        assert_eq!(missing["result"]["isError"], true, "{missing}");
+        assert!(
+            text(&missing).starts_with("No note named or with id"),
+            "{missing}"
+        );
+        let no_to = call("unlink_notes", json!({ "from": "A" })).await.unwrap();
+        assert_eq!(no_to["error"]["code"], INVALID_PARAMS);
     }
 
     /// The status `POST /mcp` answers through the local-only layers, sent with
