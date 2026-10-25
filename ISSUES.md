@@ -38,27 +38,6 @@ test covers it.
 
 ---
 
-### I-42 · A rich-text save that fails for a non-conflict reason is dropped silently · medium · confirmed
-
-**Where:** `calcifer/src/model/richtext.ts` (`putOnce`, the non-`FailedPrecondition` branch)
-
-**Problem:** If a `Put` fails for any reason other than a conflict (the server is
-down, a network error), the saver logs to the console and moves on. The editor shows
-no error and doesn't retry, so the text is lost unless another edit follows once the
-server is back. If that editor was a daily note being left, the prune then sees an empty
-doc and deletes the note. Found during T06b of the API review; confirmed by reading.
-
-**Fix:** Keep the unsaved doc and retry with backoff, and show an inline "not saved"
-notice (the same slot as the conflict notice) until a save succeeds. The prune should
-skip the delete while a doc has an unsaved local change.
-
-**Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
-
-**Done when:** typing while the server is down shows the notice, and the text is saved
-once the server returns without further typing.
-
----
-
 ### I-45 · Two untitled Tags created at once can pick the same free name · low · confirmed
 
 **Where:** `server/src/services/entity.rs` (`create`, `free_name`)
@@ -186,8 +165,30 @@ the tests that assert the plain-result text.
 
 ---
 
+### I-76 · A failed reload after a save conflict ends the save loop with the doc unsaved · low · confirmed
+
+**Where:** `calcifer/src/model/richtext.ts` (`reloadAfterConflict`, called from `putOnce`)
+
+**Problem:** When a save loses a conflict, the saver drops its queued docs (by design) and
+reloads the server's version. If that reload fails too (the network drops at that
+moment), it only logs. The loop ends, `whenRichTextSaved` resolves, and the editor keeps
+a stale base. The next save conflicts again and retries the reload, but nothing retries
+without more typing, and a daily-note prune waiting on the save proceeds. Found in T01 of
+the I-42 plan, confirmed by reading.
+
+**Fix:** Treat a failed reload like a retryable save failure: back off (the same
+`waitToRetry`) and reload again until it succeeds, keeping the outstanding save open.
+
+**Deferred:** needs a conflict and a network failure back to back; single-user app.
+
+**Done when:** a test where the reload after a conflict fails once shows the reload
+retried and `whenRichTextSaved` resolving only after it succeeds.
+
+---
+
 ## Resolved
 
+- **I-42 · A rich-text save that fails for a non-conflict reason is dropped silently.** Fixed 2026-10-24 (e00b852). A save that fails for a reason that can pass is kept and retried with backoff (1 s doubling to 30 s, and at once when the Watch stream turns live), and the editor shows "Not saved yet. Retrying…" until it lands. The retry keeps the doc's outstanding save open, so a daily-note prune waits for it. Covered by eight `usePutRichText` tests; in the browser, text typed with the server down saved by itself when it returned, and an empty daily note typed in offline and then left was saved, not pruned.
 - **I-72 · The agent can't see or change an existing note's tags.** Fixed 2026-10-24 (70155a8). `get_note`'s frontmatter has a `tags` line, `create_note` reads it back when given no `tags` argument, and the new `tag_entity(name, add, remove)` tool tags and untags an existing note one target at a time. Covered by `tag_entity_adds_and_removes`, `tag_entity_keeps_a_concurrent_tag` and the extended `get_note_copied_into_create_note_links_the_same_targets`; checked over MCP on a scratch DB.
 - **I-34 · Relation edits resend the whole list.** Fixed 2026-10-24 (6b9c1dd, ff1aa8c, f6480c1). New `AddRelationTarget` / `RemoveRelationTarget` RPCs change one target of a `relations` property, idempotently, and the browser's tag field uses them. Covered by `two_adds_of_different_targets_both_survive` and the store tests; on a scratch DB, a tag added by the agent while the page was open and one added in the browser both survived.
 - **I-71 · `get_note` queries backlinks on every read.** Fixed 2026-10-24 (763ba04). `get_note`'s frontmatter is `name` and `version` only, and its description points to `get_backlinks`. Covered by `get_note_frontmatter_has_only_name_and_version`; checked over MCP against a scratch DB.

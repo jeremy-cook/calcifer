@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-24, against `connection-status` @ `e3388ab`, where the connection notice is built (stacked on `agent-daily-notes`).
+**Last reviewed:** 2026-10-24, against `i-42-save-retry` @ `e00b852`, where failed saves retry (stacked on `connection-status`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,11 +22,10 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-42: a failed rich-text save is dropped silently | M | Medium severity but very unlikely. Retry with backoff, an "unsaved" notice, and a prune guard. Reuses the Watch connection state. |
-| 2 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
-| 3 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
-| 4 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 5 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | Direct relationships (Next up 1) | L | ADR 12 accepted 2026-10-24. |
+| 2 | I-61: names containing `\|` or `]]` | S | Decided 2026-10-24: refuse them on create and rename, no escaping. Direct relationships remove the `link_notes` half. |
+| 3 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
+| 4 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ## Next up
 
