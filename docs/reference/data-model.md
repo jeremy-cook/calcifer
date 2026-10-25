@@ -791,7 +791,7 @@ facets it accepts (`facets: todo`) and, when it has any, the structures it may r
 Note`). No tool attaches or detaches a facet.
 
 Writes go through the same service methods the browser's RPCs reach. Markdown is converted
-to TipTap JSON in `server/src/mcp/markdown.rs`, resolving `[[wikilink]]` and `#tag` through
+to TipTap JSON in `server/src/mcp/markdown/`, resolving `[[wikilink]]` and `#tag` through
 `ResolveEntity` by name. A missing `#tag` is created; a `[[wikilink]]` to a missing target
 fails the call, which writes nothing. A body `#tag` only references its Tag; it doesn't
 tag the note. `create_note` fails for a name that already exists or breaks the name rule (a `|` or

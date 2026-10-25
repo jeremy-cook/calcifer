@@ -102,7 +102,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
 - **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen both TS consumers
   (above). Note the `ref` field generates as `r#ref` in Rust.
 - **MCP (Rust):** tool ops in `server/src/mcp/tools.rs`, the JSON-RPC transport and tool
-  schemas in `server/src/mcp/mod.rs`, markdown <-> TipTap in `server/src/mcp/markdown.rs`.
+  schemas in `server/src/mcp/{mod,definitions,dispatch}.rs`, markdown <-> TipTap in `server/src/mcp/markdown/`.
 - **FE (React):** `web/src/model/` is the data layer: `api.ts` (client and query
   cache), `sync.ts` and `replica.ts` (the Watch-fed replica), `store.ts` (the hooks and
   mutations components use), and one module per domain (`richtext`, `relationships`,

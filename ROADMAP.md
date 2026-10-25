@@ -86,7 +86,7 @@ beside the explicit tools rather than in place of them.
 
 ### Markdown converter from the editor's schema · size: M
 
-`server/src/mcp/markdown.rs` hand-writes the markdown ↔ TipTap mapping and copies
+`server/src/mcp/markdown/` hand-writes the markdown ↔ TipTap mapping and copies
 schema facts from `TiptapEditor.tsx` (the link's `target`/`rel` defaults, the mark order,
 the attribute allow-list), so a change to the editor's extensions can drift from what
 agents read and write. Replace it with a binding to a TypeScript converter built from
@@ -115,7 +115,7 @@ the acceptance suite, and I-61's escaping cases belong in it.
   at all. Revisit after the chat panel; it may make a dedicated search view redundant.
 - **One tag-name rule** — tag names are letters and digits with single dots between
   them (`v1.2`); no `_` or `-`. Quick-add follows this, but the agent's markdown
-  (`TAG` in `server/src/mcp/markdown.rs`, documented in `docs/reference/richtext-doc.md`)
+  (`TAG` in `server/src/mcp/markdown/inline.rs`, documented in `docs/reference/richtext-doc.md`)
   still takes `_` and `-`, and nothing validates a Tag name on create (the editor's `#`
   menu, the relation picker, `ResolveEntity`). Enforce it on the server and match it in
   the editor and the docs.
@@ -164,4 +164,4 @@ the acceptance suite, and I-61's escaping cases belong in it.
 - **Embedding model** — currently local `all-MiniLM-L6-v2` (384-d), pinned in the
   migration. Changing it means a re-embed and a migration.
 - **Export format** — JSON proto dump vs Markdown-per-entity. The
-  `server/src/mcp/markdown.rs` serializer is most of the latter already.
+  `server/src/mcp/markdown/write.rs` serializer is most of the latter already.
