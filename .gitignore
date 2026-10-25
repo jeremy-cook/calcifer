@@ -18,8 +18,13 @@ server/.env
 # Local fastembed model cache (~90 MB ONNX model, downloaded on first run).
 server/.fastembed_cache/
 
-# Per-machine Claude Code launch configuration.
+# Per-machine Claude Code state: launch configuration, session locks and worktrees,
+# local permissions.
 .claude/launch.json
+.claude/scheduled_tasks.lock
+.claude/worktrees/
+.claude/.cc-writes/
+**/.claude/settings.local.json
 
 # Working implementation plans, kept out of the repo.
 plans/
