@@ -1,5 +1,6 @@
 import { RouterProvider } from '@tanstack/react-router'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
+import { ServerUnreachableNotice } from '~/components/ServerUnreachableNotice'
 import { router } from '~/router'
 import { queryClient } from '~/model/api'
 import { structuresQuery } from '~/model/structures'
@@ -12,15 +13,11 @@ function WatchedRouter() {
 
 // The structure registry comes from the server. Nothing under the router
 // renders until it has loaded, so routes, the editor and store helpers can
-// read it synchronously from the query cache.
+// read it synchronously from the query cache. The gate waits, retrying, until
+// the server answers, and says so once an attempt has failed.
 function StructureRegistryGate() {
-  const { isPending, isError } = useQuery(structuresQuery)
-  if (isPending) return null
-  if (isError) {
-    return (
-      <p className="p-8 text-sm text-muted-foreground">Couldn't load structures from the server. Reload to retry.</p>
-    )
-  }
+  const { isPending, failureCount } = useQuery(structuresQuery)
+  if (isPending) return failureCount > 0 ? <ServerUnreachableNotice /> : null
   return <WatchedRouter />
 }
 
