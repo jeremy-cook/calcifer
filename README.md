@@ -62,8 +62,9 @@ that isn't `application/json` gets 415. Claude Code sends no `Origin`, and brows
 `localhost` such as the MCP Inspector pass.
 
 Tools: `search_notes`, `get_note`, `query_text_location`, `edit_note`, `create_note`,
-`append_to_note`, `link_notes`, `get_backlinks`, `create_daily_note`, `append_to_daily_note`,
-`list_structures`. Their tests run with the rest of the server's: `cd server && cargo test`.
+`append_to_note`, `tag_entity`, `link_notes`, `get_backlinks`, `create_daily_note`,
+`append_to_daily_note`, `list_structures`. Their tests run with the rest of the server's:
+`cd server && cargo test`.
 
 After editing anything under `proto/`, lint it and regenerate the TS bindings:
 

@@ -334,6 +334,9 @@ service EntityService {
   // Attach or detach a facet (ADR 11); see below.
   rpc AttachFacet(AttachFacetRequest) returns (AttachFacetResponse);  // entity_id, facet -> entity
   rpc DetachFacet(DetachFacetRequest) returns (DetachFacetResponse);  // entity_id, facet -> entity
+  // Add or remove one target of a `relations` property; see Relations targets below.
+  rpc AddRelationTarget(AddRelationTargetRequest) returns (AddRelationTargetResponse);  // entity_id, property_id, target_id -> entity
+  rpc RemoveRelationTarget(RemoveRelationTargetRequest) returns (RemoveRelationTargetResponse);  // entity_id, property_id, target_id -> entity
 }
 
 message CreateEntityRequest {
@@ -346,6 +349,10 @@ message AttachFacetRequest  { string entity_id = 1; string facet = 2; }
 message AttachFacetResponse { Entity entity = 1; }
 message DetachFacetRequest  { string entity_id = 1; string facet = 2; }
 message DetachFacetResponse { Entity entity = 1; }
+message AddRelationTargetRequest     { string entity_id = 1; string property_id = 2; string target_id = 3; }
+message AddRelationTargetResponse    { Entity entity = 1; }
+message RemoveRelationTargetRequest  { string entity_id = 1; string property_id = 2; string target_id = 3; }
+message RemoveRelationTargetResponse { Entity entity = 1; }
 
 message ListBacklinksRequest { string entity_id = 1; }
 message Backlink {
@@ -463,6 +470,24 @@ that isn't, returns the entity unchanged with no write and no event. `SetEntityP
 of a value on a facet's id while that facet isn't attached is `FAILED_PRECONDITION`
 (`attach the todo facet before setting todo.status`); a clear is allowed. There is no
 facet argument on `ResolveEntity`: an entity it creates has no facets.
+
+**Relations targets.** `AddRelationTarget` and `RemoveRelationTarget` change one target of
+a `relations` property, so two writers adding different targets both keep theirs; two
+`SetEntityProperty` calls that each resend the whole list can drop one. `SetEntityProperty`
+still writes a whole list (create flows and clears use it), and so does a single `relation`
+property, which has nothing to merge and which these RPCs refuse. Add appends the target as
+a ref carrying its real structure type; a target already in the list is a no-op. Remove drops
+the target; one that isn't in the list, including an id with no entity, is a no-op, and
+removing the last target clears the property (its row is deleted). Both run in one
+transaction, re-derive that property's links, bump `updated_at`, publish `upserted` and
+return the entity; a no-op returns the entity unchanged with no write and no event. Only a
+declared `relations` property of the entity's structure or an attached facet is accepted.
+Errors: `INVALID_ARGUMENT` for an empty `entity_id`, `property_id` or `target_id`, for a
+property that isn't a declared `relations` property (`Note.content is not a relations
+property`), and for an Add target whose structure isn't the property's `target_structure`;
+`NOT_FOUND` for an unknown entity, and for an Add target that doesn't exist;
+`FAILED_PRECONDITION` for a property of a facet that isn't attached. Remove checks neither
+the target's existence nor its structure, so a stale ref can always be removed.
 
 `ResolveEntity` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
@@ -583,14 +608,19 @@ could forge: a `Host` that isn't this machine (403, against DNS rebinding), an `
 that isn't loopback (403), and a POST body that isn't `application/json` (415, so a
 cross-site `no-cors` `text/plain` POST can't run a tool). Agents like Claude Code send no
 `Origin`; browser tools on `localhost`, such as the MCP Inspector, pass.
-It exposes eleven tools:
+It exposes twelve tools:
 
 `search_notes` · `get_note` · `query_text_location` · `edit_note` · `create_note` ·
-`append_to_note` · `link_notes` · `get_backlinks` · `create_daily_note` ·
+`append_to_note` · `tag_entity` · `link_notes` · `get_backlinks` · `create_daily_note` ·
 `append_to_daily_note` · `list_structures`
 
 `search_notes` makes one `Search` call in its `mode` (default hybrid) and writes each
 hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
+
+`get_note` returns the note's markdown under a frontmatter block of `name`, `version` and
+`tags`, each a JSON value on its own line. `tags` is the names of the note's Tags in the
+property's stored order, `[]` when it has none; a ref whose Tag no longer exists is
+skipped.
 
 `list_structures` formats the structure registry (`structures.rs`): each structure's type,
 description, properties (kinds, select options and defaults, relation targets) and the
@@ -604,8 +634,23 @@ to TipTap JSON in `server/src/mcp/markdown.rs`, resolving `[[wikilink]]` and `#t
 fails the call, which writes nothing. A body `#tag` only references its Tag; it doesn't
 tag the note. `create_note` fails for a name that already exists, and takes an optional
 `tags` list: each name is resolved or created as a Tag (repeats folded) and set as the
-note's `tags` property through `SetEntityProperty`, after the body is written. Its result
-counts the body's links (`Wikilinks: N`) apart from the `tags` links (`tags: N`).
+note's `tags` property through `SetEntityProperty`, after the body is written. Without a
+`tags` argument it takes the `tags:` line of the markdown's leading frontmatter, a JSON list
+of strings, so a `get_note` result copied into `create_note` keeps its tags; a value that
+isn't one fails the call and writes nothing. A `tags` argument, even an empty list, wins over
+the frontmatter. Its result counts the body's links (`Wikilinks: N`) apart from the `tags`
+links (`tags: N`).
+
+`tag_entity(name, add, remove)` tags or untags an existing note, found by name as
+`append_to_note` finds it and never created. Only Notes have `tags` today (ADR 11).
+`add` and `remove` are lists of tag names, each optional, but one must be non-empty; a name
+in both lists (compared case-insensitively) fails the call and writes nothing. Each `add`
+name is resolved or created as a Tag (repeats folded) and added with `AddRelationTarget`;
+each `remove` name is looked up without creating, a Tag that doesn't exist or that the note
+doesn't have is skipped, and the rest go through `RemoveRelationTarget`. A tag someone else
+adds meanwhile is kept. The result names the note and its tags afterwards,
+`Tags on "X": ml, papers.` (`none` when it has none).
+
 `create_daily_note` and `append_to_daily_note` get-or-create the
 day's note with `ResolveEntity` by date; `create_daily_note` says whether it was created or
 already existed. An agent creates a note with wikilinks, the server derives the graph,
