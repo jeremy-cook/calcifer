@@ -107,8 +107,7 @@ Field formats: a `date` value, `ResolveEntityRequest.date` and every
 `referenced_dates` entry are ISO calendar days, `yyyy-MM-dd`. The server checks them:
 `CreateEntity`, `ResolveEntity` and `SetEntityProperty` return `INVALID_ARGUMENT` for a
 `date` value that isn't a real day in that canonical form (`2026-13-45`, `2026-2-3`,
-`June 13`, `""`), whether the property is declared or ad hoc; clear a date by removing
-the property. A date chip with a bad `date` is skipped (see
+`June 13`, `""`); clear a date by removing the property. A date chip with a bad `date` is skipped (see
 [`richtext-doc.md`](richtext-doc.md)). In a relation value the
 server reads only each `EntityRef`'s `id`; `structure_type` may be empty.
 
@@ -204,14 +203,16 @@ already exists` with the name as given. Resolve looks keys up in the same table 
 the same folding. The table enforces identity only; values are still checked as
 described below.
 `CreateEntity`, `ResolveEntity` and `SetEntityProperty` check property values against it and return
-`InvalidArgument` for any value on a declared rich-text property (it takes none), a
-value whose case isn't the declared property's `PropertyKind`, a select key that isn't one of the
-property's options, a `select` value on a property not declared as a select, or a
-`date` value that isn't an ISO day (on any property, declared or not). Other
-undeclared (ad-hoc) property ids take any value. `CreateEntity`, `ResolveEntity` by name and a
-non-empty `ListEntities` filter return `InvalidArgument` for a `structure_type` not in the
-table. Entities of such a type written before that check have no schema and their
-properties aren't checked.
+`InvalidArgument` for a value on a property the structure doesn't declare
+(`Note.mood isn't a declared property`; a facet's only while it's attached), any value on
+a declared rich-text property (it takes none), a value whose case isn't the declared
+property's `PropertyKind`, a select key that isn't one of the property's options, or a
+`date` value that isn't an ISO day. A new property is an edit to `structures.rs` and a
+server restart, not a write. Clearing is always allowed, so a value stored before
+undeclared ids were refused (I-79) can still be removed, and clearing a relation value
+drops its links. `CreateEntity`, `ResolveEntity` by name and a non-empty `ListEntities`
+filter return `InvalidArgument` for a `structure_type` not in the table. Entities of
+such a type written before that check declare nothing, so they take no values.
 
 The frontend fetches the registry once (TanStack Query, `staleTime: Infinity`) and
 doesn't render the router until it has loaded, so synchronous code reads it from the
