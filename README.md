@@ -87,7 +87,7 @@ Rust regen is automatic on `cargo build` (tonic-build).
   `export PATH="/Users/bebop/.nvm/versions/node/v24.12.0/bin:$PATH"`.
 - **Rust toolchain:** `server/rust-toolchain.toml` pins it; rustfmt and the extra clippy
   lints are configured in `server/rustfmt.toml` and `server/Cargo.toml`.
-- **Server (Rust):** services in `server/src/services/*.rs`, registered in
+- **Server (Rust):** services in `server/src/services/` (`entity/` is a directory, split by concern; see its `mod.rs`), registered in
   `server/src/main.rs`. Migrations in `server/migrations/` (timestamp-prefixed).
   `sqlx::query!` checks SQL at compile time against the committed cache in `server/.sqlx/`,
   never the live database; the binary runs `migrate!` on boot. After changing a query or

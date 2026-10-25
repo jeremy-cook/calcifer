@@ -19,7 +19,7 @@ running app. Nothing below has been reproduced yet.
 
 ### I-36 · `ResolveEntity` fails instead of returning the winner when it loses a create race · low · confirmed
 
-**Where:** `server/src/services/entity.rs` (`resolve_name`, `resolve_date`)
+**Where:** `server/src/services/entity/resolve.rs` (`resolve_name`, `resolve_date`)
 
 **Problem:** `ResolveEntity` with `create_if_missing` looks the key up, then creates.
 If a concurrent call creates the same keyed entity (a Tag by name, a DailyNote by date)
@@ -40,7 +40,7 @@ test covers it.
 
 ### I-45 · Two untitled Tags created at once can pick the same free name · low · confirmed
 
-**Where:** `server/src/services/entity.rs` (`create`, `free_name`)
+**Where:** `server/src/services/entity/rpc.rs` (`create`), `server/src/services/entity/resolve.rs` (`free_name`)
 
 **Problem:** `free_name` looks up a free `Untitled Tag N` outside the insert
 transaction. Two Creates of an untitled Tag at the same moment can both pick the same
@@ -58,7 +58,7 @@ the insert transaction.
 
 ### I-49 · Two writes to one entity can publish their events out of commit order · low · confirmed
 
-**Where:** `server/src/services/entity.rs` (`rename`, `set_property`), `server/src/services/richtext.rs` (`put`), `server/src/watch.rs`
+**Where:** `server/src/services/entity/rpc.rs` (`rename`, `set_property`), `server/src/services/richtext.rs` (`put`), `server/src/watch.rs`
 
 **Problem:** Each write reloads its entity after commit and publishes it afterwards. The
 hub's revision follows publish order, not commit order. If write A reloads, then write B

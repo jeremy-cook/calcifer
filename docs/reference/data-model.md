@@ -169,7 +169,7 @@ message FacetDef {
 
 The server derives what its write paths need from the same table: `richtext_properties`
 (which property ids `RichTextService` addresses), `select_defaults` (what `new_entity`
-in `services/entity.rs` puts on an entity `CreateEntity` or `ResolveEntity` creates),
+in `services/entity/construct.rs` puts on an entity `CreateEntity` or `ResolveEntity` creates),
 `relation_properties`
 (what link sync clears), and `property(type, id)` for single-definition lookups. For
 facets: `facet(id)`, `facet_of_property(id)` (the facet whose namespace an id is in),
