@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use futures::future::try_join_all;
 use serde_json::json;
 use tonic::{Code, Request, Status};
@@ -8,9 +10,9 @@ use crate::structures::{self};
 use calcifer::v1::entity_service_server::EntityService as EntityServiceTrait;
 use calcifer::v1::search_service_server::SearchService as SearchServiceTrait;
 use calcifer::v1::{
-    property_value, AddRelationTargetRequest, Entity, EntityRef, EntityRefList, MatchRange,
-    PropertyValue, RemoveRelationTargetRequest, SearchMode, SearchRequest,
-    SetEntityPropertyRequest,
+    property_value, AddRelationTargetRequest, CreateEntityRequest, Entity, EntityRef,
+    EntityRefList, MatchRange, PropertyValue, RemoveRelationTargetRequest, SearchMode,
+    SearchRequest,
 };
 
 use super::doc::{doc_ref, unknown_targets};
@@ -23,7 +25,8 @@ impl Knowledge {
     /// Links are checked before the note is created, so a failed call leaves
     /// nothing behind; the note's links to itself are the one target allowed to
     /// be missing. Each of `tags` is resolved, or created, as a Tag and set as
-    /// the note's `tags` property; a body #tag only references its Tag. With no
+    /// the note's `tags` property, in the transaction that creates the note
+    /// (I-73); a body #tag only references its Tag. With no
     /// `tags`, the `tags:` line of the markdown's leading frontmatter is used, so
     /// a get_note result keeps its tags when copied into a new note; `Some`, even
     /// an empty list, wins over the frontmatter.
@@ -65,19 +68,29 @@ impl Knowledge {
         }
         let tag_ids = self.resolve_tags(&tags).await?;
 
-        let res = self.resolve_name("Note", name, true).await?;
-        // Someone else made it between the check above and now.
-        if !res.created {
-            return Err(exists());
+        // Note names aren't unique, so a create_note of the same name that also
+        // got past the check above makes a second note rather than an error;
+        // resolving the name returns the older one.
+        let mut properties = HashMap::new();
+        if !tag_ids.is_empty() {
+            properties.insert("tags".to_string(), tags_value(tag_ids));
         }
-        let id = res.entity.map(|e| e.id).unwrap_or_default();
+        let req = CreateEntityRequest {
+            structure_type: "Note".into(),
+            name: Some(name.to_string()),
+            properties,
+            facets: vec![],
+        };
+        let created = self.entity.create_entity(Request::new(req)).await?;
+        let id = created
+            .into_inner()
+            .entity
+            .map(|e| e.id)
+            .unwrap_or_default();
         ids.insert(own_key, id.clone());
         // Unconditional: the note was created just above, so it has no body to lose.
         let body = doc_ref("Note", &id)?;
         self.put_doc(&body, &parsed.resolve(&ids), None).await?;
-        if !tag_ids.is_empty() {
-            self.set_tags(&id, tag_ids).await?;
-        }
         let ent = self.entity(&id).await?;
         let wikilinks: Vec<_> = ent
             .links
@@ -112,29 +125,6 @@ impl Knowledge {
             }
         }
         Ok(ids)
-    }
-
-    pub(super) async fn set_tags(
-        &self,
-        entity_id: &str,
-        tag_ids: Vec<String>,
-    ) -> Result<(), Status> {
-        let refs = tag_ids
-            .into_iter()
-            .map(|id| EntityRef {
-                id,
-                structure_type: "Tag".into(),
-            })
-            .collect();
-        let req = SetEntityPropertyRequest {
-            entity_id: entity_id.to_string(),
-            property_id: "tags".into(),
-            value: Some(PropertyValue {
-                value: Some(property_value::Value::Relations(EntityRefList { refs })),
-            }),
-        };
-        self.entity.set_entity_property(Request::new(req)).await?;
-        Ok(())
     }
 
     pub async fn append_to_note(&self, name: &str, markdown: &str) -> ToolResult {
@@ -324,6 +314,20 @@ pub(super) fn mark_matches(snippet: &str, matches: &[MatchRange]) -> String {
         at = end;
     }
     out + &slice(at, units.len())
+}
+
+/// A `tags` value naming these Tags.
+fn tags_value(tag_ids: Vec<String>) -> PropertyValue {
+    let refs = tag_ids
+        .into_iter()
+        .map(|id| EntityRef {
+            id,
+            structure_type: "Tag".into(),
+        })
+        .collect();
+    PropertyValue {
+        value: Some(property_value::Value::Relations(EntityRefList { refs })),
+    }
 }
 
 #[cfg(test)]

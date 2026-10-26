@@ -51,27 +51,6 @@ published last.
 
 ---
 
-### I-73 · `create_note`'s tags aren't written in the note's transaction · low · confirmed
-
-**Where:** `server/src/mcp/tools/notes.rs` (`create_note`, `resolve_tags`, `set_tags`)
-
-**Problem:** `create_note` resolves (creating) each `tags` Tag before it creates the
-Note, then writes the body and sets `tags` as separate calls. If the Note create loses
-a race (`!res.created`), the new Tags are left behind, untagged and unreferenced. If
-`SetEntityProperty` fails after the body is saved, the note exists without its tags and
-the call reports an error. A body `#tag` has the same first half already. Found in T07.
-
-**Fix:** Pass the Tag refs in `CreateEntityRequest.properties` and create the Note with
-`CreateEntity`, which writes the name and initial properties in one transaction,
-instead of `ResolveEntity` then `SetEntityProperty`. Keep the name-exists check.
-
-**Deferred:** Calcifer is a single-user local app, so both failures are very unlikely. Revisit if it's ever seen.
-
-**Done when:** a `create_note` with `tags` writes the note and its `tags` in one
-transaction, and its tests still pass.
-
----
-
 ### I-76 · A failed reload after a save conflict ends the save loop with the doc unsaved · low · confirmed
 
 **Where:** `web/src/model/richtext.ts` (`reloadAfterConflict`, called from `putOnce`)
@@ -95,6 +74,7 @@ retried and `whenRichTextSaved` resolving only after it succeeds.
 
 ## Resolved
 
+- **I-73 · `create_note`'s tags aren't written in the note's transaction.** Fixed 2026-10-26. `create_note` creates the Note with `CreateEntity`, passing its `tags` as an initial property, so the note and its tags are written in one transaction; `set_tags` is gone. The body is still a second write, and Tags (from `tags` or a body #tag) are still resolved, or created, before the Note, so a failed create can leave a new Tag unused. Note names aren't unique, so two `create_note` calls of one name that both get past the existence check now make two Notes instead of failing the second (accepted 2026-10-26); resolving the name returns the older one. Covered by the existing `create_note` tests.
 - **I-45 · Two untitled Tags created at once can pick the same free name.** Fixed 2026-10-26. `create_entity` persists an untitled Tag through `persist_with_free_name`: when the insert fails because the free name it picked has been taken since, it looks for the next free name and tries again (up to five times). Reproduced first: two joined untitled creates failed every round on a file DB. Covered by `racing_untitled_tag_creates_get_distinct_names`.
 - **I-36 · `ResolveEntity` fails instead of returning the winner when it loses a create race.** Fixed 2026-10-26. When a create-on-miss Resolve's insert fails its key with `ALREADY_EXISTS`, `resolve_name` and `resolve_date` look the key up again and return the entity the concurrent Resolve made, with `created = false`; if it has been deleted since, the error stands. Reproduced first: two joined Resolves of one Tag or one day failed every round on a file DB, and so did a single MCP `create_note` whose `tags` repeat a new name in another case (`resolve_tags` resolves them at once). Covered by `racing_resolves_of_one_tag_return_the_same_tag`, `racing_resolves_of_one_day_return_the_same_daily_note` and `create_note_with_case_variant_new_tags_tags_it_once`.
 - **I-79 · Undeclared property ids take any value.** Fixed 2026-10-25 (29def34). `CreateEntity` and `SetEntityProperty` refuse a value on a property the structure doesn't declare (`INVALID_ARGUMENT`, `<Structure>.<id> isn't a declared property`), whatever its kind, as `PutRichText` already did for documents; the entity page only ever rendered declared properties, so such values were stored but never shown. A new property is a registry edit and a server restart (user, 2026-10-25). Clearing stays allowed, so a value stored before this can be removed and its links go with it. `sync_relation_links` no longer walks undeclared relation values. Covered by `undeclared_properties_are_invalid` and `an_undeclared_value_can_be_cleared`; tests that leaned on undeclared values now declare theirs or seed rows directly.

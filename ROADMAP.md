@@ -22,8 +22,7 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-36, I-45, I-73: create-race errors | S each | Deferred unless seen. |
-| 2 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
 ## Next up
 
