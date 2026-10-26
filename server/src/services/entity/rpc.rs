@@ -95,15 +95,12 @@ impl EntityServiceTrait for EntityService {
         if let Some(name) = &name {
             check_name_chars(name)?;
         }
-        let mut entity = new_entity(&structure_type, name.as_deref(), properties, &facet_defs);
-        if name.is_none() && def.unique_names() {
-            entity.name = self
-                .free_name(&structure_type, &entity.name)
-                .await
-                .map_err(Status::from)?;
-        }
-
-        let saved = self.persist_new_entity(&entity).await?;
+        let entity = new_entity(&structure_type, name.as_deref(), properties, &facet_defs);
+        let saved = if name.is_none() && def.unique_names() {
+            self.persist_with_free_name(entity).await?
+        } else {
+            self.persist_new_entity(&entity).await?
+        };
         self.hub
             .publish(watch_entities_response::Event::Upserted(saved.clone()));
         Ok(Response::new(CreateEntityResponse {

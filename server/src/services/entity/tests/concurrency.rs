@@ -147,3 +147,27 @@ async fn racing_resolves_of_one_day_return_the_same_daily_note() {
     }
     scratch.pool.close().await;
 }
+
+// I-45: untitled Tags created at once each look up the first free name before
+// they insert, so they can pick the same one. The loser looks again and takes
+// the next free name, so every create succeeds.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn racing_untitled_tag_creates_get_distinct_names() {
+    let scratch = ScratchDb::new().await;
+    let svc = entity_service(scratch.pool.clone());
+
+    let mut names = Vec::new();
+    for _ in 0..5 {
+        let (a, b, c) = tokio::join!(
+            try_create(&svc, untitled("Tag")),
+            try_create(&svc, untitled("Tag")),
+            try_create(&svc, untitled("Tag")),
+        );
+        for created in [a, b, c] {
+            names.push(created.expect("create").name);
+        }
+    }
+    let distinct: std::collections::BTreeSet<&String> = names.iter().collect();
+    assert_eq!(distinct.len(), names.len(), "{names:?}");
+    scratch.pool.close().await;
+}

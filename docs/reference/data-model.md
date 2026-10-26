@@ -545,7 +545,8 @@ defaults, then the request's properties laid over them; a request value for a
 rich-text property is `INVALID_ARGUMENT`), saves it, publishes `upserted` and returns it. With no name (or a
 blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled Note"; for a
 `unique_names` structure (Tag) the server takes the first free one of `Untitled Tag`,
-`Untitled Tag 2`, `Untitled Tag 3`, … (checked against its folded `name` key). A given name is trimmed.
+`Untitled Tag 2`, `Untitled Tag 3`, … (checked against its folded `name` key), and looks
+again if a concurrent Create takes it first. A given name is trimmed.
 A new entity
 has no `referenced_dates`, and its only links are those from relation properties in
 the request.

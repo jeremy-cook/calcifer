@@ -11,6 +11,9 @@ use crate::error::AppError;
 use crate::structures::{self, fold_name, StructureDef};
 use calcifer::v1::{watch_entities_response, Entity, ResolveEntityResponse};
 
+/// How many free names `persist_with_free_name` tries before it gives up.
+const FREE_NAME_ATTEMPTS: usize = 5;
+
 impl EntityService {
     /// Case-insensitive lookup of an entity id by (structure_type, name). A
     /// structure with a name key (Tag) is looked up in `entity_keys`, folded as
@@ -61,6 +64,42 @@ impl EntityService {
             candidate = format!("{base} {n}");
         }
         Ok(candidate)
+    }
+
+    /// Persist an untitled `entity` of a `unique_names` structure under the first
+    /// free name from its default (see `free_name`). Another Create can take that
+    /// name between the lookup and the insert (I-45), so when the insert fails
+    /// because the picked name is now taken, look again.
+    pub(super) async fn persist_with_free_name(
+        &self,
+        mut entity: Entity,
+    ) -> Result<Entity, Status> {
+        let base = entity.name.clone();
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            entity.name = self
+                .free_name(&entity.structure_type, &base)
+                .await
+                .map_err(Status::from)?;
+            let lost = match self.persist_new_entity(&entity).await {
+                Err(lost)
+                    if lost.code() == Code::AlreadyExists && attempts < FREE_NAME_ATTEMPTS =>
+                {
+                    lost
+                }
+                result => return result,
+            };
+            // Only a clash on the name it picked is worth another look.
+            if self
+                .find_by_name(&entity.structure_type, &entity.name)
+                .await
+                .map_err(Status::from)?
+                .is_none()
+            {
+                return Err(lost);
+            }
+        }
     }
 
     /// The `structure_type` entity whose `key` has the canonical `value`.
