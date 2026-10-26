@@ -126,3 +126,13 @@ Node version):
   and confirm `cargo sqlx prepare --check -- --all-targets` passes (the README says how).
 - **Proto:** `pnpm proto:lint`, then `pnpm proto:gen` and commit the regenerated
   `proto/ts/src/`.
+
+## Skills
+
+Project skills live at the repo root, in `.claude/skills/` (`tailwind-design-system` is a
+symlink to `.agents/skills/`, as the skills installer lays it out; `skills-lock.json`
+records what it installed). They are vendored third-party text for the stack in `web/`:
+shadcn, TanStack Query and Router, Tailwind, and React performance. The React one is
+trimmed to what applies to a client-rendered Vite app (see the note at the top of its
+`SKILL.md`). Don't edit one to match Calcifer; add what is ours here.
+

@@ -13,7 +13,6 @@ Comprehensive guidelines for implementing TanStack Query (React Query) patterns 
 - Setting up query configurations
 - Implementing mutations and optimistic updates
 - Configuring caching strategies
-- Integrating with SSR/SSG
 - Refactoring existing data fetching code
 
 ## Rule Categories by Priority
@@ -27,7 +26,6 @@ Comprehensive guidelines for implementing TanStack Query (React Query) patterns 
 | MEDIUM | Prefetching | 4 rules | Improves perceived performance |
 | MEDIUM | Parallel Queries | 2 rules | Enables dynamic parallel fetching |
 | MEDIUM | Infinite Queries | 3 rules | Prevents pagination bugs |
-| MEDIUM | SSR Integration | 4 rules | Enables proper hydration |
 | LOW | Performance | 4 rules | Reduces unnecessary re-renders |
 | LOW | Offline Support | 2 rules | Enables offline-first patterns |
 
@@ -76,13 +74,6 @@ Comprehensive guidelines for implementing TanStack Query (React Query) patterns 
 - `inf-page-params` — Always provide getNextPageParam
 - `inf-loading-guards` — Check isFetchingNextPage before fetching more
 - `inf-max-pages` — Consider maxPages for large datasets
-
-### SSR Integration (Prefix: `ssr-`)
-
-- `ssr-dehydration` — Use dehydrate/hydrate pattern for SSR
-- `ssr-client-per-request` — Create QueryClient per request
-- `ssr-stale-time-server` — Set higher staleTime on server
-- `ssr-hydration-boundary` — Wrap with HydrationBoundary
 
 ### Parallel Queries (Prefix: `parallel-`)
 
