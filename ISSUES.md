@@ -92,7 +92,7 @@ published last.
 
 ### I-73 · `create_note`'s tags aren't written in the note's transaction · low · confirmed
 
-**Where:** `server/src/mcp/tools.rs` (`create_note`, `resolve_tags`, `set_tags`)
+**Where:** `server/src/mcp/tools/notes.rs` (`create_note`, `resolve_tags`, `set_tags`)
 
 **Problem:** `create_note` resolves (creating) each `tags` Tag before it creates the
 Note, then writes the body and sets `tags` as separate calls. If the Note create loses

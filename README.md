@@ -102,7 +102,7 @@ The Rust crate regenerates on `cargo build` (`proto/rs/build.rs`, tonic-build), 
   `ts_from_millis`.
 - **Proto:** edit `proto/calcifer/v1/services.proto`, then lint and regen the TS package
   (above). Note the `ref` field generates as `r#ref` in Rust.
-- **MCP (Rust):** tool ops in `server/src/mcp/tools.rs`, the JSON-RPC transport and tool
+- **MCP (Rust):** tool ops in `server/src/mcp/tools/` (one file per area: notes, edit, relationships, daily, registry), the JSON-RPC transport and tool
   schemas in `server/src/mcp/{mod,definitions,dispatch}.rs`, markdown <-> TipTap in `server/src/mcp/markdown/`.
 - **FE (React):** `web/src/model/` is the data layer: `api.ts` (client and query
   cache), `sync.ts` and `replica.ts` (the Watch-fed replica), `store.ts` (the hooks and
