@@ -117,11 +117,12 @@ function Sections({ sections }: SectionsProps) {
 ## Checks
 
 There is no CI. Before calling a change done, run what it touches (UI commands in
-`web/`, server commands in `server/`; `web/.nvmrc` has the Node version):
+`web/`, server commands in `server/`, proto commands at the repo root; `.nvmrc` has the
+Node version):
 
 - **UI:** `pnpm lint`, `pnpm exec tsc -b`, `pnpm test`, `pnpm format:check`.
 - **Server:** `cargo fmt --check`, `cargo clippy --all-targets` (no new warnings), `cargo test`.
 - **SQL:** after changing a `sqlx::query!` or a migration, refresh `server/.sqlx/`
   and confirm `cargo sqlx prepare --check -- --all-targets` passes (the README says how).
 - **Proto:** `pnpm proto:lint`, then `pnpm proto:gen` and commit the regenerated
-  `web/gen/ts/`.
+  `proto/ts/src/`.
