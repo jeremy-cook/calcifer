@@ -2,7 +2,7 @@
 
 One file per decision: the context that forced it, what was decided, and what it costs
 us. ADRs are immutable once accepted — if a decision changes, add a new record that
-supersedes the old one rather than editing history.
+supersedes the old one rather than editing history. The one exception is a path: when a file an ADR names moves, the path is corrected in place.
 
 | # | Decision | Status |
 |---|---|---|

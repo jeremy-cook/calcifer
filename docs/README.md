@@ -41,3 +41,6 @@ that's a signal it's ready to be built, not that it needs a plan document.
   what was designed, deliberately or not. Keep it current; it's the most useful part.
 - Research documents end with **what we took and what we dropped**.
 - Don't update a research file to match Calcifer. Write or fix a spec instead.
+- An ADR's text never changes, with one exception: when a file or directory it names is
+  renamed or moved, the path is corrected in place (nothing else), so a link doesn't
+  point at nothing. The decision and its reasoning stay as written.

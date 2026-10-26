@@ -29,7 +29,7 @@ system: `mentionable`, `creatable`, `uniqueNames`, per-property `editable`, and
 `nameMeta`. The entity page renders properties dynamically by dispatching on each
 property's type, so metadata is the rendering contract.
 
-Adding a Structure is an edit to `calcifer/src/model/structures.ts` and
+Adding a Structure is an edit to `web/src/model/structures.ts` and
 `server/src/structures.rs`, plus any custom rendering. **No DB migration.**
 
 ## Consequences

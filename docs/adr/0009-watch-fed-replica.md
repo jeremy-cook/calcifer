@@ -89,7 +89,7 @@ overwriting it.
 
 ## Notes
 
-- **2026-10-11:** The replica now lives in a Zustand store, `calcifer/src/model/replica.ts`,
+- **2026-10-11:** The replica now lives in a Zustand store, `web/src/model/replica.ts`,
   rather than the TanStack Query cache, which stays for data the browser requests (rich-text
   docs, the structure registry) and for mutations. `model/sync.ts` still applies the stream.
   The decision is unchanged.

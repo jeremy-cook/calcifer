@@ -8,7 +8,7 @@
 [ADR 1](0001-polymorphic-entity-model.md) differentiates entities by Structure, but the
 structures themselves (types, property ids and kinds, select options and defaults,
 relation targets, create/mention/naming rules) were hand-copied into three places:
-`calcifer/src/model/structures.ts`, `server/src/structures.rs` and
+`web/src/model/structures.ts`, `server/src/structures.rs` and
 `mcp-server/src/tools.ts`. Each new structure or option meant three edits that drifted:
 the Rust copy knew only select *defaults*, the MCP copy was prose, and only the frontend
 had option lists and labels.

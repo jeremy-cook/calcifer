@@ -35,7 +35,7 @@ discriminated union, so the sum type is exhaustively checked in TS.
 - Client and server cannot disagree about the model; there is one authored source.
 - Exhaustive `switch` over `PropertyValue.value.case` in TS, with the compiler
   catching every unhandled variant when a new property type is added.
-- Editing the schema means regenerating TS for `calcifer/` (Rust regenerates on build).
+- Editing the schema means regenerating the TS package, `proto/ts` (Rust regenerates on build).
   `mcp-server/`, the MCP server before it moved into the Rust backend, used to have its
   own stubs.
 - Proto naming leaks into both languages: `structure_type` becomes `structureType` in
