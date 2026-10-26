@@ -1,6 +1,7 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
-import { getEntitiesSnapshot, getOrCreateEntityForMention } from '~/model/store'
-import { getStructure, isMentionable, structurePresentation } from '~/model/structures'
+import { findMentionTargets } from '~/model/mentions'
+import { getOrCreateEntityForMention } from '~/model/store'
+import { getStructure, structurePresentation } from '~/model/structures'
 import { createSuggestionPopup } from '~/editors/tiptap/components/suggestion-popup'
 import { MentionMenu } from './MentionMenu'
 import { parseQuery } from './parse-query'
@@ -25,27 +26,18 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
         : parseQuery(query)
       // Bare `@` (no narrowing, no explicit filter): only Structures with mentionable !== false.
       const filterByMentionable = config.char === '@' && !config.structureFilter && structureType === null
-      const q = term.toLowerCase()
-      const entities = getEntitiesSnapshot()
-      const results: EntitySuggestionItem[] = []
-      let exactMatch = false
-      for (const entity of entities) {
-        if (structureType && entity.structureType !== structureType) continue
-        if (filterByMentionable && !isMentionable(entity.structureType)) continue
-        if (q && !entity.name.toLowerCase().includes(q)) continue
-        if (entity.name.toLowerCase() === q) exactMatch = true
-        if (results.length < MAX_RESULTS) {
-          results.push({
-            id: entity.id,
-            label: entity.name,
-            structureType: entity.structureType,
-            color: structurePresentation(entity.structureType).color,
-          })
-        }
-        // Keep scanning past the cap only to settle exactMatch (it gates the
-        // create-on-miss item below); once it's true there's nothing more to learn.
-        if (results.length >= MAX_RESULTS && exactMatch) break
-      }
+      const { entities, exactMatch } = findMentionTargets({
+        term,
+        structureType,
+        mentionableOnly: filterByMentionable,
+        limit: MAX_RESULTS,
+      })
+      const results: EntitySuggestionItem[] = entities.map((entity) => ({
+        id: entity.id,
+        label: entity.name,
+        structureType: entity.structureType,
+        color: structurePresentation(entity.structureType).color,
+      }))
 
       const createStructureType = resolveCreateStructureType(structureType)
       if (createStructureType && term.length > 0 && !exactMatch) {
