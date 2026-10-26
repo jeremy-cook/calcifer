@@ -12,7 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::broadcast;
 
-use crate::proto::{watch_entities_response, WatchEntitiesResponse};
+use calcifer::v1::{watch_entities_response, WatchEntitiesResponse};
 
 #[derive(Clone)]
 pub struct WatchHub {

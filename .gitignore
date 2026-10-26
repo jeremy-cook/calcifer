@@ -6,6 +6,7 @@
 
 # Rust build output.
 server/target/
+proto/rs/target/
 
 # Local SQLite database and its WAL-mode side files.
 server/calcifer.db

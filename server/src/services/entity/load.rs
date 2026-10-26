@@ -5,7 +5,7 @@ use sqlx::SqlitePool;
 use super::lookup::sort_facets;
 use super::EntityService;
 use crate::error::AppError;
-use crate::proto::{Entity, EntityRef, LinkRef, PropertyValue};
+use calcifer::v1::{Entity, EntityRef, LinkRef, PropertyValue};
 
 impl EntityService {
     /// Hydrate a full Entity (metadata + properties + links + referenced_dates).

@@ -2,8 +2,8 @@ use tonic::Status;
 
 use crate::dates::is_iso_day;
 use crate::error::AppError;
-use crate::proto::{property_value, Entity};
 use crate::structures::{self, PropertyKind};
+use calcifer::v1::{property_value, Entity};
 
 /// Check every property of an entity against its structure. See
 /// `validate_property`.

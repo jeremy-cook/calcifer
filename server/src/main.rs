@@ -17,7 +17,6 @@ mod embed;
 mod error;
 mod links;
 mod mcp;
-mod proto;
 mod security;
 mod services;
 mod structures;
@@ -26,15 +25,15 @@ mod test_support;
 mod tiptap;
 mod watch;
 
-use crate::proto::entity_service_server::EntityServiceServer;
-use crate::proto::rich_text_service_server::RichTextServiceServer;
-use crate::proto::search_service_server::SearchServiceServer;
-use crate::proto::structure_service_server::StructureServiceServer;
 use crate::services::entity::EntityService;
 use crate::services::richtext::RichTextService;
 use crate::services::search::SearchService;
 use crate::services::structure::StructureService;
 use crate::watch::WatchHub;
+use calcifer::v1::entity_service_server::EntityServiceServer;
+use calcifer::v1::rich_text_service_server::RichTextServiceServer;
+use calcifer::v1::search_service_server::SearchServiceServer;
+use calcifer::v1::structure_service_server::StructureServiceServer;
 
 /// Where the UI and the gRPC-Web API listen unless `CALCIFER_ADDR` says otherwise.
 /// Loopback by default: the service has no auth (ADR 5).

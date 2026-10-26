@@ -1,7 +1,7 @@
 use serde_json::Value;
 
 use crate::mcp::tools::{Knowledge, NoteKey, ToolError};
-use crate::proto::SearchMode;
+use calcifer::v1::SearchMode;
 
 use super::args::{
     CreateNoteArgs, DailyArgs, DateArgs, EditArgs, GetNoteArgs, LinkArgs, Mode, NameArgs, NoteArgs,

@@ -5,11 +5,6 @@ use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::links::store::{live_targets, replace_scoped_links};
-use crate::proto::{
-    rich_text_service_server::RichTextService as RichTextServiceTrait, watch_entities_response,
-    GetRichTextRequest, GetRichTextResponse, PutRichTextRequest, PutRichTextResponse, RichText,
-    RichTextRef,
-};
 use crate::services::entity::{
     fts_upsert_body, load_entity, reject_reserved_property_id, ts_from_millis,
 };
@@ -17,6 +12,11 @@ use crate::structures;
 use crate::tiptap::references::extract_doc_references;
 use crate::tiptap::text::extract_plain_text;
 use crate::watch::WatchHub;
+use calcifer::v1::{
+    rich_text_service_server::RichTextService as RichTextServiceTrait, watch_entities_response,
+    GetRichTextRequest, GetRichTextResponse, PutRichTextRequest, PutRichTextResponse, RichText,
+    RichTextRef,
+};
 
 pub struct RichTextService {
     pool: SqlitePool,
@@ -286,11 +286,11 @@ impl RichTextServiceTrait for RichTextService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto::entity_service_server::EntityService as _;
-    use crate::proto::{CreateEntityRequest, Entity};
     use crate::test_support::{
         entity_service, memory_pool, note, richtext_service, tag, ScratchDb,
     };
+    use calcifer::v1::entity_service_server::EntityService as _;
+    use calcifer::v1::{CreateEntityRequest, Entity};
 
     const DOC_A: &str =
         r#"{"type":"doc","content":[{"type":"paragraph","content":[{"type":"text","text":"a"}]}]}"#;

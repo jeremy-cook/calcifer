@@ -17,7 +17,8 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_property};
-use crate::proto::{
+use crate::structures::{self, FacetDef, KeySource};
+use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, AddRelationTargetRequest,
     AddRelationTargetResponse, AddRelationshipRequest, AddRelationshipResponse, AttachFacetRequest,
@@ -29,7 +30,6 @@ use crate::proto::{
     RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
     SetEntityPropertyResponse, WatchEntitiesRequest, WatchEntitiesResponse,
 };
-use crate::structures::{self, FacetDef, KeySource};
 
 #[tonic::async_trait]
 impl EntityServiceTrait for EntityService {

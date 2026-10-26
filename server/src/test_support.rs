@@ -7,10 +7,10 @@ use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
 
 use crate::embed::EmbedHandle;
-use crate::proto::CreateEntityRequest;
 use crate::services::entity::EntityService;
 use crate::services::richtext::RichTextService;
 use crate::watch::WatchHub;
+use calcifer::v1::CreateEntityRequest;
 
 /// A fresh in-memory database with every migration applied. Each `:memory:`
 /// connection is its own database, so the pool is pinned to exactly one

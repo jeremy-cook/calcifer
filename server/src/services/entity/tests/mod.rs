@@ -26,7 +26,9 @@ use super::lookup::sort_facets;
 use super::watch::watch_stream;
 use super::EntityService;
 use crate::embed::EmbedHandle;
-use crate::proto::{
+use crate::structures::{self};
+use crate::watch::WatchHub;
+use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, AddRelationTargetRequest,
     AddRelationshipRequest, AttachFacetRequest, Backlink, CreateEntityRequest, DeleteEntityRequest,
@@ -35,15 +37,13 @@ use crate::proto::{
     RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
     WatchEntitiesRequest, WatchEntitiesResponse,
 };
-use crate::structures::{self};
-use crate::watch::WatchHub;
 
 use super::*;
-use crate::proto::rich_text_service_server::RichTextService as _;
-use crate::proto::PutRichTextRequest;
 use crate::test_support::{
     entity_service, memory_pool, note, richtext_service, tag, todo, with_facets, ScratchDb,
 };
+use calcifer::v1::rich_text_service_server::RichTextService as _;
+use calcifer::v1::PutRichTextRequest;
 use futures::StreamExt;
 
 async fn create(svc: &EntityService, req: CreateEntityRequest) -> Entity {

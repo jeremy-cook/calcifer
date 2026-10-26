@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use super::keys::property_key_value;
 use super::lookup::sort_facets;
 use crate::dates::format_long_date;
-use crate::proto::{property_value, Entity, PropertyValue};
 use crate::structures::{self, FacetDef};
+use calcifer::v1::{property_value, Entity, PropertyValue};
 
 /// The DailyNote name rule (ADR 8): a DailyNote is named for its date, as a long
 /// human date, on every write. `date` is the value of a DailyNote's `date`

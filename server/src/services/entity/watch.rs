@@ -4,8 +4,8 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use tonic::Status;
 
 use super::load::load_entities;
-use crate::proto::{watch_entities_response, EntitySnapshot, WatchEntitiesResponse};
 use crate::watch::WatchHub;
+use calcifer::v1::{watch_entities_response, EntitySnapshot, WatchEntitiesResponse};
 
 /// What a Watch stream sends next.
 pub(super) enum WatchPhase {

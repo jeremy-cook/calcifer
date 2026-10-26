@@ -12,15 +12,15 @@ mod tags;
 use super::tools::{NoteKey, ToolError};
 use super::*;
 use crate::embed::EmbedHandle;
-use crate::proto::entity_service_server::EntityService as _;
-use crate::proto::SearchMode;
-use crate::proto::{
-    resolve_entity_request, AddRelationTargetRequest, CreateEntityRequest, ListEntitiesRequest,
-    RenameEntityRequest, ResolveEntityRequest,
-};
 use crate::services::search::SearchService;
 use crate::test_support::{entity_service, memory_pool, richtext_service};
 use crate::watch::WatchHub;
+use calcifer::v1::entity_service_server::EntityService as _;
+use calcifer::v1::SearchMode;
+use calcifer::v1::{
+    resolve_entity_request, AddRelationTargetRequest, CreateEntityRequest, ListEntitiesRequest,
+    RenameEntityRequest, ResolveEntityRequest,
+};
 use sqlx::SqlitePool;
 use std::sync::Arc;
 use tonic::Request;
@@ -165,8 +165,8 @@ fn frontmatter_keys(note: &str) -> Vec<&str> {
 }
 
 /// The entity's `tags` property, as target ids.
-fn tag_ids(entity: &crate::proto::Entity) -> Vec<String> {
-    use crate::proto::property_value::Value;
+fn tag_ids(entity: &calcifer::v1::Entity) -> Vec<String> {
+    use calcifer::v1::property_value::Value;
     match entity.properties.get("tags").and_then(|v| v.value.as_ref()) {
         Some(Value::Relations(list)) => list.refs.iter().map(|r| r.id.clone()).collect(),
         _ => vec![],

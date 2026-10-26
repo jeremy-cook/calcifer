@@ -3,8 +3,8 @@
 
 use super::store::{replace_scoped_links, LinkTarget};
 use crate::error::AppError;
-use crate::proto::{property_value, Entity, EntityRef};
 use crate::structures::{self, relation_properties};
+use calcifer::v1::{property_value, Entity, EntityRef};
 
 /// Scoped-replace links derived from an entity's `relation`/`relations` property
 /// values (as opposed to richtext-derived links, owned by `RichTextService.PutRichText`).

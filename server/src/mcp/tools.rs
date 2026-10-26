@@ -10,20 +10,20 @@ use serde_json::{json, Value};
 use tonic::{Code, Request, Response, Status};
 
 use super::markdown::{self, ChipTarget, Reference};
-use crate::proto::entity_service_server::EntityService as EntityServiceTrait;
-use crate::proto::rich_text_service_server::RichTextService as RichTextServiceTrait;
-use crate::proto::search_service_server::SearchService as SearchServiceTrait;
-use crate::proto::{
+use crate::services::entity::{check_name_chars, ts_from_millis, EntityService};
+use crate::services::richtext::RichTextService;
+use crate::services::search::SearchService;
+use crate::structures::{self, PropertyDef, PropertyKind, FACETS, STRUCTURES};
+use calcifer::v1::entity_service_server::EntityService as EntityServiceTrait;
+use calcifer::v1::rich_text_service_server::RichTextService as RichTextServiceTrait;
+use calcifer::v1::search_service_server::SearchService as SearchServiceTrait;
+use calcifer::v1::{
     property_value, resolve_entity_request, AddRelationTargetRequest, AddRelationshipRequest,
     Entity, EntityRef, EntityRefList, GetEntityRequest, GetRichTextRequest, ListBacklinksRequest,
     ListEntitiesRequest, MatchRange, PropertyValue, PutRichTextRequest,
     RemoveRelationTargetRequest, RemoveRelationshipRequest, ResolveEntityRequest,
     ResolveEntityResponse, SearchMode, SearchRequest, SetEntityPropertyRequest,
 };
-use crate::services::entity::{check_name_chars, ts_from_millis, EntityService};
-use crate::services::richtext::RichTextService;
-use crate::services::search::SearchService;
-use crate::structures::{self, PropertyDef, PropertyKind, FACETS, STRUCTURES};
 
 /// What a failed tool call tells the agent.
 #[derive(Debug)]

@@ -7,7 +7,7 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_links;
-use crate::proto::Entity;
+use calcifer::v1::Entity;
 
 impl EntityService {
     /// Insert a brand-new entity built by `new_entity` (row, properties, relation

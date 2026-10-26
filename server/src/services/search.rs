@@ -5,11 +5,11 @@ use tonic::{Request, Response, Status};
 
 use crate::embed::{vector_blob, EmbedHandle};
 use crate::error::AppError;
-use crate::proto::{
+use crate::services::entity::load_entities_by_id;
+use calcifer::v1::{
     search_service_server::SearchService as SearchServiceTrait, MatchRange, SearchHit, SearchMode,
     SearchRequest, SearchResponse,
 };
-use crate::services::entity::load_entities_by_id;
 
 const DEFAULT_LIMIT: i64 = 10;
 
@@ -307,13 +307,13 @@ mod tests {
 
     use super::*;
     use crate::embed::provider::{Embedder, EMBED_DIM};
-    use crate::proto::entity_service_server::EntityService as _;
-    use crate::proto::rich_text_service_server::RichTextService as _;
-    use crate::proto::Entity;
-    use crate::proto::{PutRichTextRequest, RenameEntityRequest};
     use crate::services::entity::load_entity;
     use crate::test_support::{entity_service, memory_pool, note, richtext_service};
     use crate::watch::WatchHub;
+    use calcifer::v1::entity_service_server::EntityService as _;
+    use calcifer::v1::rich_text_service_server::RichTextService as _;
+    use calcifer::v1::Entity;
+    use calcifer::v1::{PutRichTextRequest, RenameEntityRequest};
 
     /// Embeds every text as the unit vector on axis 0, so a chunk stored on axis
     /// 0 is the nearest neighbour of any query.

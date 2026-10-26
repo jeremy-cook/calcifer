@@ -8,8 +8,8 @@ use super::validate::check_name_chars;
 use super::EntityService;
 use crate::dates::is_iso_day;
 use crate::error::AppError;
-use crate::proto::{watch_entities_response, Entity, ResolveEntityResponse};
 use crate::structures::{self, fold_name, StructureDef};
+use calcifer::v1::{watch_entities_response, Entity, ResolveEntityResponse};
 
 impl EntityService {
     /// Case-insensitive lookup of an entity id by (structure_type, name). A

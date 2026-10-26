@@ -102,8 +102,8 @@ async fn add_relation_target_checks_entity_property_and_target() {
 // those are the link scopes the server derives.
 #[tokio::test]
 async fn reserved_property_ids_are_invalid_argument() {
-    use crate::proto::rich_text_service_server::RichTextService as _;
-    use crate::proto::GetRichTextRequest;
+    use calcifer::v1::rich_text_service_server::RichTextService as _;
+    use calcifer::v1::GetRichTextRequest;
 
     let pool = memory_pool().await;
     let svc = entity_service(pool.clone());

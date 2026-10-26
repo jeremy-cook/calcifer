@@ -7,10 +7,10 @@ use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_property;
 use crate::links::store::{replace_scoped_links, LinkTarget};
-use crate::proto::{
+use crate::structures::{self, PropertyKind};
+use calcifer::v1::{
     property_value, watch_entities_response, Entity, EntityRef, EntityRefList, PropertyValue,
 };
-use crate::structures::{self, PropertyKind};
 
 impl EntityService {
     /// The shared body of AddRelationTarget and RemoveRelationTarget: change one

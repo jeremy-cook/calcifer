@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use tonic::Status;
 
 use crate::error::AppError;
-use crate::proto::{property_value, PropertyValue};
 use crate::structures::{self, fold_name, KeyDef, KeySource};
+use calcifer::v1::{property_value, PropertyValue};
 
 /// The natural keys a structure declares (ADR 10). Structures missing from the
 /// registry have none.

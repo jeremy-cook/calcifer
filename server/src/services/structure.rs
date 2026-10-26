@@ -1,10 +1,10 @@
 use tonic::{Request, Response, Status};
 
-use crate::proto::{
-    self, structure_service_server::StructureService as StructureServiceTrait,
+use crate::structures::{FacetDef, PropertyDef, PropertyKind, StructureDef, FACETS, STRUCTURES};
+use calcifer::v1::{
+    self as proto, structure_service_server::StructureService as StructureServiceTrait,
     ListStructuresRequest, ListStructuresResponse,
 };
-use crate::structures::{FacetDef, PropertyDef, PropertyKind, StructureDef, FACETS, STRUCTURES};
 
 /// Serves the static registry in `structures.rs`. No state: the registry never
 /// changes while the server runs.
@@ -101,9 +101,9 @@ impl From<&FacetDef> for proto::FacetDef {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto::entity_service_server::EntityService as _;
-    use crate::proto::{property_value, PropertyDef, PropertyKind, StructureDef};
     use crate::test_support::{entity_service, memory_pool, todo};
+    use calcifer::v1::entity_service_server::EntityService as _;
+    use calcifer::v1::{property_value, PropertyDef, PropertyKind, StructureDef};
 
     async fn list_response() -> ListStructuresResponse {
         StructureService
