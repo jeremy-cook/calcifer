@@ -17,27 +17,6 @@ running app. Nothing below has been reproduced yet.
 
 ---
 
-### I-36 · `ResolveEntity` fails instead of returning the winner when it loses a create race · low · confirmed
-
-**Where:** `server/src/services/entity/resolve.rs` (`resolve_name`, `resolve_date`)
-
-**Problem:** `ResolveEntity` with `create_if_missing` looks the key up, then creates.
-If a concurrent call creates the same keyed entity (a Tag by name, a DailyNote by date)
-in between, the insert fails the `entity_keys` primary key and the caller gets
-`ALREADY_EXISTS` instead of the winner. Found during T01 of the API review; narrowed
-2026-10-23 after ADR 10, which replaced the generic database error with
-`ALREADY_EXISTS`.
-
-**Fix:** On `ALREADY_EXISTS` from `persist_new_entity`, re-read with `find_by_key` and
-return the winner with `created = false`, for both keys.
-
-**Deferred:** Calcifer is a single-user local app, so this race is very unlikely. Revisit if it's ever seen.
-
-**Done when:** a get-or-create that loses the race returns the existing entity, and a
-test covers it.
-
----
-
 ### I-45 · Two untitled Tags created at once can pick the same free name · low · confirmed
 
 **Where:** `server/src/services/entity/rpc.rs` (`create_entity`), `server/src/services/entity/resolve.rs` (`free_name`)
@@ -134,6 +113,7 @@ retried and `whenRichTextSaved` resolving only after it succeeds.
 
 ## Resolved
 
+- **I-36 · `ResolveEntity` fails instead of returning the winner when it loses a create race.** Fixed 2026-10-26. When a create-on-miss Resolve's insert fails its key with `ALREADY_EXISTS`, `resolve_name` and `resolve_date` look the key up again and return the entity the concurrent Resolve made, with `created = false`; if it has been deleted since, the error stands. Reproduced first: two joined Resolves of one Tag or one day failed every round on a file DB, and so did a single MCP `create_note` whose `tags` repeat a new name in another case (`resolve_tags` resolves them at once). Covered by `racing_resolves_of_one_tag_return_the_same_tag`, `racing_resolves_of_one_day_return_the_same_daily_note` and `create_note_with_case_variant_new_tags_tags_it_once`.
 - **I-79 · Undeclared property ids take any value.** Fixed 2026-10-25 (29def34). `CreateEntity` and `SetEntityProperty` refuse a value on a property the structure doesn't declare (`INVALID_ARGUMENT`, `<Structure>.<id> isn't a declared property`), whatever its kind, as `PutRichText` already did for documents; the entity page only ever rendered declared properties, so such values were stored but never shown. A new property is a registry edit and a server restart (user, 2026-10-25). Clearing stays allowed, so a value stored before this can be removed and its links go with it. `sync_relation_links` no longer walks undeclared relation values. Covered by `undeclared_properties_are_invalid` and `an_undeclared_value_can_be_cleared`; tests that leaned on undeclared values now declare theirs or seed rows directly.
 - **I-78 · `get_backlinks` reports a missing note as a result, not an error.** Fixed 2026-10-25 (2a2e3bb). `get_backlinks` finds the note with `existing_note_id`, so a missing note is `isError: true` with the shared "No note named …" text; a note nobody links to still gets "Nothing links to …". Covered by `get_backlinks_missing_note_is_an_error`; checked over MCP on a scratch DB.
 - **I-77 · Stale backlinks references after direct relationships.** Fixed 2026-10-24 (5aa136b). The `list_backlinks` comment names the relationships section, `LINK_SYNTAX` says `link_notes` relates notes without writing a link, and `LinkRef.source_property_id`'s proto comment mentions `@related`.

@@ -628,6 +628,8 @@ name, an empty or unknown `structure_type` (name), a malformed day, or a `struct
 or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is set, in
 which case the server builds the entity (`new_entity`: minted id, select defaults,
 and for a date the `date` property and its name), saves it, publishes `upserted` and returns `created = true`.
+A create that loses to a concurrent Resolve of the same key (a Tag name or a day) returns
+the entity the other one made, with `created = false`.
 Creating by name is `FAILED_PRECONDITION` for a structure that isn't `creatable` (a
 DailyNote is resolved by `date`); looking one up by name still works. A miss with
 `create_if_missing` set and a name that breaks the name rule (under `CreateEntity`) is

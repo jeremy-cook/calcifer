@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tonic::Status;
+use tonic::{Code, Status};
 
 use super::construct::{date_properties, new_entity};
 use super::lookup::known_structure;
@@ -107,11 +107,7 @@ impl EntityService {
             .await
             .map_err(Status::from)?
         {
-            let entity = self.load_entity(&id).await.map_err(Status::from)?;
-            return Ok(ResolveEntityResponse {
-                entity: Some(entity),
-                created: false,
-            });
+            return self.found(&id).await;
         }
         if !create_if_missing {
             return Err(Status::not_found(format!(
@@ -132,8 +128,17 @@ impl EntityService {
 
         check_name_chars(name)?;
         let entity = new_entity(structure_type, Some(name), HashMap::new(), &[]);
-        let saved = self.persist_new_entity(&entity).await?;
-        Ok(self.created(saved))
+        match self.persist_new_entity(&entity).await {
+            Ok(saved) => Ok(self.created(saved)),
+            Err(lost) if lost.code() == Code::AlreadyExists => {
+                let winner = self
+                    .find_by_name(structure_type, name)
+                    .await
+                    .map_err(Status::from)?;
+                self.winner_or(winner, lost).await
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Resolve's `date` key: get the day's DailyNote, or create it (named for the
@@ -162,19 +167,48 @@ impl EntityService {
             .await
             .map_err(Status::from)?
         {
-            let entity = self.load_entity(&id).await.map_err(Status::from)?;
-            return Ok(ResolveEntityResponse {
-                entity: Some(entity),
-                created: false,
-            });
+            return self.found(&id).await;
         }
         if !create_if_missing {
             return Err(Status::not_found(format!("DailyNote for {date}")));
         }
 
         let entity = new_entity("DailyNote", None, date_properties(date), &[]);
-        let saved = self.persist_new_entity(&entity).await?;
-        Ok(self.created(saved))
+        match self.persist_new_entity(&entity).await {
+            Ok(saved) => Ok(self.created(saved)),
+            Err(lost) if lost.code() == Code::AlreadyExists => {
+                let winner = self
+                    .find_by_key("DailyNote", "date", date)
+                    .await
+                    .map_err(Status::from)?;
+                self.winner_or(winner, lost).await
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The response for an entity Resolve found rather than created.
+    async fn found(&self, id: &str) -> Result<ResolveEntityResponse, Status> {
+        let entity = self.load_entity(id).await.map_err(Status::from)?;
+        Ok(ResolveEntityResponse {
+            entity: Some(entity),
+            created: false,
+        })
+    }
+
+    /// After a Resolve's create fails its key with `lost` (ALREADY_EXISTS): a
+    /// concurrent Resolve created the same key between the lookup and the insert
+    /// (I-36). `winner` is the key looked up again; return its entity, or `lost`
+    /// if it has been deleted since.
+    async fn winner_or(
+        &self,
+        winner: Option<String>,
+        lost: Status,
+    ) -> Result<ResolveEntityResponse, Status> {
+        match winner {
+            Some(id) => self.found(&id).await,
+            None => Err(lost),
+        }
     }
 
     /// Publish a Resolve-created entity and wrap it in the response.

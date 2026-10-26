@@ -37,6 +37,23 @@ async fn create_note_with_tags_sets_the_tags_property() {
     assert_eq!(f.link_targets(&note.id).await, expected);
 }
 
+// I-36: `tags` that differ only in case are resolved at the same time, so the
+// second create of the new Tag loses to the first. It gets the same Tag back,
+// and the note is tagged once.
+#[tokio::test]
+async fn create_note_with_case_variant_new_tags_tags_it_once() {
+    let f = fixture().await;
+    let tags = tag_args(&["Urgent", "urgent"]);
+    let saved =
+        f.k.create_note("Tagged", "Body.", Some(&tags))
+            .await
+            .unwrap();
+    assert!(saved.contains("tags: 1."), "{saved}");
+
+    let note = f.k.entity(&f.note_id("Tagged").await).await.unwrap();
+    assert_eq!(tag_ids(&note), [tag_id(&f, "urgent").await]);
+}
+
 #[tokio::test]
 async fn get_note_frontmatter_shows_tags() {
     let f = fixture().await;

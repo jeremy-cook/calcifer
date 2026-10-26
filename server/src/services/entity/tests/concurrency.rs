@@ -99,3 +99,51 @@ async fn racing_set_property_writes_both_succeed() {
     }
     scratch.pool.close().await;
 }
+
+// I-36: two get-or-creates of one Tag race. The loser's insert fails the name
+// key, and it returns the winner's Tag instead of ALREADY_EXISTS. A few rounds,
+// because one race can miss the window.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn racing_resolves_of_one_tag_return_the_same_tag() {
+    let scratch = ScratchDb::new().await;
+    let svc = entity_service(scratch.pool.clone());
+
+    for round in 0..5 {
+        let (a, b) = tokio::join!(
+            resolve(&svc, "Tag", by_name(&format!("urgent {round}")), true),
+            resolve(&svc, "Tag", by_name(&format!("URGENT {round}")), true),
+        );
+        let (a, b) = (a.expect("first resolve"), b.expect("second resolve"));
+        assert_eq!(
+            [a.created, b.created].iter().filter(|c| **c).count(),
+            1,
+            "exactly one of them creates it"
+        );
+        assert_eq!(a.entity.expect("entity").id, b.entity.expect("entity").id);
+    }
+    scratch.pool.close().await;
+}
+
+// I-36 for the date key: two get-or-creates of one day's DailyNote race, and
+// both return the one note.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn racing_resolves_of_one_day_return_the_same_daily_note() {
+    let scratch = ScratchDb::new().await;
+    let svc = entity_service(scratch.pool.clone());
+
+    for day in 10..15 {
+        let date = format!("2026-06-{day}");
+        let (a, b) = tokio::join!(
+            resolve(&svc, "", by_date(&date), true),
+            resolve(&svc, "DailyNote", by_date(&date), true),
+        );
+        let (a, b) = (a.expect("first resolve"), b.expect("second resolve"));
+        assert_eq!(
+            [a.created, b.created].iter().filter(|c| **c).count(),
+            1,
+            "exactly one of them creates it"
+        );
+        assert_eq!(a.entity.expect("entity").id, b.entity.expect("entity").id);
+    }
+    scratch.pool.close().await;
+}
