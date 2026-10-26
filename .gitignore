@@ -16,8 +16,9 @@ server/calcifer.db-wal
 # Local server environment (DATABASE_URL for sqlx).
 server/.env
 
-# Local fastembed model cache (~90 MB ONNX model, downloaded on first run).
-server/.fastembed_cache/
+# Local fastembed model cache (~90 MB ONNX model, downloaded on first run), in
+# whichever directory the server is started from.
+**/.fastembed_cache/
 
 # Per-machine Claude Code state: launch configuration, session locks and worktrees,
 # local permissions.
