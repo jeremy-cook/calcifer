@@ -1,11 +1,14 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import type { RichTextRef } from 'calcifer/v1/entities_pb'
+import { isAlreadyExists } from '~/model/api'
 import { richTextRef } from '~/model/richtext'
 import {
   dailyNoteByDate,
+  dailyNoteDate,
   deleteEntity,
   deleteEntityIfRichTextEmpty,
   getEntitiesSnapshot,
+  usePropertyWriters,
   type Entity,
 } from '~/model/store'
 import { richTextPropertyIds } from '~/model/structures'
@@ -47,4 +50,49 @@ function pruneDailyNote(iso: string): void {
   const ref = dailyNoteContentRef(existing)
   if (ref) deleteEntityIfRichTextEmpty(existing.id, ref)
   else deleteEntity(existing.id)
+}
+
+const DAY_TAKEN = 'A daily note already exists for that day.'
+
+export interface DailyNoteDate {
+  // The note's day, or undefined when the entity has none.
+  iso: string | undefined
+  // The reason `next` can't be this note's day, or null. It reads the cached list,
+  // which can be stale; the server's unique date index is the real check.
+  validate: (next: string) => string | null
+  // The server's last refusal for this note, cleared by the next move.
+  error: string | null
+  // Moves the note to `next`: a plain `date` write, which the server answers by
+  // renaming the note for the new day.
+  move: (next: string) => void
+}
+
+// A day can hold only one daily note. The cached-list check and the server's
+// AlreadyExists answer give the same message.
+export function useDailyNoteDate(entity: Entity): DailyNoteDate {
+  // Keyed by entity id so an error doesn't follow the field to another note.
+  const [serverError, setServerError] = useState<{ id: string; message: string } | null>(null)
+  const { setDate } = usePropertyWriters({
+    onError: (err, failed) => {
+      const message = isAlreadyExists(err) ? DAY_TAKEN : "Couldn't move the daily note. Try again."
+      setServerError({ id: failed.id, message })
+    },
+  })
+
+  const validate = (next: string) => {
+    const occupant = dailyNoteByDate(getEntitiesSnapshot(), next)
+    return occupant && occupant.id !== entity.id ? DAY_TAKEN : null
+  }
+
+  const move = (next: string) => {
+    setServerError(null)
+    setDate(entity, 'date', next)
+  }
+
+  return {
+    iso: dailyNoteDate(entity),
+    validate,
+    error: serverError?.id === entity.id ? serverError.message : null,
+    move,
+  }
 }
