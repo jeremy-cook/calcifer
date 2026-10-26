@@ -6,7 +6,7 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-25, against `small-fixes` @ `2a2e3bb`, the end of a stack of eight queue branches from `tooling-pass` (each ready to merge in order).
+**Last reviewed:** 2026-10-26, against `main` @ `56d0ee6`.
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -27,21 +27,7 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 ## Next up
 
-### 1. AI chat panel (RAG) · size: L · **blocked: LLM provider undecided**
-
-The headline feature the retrieval work was built for, and the last piece of "AI as a
-first-class writer."
-
-Right-hand panel toggled with `Cmd+.`, backed by a new `AIService.Chat` streaming RPC:
-retrieve context via the existing hybrid `Retrieve` → call the model → stream the
-response → let it invoke the same write RPCs. Cite source entities as clickable chips.
-Conversations stored as a `Chat` Structure, dogfooding the entity model.
-
-Thin client, zero new knowledge-ops logic — every operation it needs already exists as
-an RPC. **Decide the provider first** (Anthropic, OpenAI, local via Ollama, or a
-provider-agnostic layer); that choice is the only thing blocking this.
-
-### 2. Native gRPC with reflection · size: S · optional
+### 1. Native gRPC with reflection · size: S · optional
 
 The backend serves only gRPC-Web, under `/api` through axum (see the README's "No native
 gRPC"), so `grpcurl` can't reach it and backend checks go through the browser, an MCP
@@ -53,36 +39,16 @@ call the RPCs without the proto files.
 
 ## After that
 
-### Inline editor AI · size: M · deps: AI chat panel
+### One generic MCP tool surface · size: L
 
-Slash-command group `AI`: Summarize, Continue, Rewrite, Ask. Selection-aware, falling
-back to whole-doc. Streaming insertion via TipTap transactions. Selection bubble
-offering "Ask about this paragraph."
-
-### Auto-extraction on save · size: M · deps: AI chat panel
-
-After `Update`, the server enqueues an extraction job: "list candidate mention targets
-(people, projects, tags) in this text." Candidates render as dismissable inline badges
-("Link to @Alice?"); one click rewrites the text into a real mention node. **Never
-auto-edits** — always user-confirmed.
-
-### In-app agent with tool use · size: L · deps: AI chat panel
-
-Largely proven already by the MCP tools in `server/src/mcp/`; this brings it in-app.
-Tool schemas generated from the Connect service descriptors (proto reflection → LLM tool
-JSON), an `AIService.Agent(stream)` tool-use loop, and a chat "Agent" mode showing tool
-calls and results inline. An `agent_calls` audit table
-(`id, tool, args_json, result_json, user_approved, ts`); destructive tools (delete,
-bulk-edit) require per-call confirmation. Agent tools for creating and completing
-to-dos belong here, on the facet.
-
-Until then the MCP tools stay Note-shaped and are extended one gap at a time (decided
-2026-10-24). When this lands, consider a generic surface for both agents: an entity
-addressed by one `ref` string (`Name`, `Structure/Name`, `DailyNote/<date>` or an id),
-rich text by `ref` plus `property`, and about ten tools (`create_entity`,
-`update_entity`, `find_text`, `edit_text`, `append_text`, …) in place of one per
-structure. The in-app agent could also be offered over MCP as a single `ask` tool,
-beside the explicit tools rather than in place of them.
+The MCP tools stay Note-shaped and are extended one gap at a time (decided 2026-10-24),
+because AI chat clients reach Calcifer through them. When that stops scaling, replace
+one tool per structure with a generic surface: an entity addressed by one `ref` string
+(`Name`, `Structure/Name`, `DailyNote/<date>` or an id), rich text by `ref` plus
+`property`, and about ten tools (`create_entity`, `update_entity`, `find_text`,
+`edit_text`, `append_text`, …). Agent tools for creating and completing to-dos belong
+here, on the facet. Destructive tools (delete, bulk-edit) would want a confirmation
+step the client can show.
 
 ### Markdown converter from the editor's schema · size: M
 
@@ -109,10 +75,10 @@ the acceptance suite, and I-61's escaping cases belong in it.
   calendar entry point already ship, as does facet nav ("To-dos"); the sidebar is
   otherwise static.
 - **Command palette (`Cmd+K`)** — deferred. `cmdk` is already a dependency. Revisit when
-  entity count outgrows the sidebar, or when in-app agent tool-use wants a
-  keyboard-driven action surface.
-- **User-facing search** — FTS5 and hybrid retrieval exist but aren't surfaced in the UI
-  at all. Revisit after the chat panel; it may make a dedicated search view redundant.
+  entity count outgrows the sidebar.
+- **User-facing search** — FTS5 and hybrid retrieval exist and serve the MCP
+  `search_notes` tool, but aren't surfaced in the UI at all. A dedicated search view is
+  the open question.
 - **One tag-name rule** — tag names are letters and digits with single dots between
   them (`v1.2`); no `_` or `-`. Quick-add follows this, but the agent's markdown
   (`TAG` in `server/src/mcp/markdown/inline.rs`, documented in `docs/reference/richtext-doc.md`)
@@ -136,6 +102,13 @@ the acceptance suite, and I-61's escaping cases belong in it.
 
 ## Deferred by decision
 
+- **In-app AI** — a chat panel (`Cmd+.`, an `AIService.Chat` streaming RPC over the
+  hybrid `Retrieve`, answers citing entities as chips, conversations stored as a `Chat`
+  Structure), inline editor AI (a slash group: Summarize, Continue, Rewrite, Ask), and
+  auto-extraction on save (candidate mentions offered as dismissable badges, never
+  auto-edited). Dropped 2026-10-26: existing AI chat clients connect to Calcifer through
+  MCP or connectors, so there is no in-app model, provider choice or audit table to
+  build. Kept here in case that changes.
 - **Provenance / `Source` structure** — a `Source` Structure plus provenance properties
   (`authored_by` human|machine, `agent_id`, `sources` relation, `retrieved_at`) on the
   existing `PropertyValue` oneof, stamped by the MCP write tools, and a provenance badge
@@ -159,8 +132,6 @@ the acceptance suite, and I-61's escaping cases belong in it.
 
 ## Open questions
 
-- **LLM provider** — blocks the chat panel. Anthropic, OpenAI, local via Ollama, or a
-  provider-agnostic layer.
 - **Embedding model** — currently local `all-MiniLM-L6-v2` (384-d), pinned in the
   migration. Changing it means a re-embed and a migration.
 - **Export format** — JSON proto dump vs Markdown-per-entity. The
