@@ -41,8 +41,21 @@ snapshot refetch can't cache an older doc over an in-flight `Put`. Two writes in
 millisecond share an `updated_at`, so the browser can still show the older of them until
 the next event; only the server fix closes that.
 
-**Fix:** Take the revision inside the write transaction (or publish under the write
-lock), so publish order matches commit order.
+Not reproduced 2026-10-26: in 50 rounds of two joined renames of one entity on a file DB,
+the last `upserted` published always matched the stored entity. The window needs one
+write's reload to lose to the other's whole commit, reload and publish.
+
+**Fix:** A publish gate. `WatchHub` holds an async mutex, and publishing goes through
+the guard it hands out (no free `publish`, so every publish site must take it). Each write
+takes the guard after its last statement and before `tx.commit()`: writers hold SQLite's
+write lock (`BEGIN IMMEDIATE`) in commit order, so they take the guard in commit order
+too, and a reload after commit sees exactly that commit, since the next writer can't
+commit until it has the guard. Locks are always taken SQLite first, then the guard, and
+the holder only reads (WAL) after its commit, so nothing deadlocks. `persist_new_entity`
+would publish for Create and Resolve. Rejected: strictly increasing `entities.updated_at`
+(as `PutRichText` does), which only lets the browser drop the stale payload; and
+reserving the revision inside the transaction, which needs a reorder buffer that copes
+with a commit failing after it took a number.
 
 **Deferred:** Calcifer is a single-user local app, so this is very unlikely to happen. Revisit if it's ever seen.
 
