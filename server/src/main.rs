@@ -76,9 +76,11 @@ async fn main() -> anyhow::Result<()> {
     let search = Arc::new(SearchService::new(pool, embed));
 
     // One process, two listeners over the same services:
-    //   CALCIFER_ADDR      /api/*  gRPC-Web, for the browser, and /* the built UI
+    //   CALCIFER_ADDR      /api/*  gRPC-Web, for the browser; /calcifer.v1.*/* native
+    //                      gRPC with reflection, for grpcurl; and /* the built UI
     //   CALCIFER_MCP_ADDR  /mcp    MCP over HTTP, for agents, calling the services in-process
     let api = api_router(entity.clone(), richtext.clone(), search.clone());
+    let grpc = grpc_router(entity.clone(), richtext.clone(), search.clone())?;
 
     let app_addr = bind_addr("CALCIFER_ADDR", DEFAULT_ADDR)?;
     let mcp_addr = bind_addr("CALCIFER_MCP_ADDR", DEFAULT_MCP_ADDR)?;
@@ -89,7 +91,10 @@ async fn main() -> anyhow::Result<()> {
         mcp_addr,
     );
     let ui_dir = std::env::var("CALCIFER_UI_DIR").unwrap_or_else(|_| DEFAULT_UI_DIR.to_string());
-    let app = security::local::app(app_router(api, ui_service(PathBuf::from(ui_dir))), app_addr);
+    let app = security::local::app(
+        app_router(api, grpc, ui_service(PathBuf::from(ui_dir))),
+        app_addr,
+    );
 
     let app_listener = tokio::net::TcpListener::bind(app_addr).await?;
     let mcp_listener = tokio::net::TcpListener::bind(mcp_addr).await?;
@@ -120,9 +125,34 @@ fn api_router(
         .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
 }
 
-/// The API under `/api`, and the UI, when there's a build, everywhere else.
-fn app_router(api: axum::Router, ui: Option<ServeDir<ServeFile>>) -> axum::Router {
-    let app = axum::Router::new().nest("/api", api);
+/// Native gRPC, for tools like grpcurl, with reflection so they need no proto
+/// files. A gRPC client calls `/<package>.<Service>/<Method>` with no prefix, so
+/// these routes sit at the root beside the UI rather than under `/api`. They take
+/// HTTP/2 without TLS, which no browser speaks.
+fn grpc_router(
+    entity: Arc<EntityService>,
+    richtext: Arc<RichTextService>,
+    search: Arc<SearchService>,
+) -> anyhow::Result<axum::Router> {
+    let reflection = tonic_reflection::server::Builder::configure()
+        .register_encoded_file_descriptor_set(calcifer::FILE_DESCRIPTOR_SET)
+        .build_v1()?;
+    Ok(Routes::new(EntityServiceServer::from_arc(entity))
+        .add_service(RichTextServiceServer::from_arc(richtext))
+        .add_service(SearchServiceServer::from_arc(search))
+        .add_service(StructureServiceServer::new(StructureService))
+        .add_service(reflection)
+        .into_axum_router())
+}
+
+/// gRPC-Web under `/api`, native gRPC at its services' paths, and the UI, when
+/// there's a build, everywhere else.
+fn app_router(
+    api: axum::Router,
+    grpc: axum::Router,
+    ui: Option<ServeDir<ServeFile>>,
+) -> axum::Router {
+    let app = axum::Router::new().nest("/api", api).merge(grpc);
     match ui {
         Some(ui) => app.fallback_service(ui),
         None => app,
@@ -137,13 +167,59 @@ fn bind_addr(var: &str, default: &str) -> anyhow::Result<SocketAddr> {
 
 #[cfg(test)]
 mod tests {
-    use axum::body::Body;
-    use axum::http::{Request, StatusCode};
+    use axum::body::{Body, Bytes};
+    use axum::http::{HeaderMap, Request, StatusCode};
+    use http_body_util::BodyExt;
     use tower::ServiceExt;
 
     use super::*;
     use crate::embed::EmbedHandle;
     use crate::test_support::{entity_service, memory_pool, richtext_service};
+
+    /// The app as `main` builds it, without the local-only layer, serving the UI
+    /// from `ui_dir` when it has a build.
+    async fn app(ui_dir: PathBuf) -> axum::Router {
+        let pool = memory_pool().await;
+        let entity = Arc::new(entity_service(pool.clone()));
+        let richtext = Arc::new(richtext_service(pool.clone(), WatchHub::new()));
+        let search = Arc::new(SearchService::new(pool, EmbedHandle::disabled()));
+        app_router(
+            api_router(entity.clone(), richtext.clone(), search.clone()),
+            grpc_router(entity, richtext, search).unwrap(),
+            ui_service(ui_dir),
+        )
+    }
+
+    /// One native gRPC call of `path` with `message` as the only request
+    /// message: the HTTP status, the response messages' bytes, and the trailers.
+    async fn grpc_call(
+        app: axum::Router,
+        path: &str,
+        message: &impl prost::Message,
+    ) -> (StatusCode, Bytes, HeaderMap) {
+        let encoded = message.encode_to_vec();
+        let mut frame = vec![0];
+        frame.extend_from_slice(&u32::try_from(encoded.len()).unwrap().to_be_bytes());
+        frame.extend_from_slice(&encoded);
+        let req = Request::builder()
+            .method("POST")
+            .uri(path)
+            .header("content-type", "application/grpc")
+            .header("te", "trailers")
+            .body(Body::from(frame))
+            .unwrap();
+        let res = app.oneshot(req).await.unwrap();
+        let status = res.status();
+        let collected = res.into_body().collect().await.unwrap();
+        let trailers = collected.trailers().cloned().unwrap_or_default();
+        (status, collected.to_bytes(), trailers)
+    }
+
+    /// The first message of a gRPC response body.
+    fn first_message<M: prost::Message + Default>(body: &Bytes) -> M {
+        let len = u32::from_be_bytes(body[1..5].try_into().unwrap()) as usize;
+        M::decode(&body[5..5 + len]).unwrap()
+    }
 
     #[tokio::test]
     async fn an_unknown_api_path_is_a_404_not_the_ui() {
@@ -151,14 +227,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(dir.join("index.html"), "<!doctype html>").unwrap();
 
-        let pool = memory_pool().await;
-        let entity = Arc::new(entity_service(pool.clone()));
-        let richtext = Arc::new(richtext_service(pool.clone(), WatchHub::new()));
-        let search = Arc::new(SearchService::new(pool, EmbedHandle::disabled()));
-        let app = app_router(
-            api_router(entity, richtext, search),
-            ui_service(dir.clone()),
-        );
+        let app = app(dir.clone()).await;
         let status = |method: &str, uri: &str| {
             let req = Request::builder()
                 .method(method)
@@ -180,5 +249,58 @@ mod tests {
             StatusCode::NOT_FOUND
         );
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn native_grpc_is_served_at_the_root() {
+        use calcifer::v1::{ListStructuresRequest, ListStructuresResponse};
+
+        let (status, body, trailers) = grpc_call(
+            app(PathBuf::from("no-ui-build")).await,
+            "/calcifer.v1.StructureService/ListStructures",
+            &ListStructuresRequest::default(),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            trailers.get("grpc-status").map(|v| v.to_str().unwrap()),
+            Some("0")
+        );
+        let res: ListStructuresResponse = first_message(&body);
+        assert!(res.structures.iter().any(|s| s.r#type == "Note"));
+    }
+
+    #[tokio::test]
+    async fn reflection_lists_the_services() {
+        use tonic_reflection::pb::v1::server_reflection_request::MessageRequest;
+        use tonic_reflection::pb::v1::server_reflection_response::MessageResponse;
+        use tonic_reflection::pb::v1::{ServerReflectionRequest, ServerReflectionResponse};
+
+        let (status, body, _) = grpc_call(
+            app(PathBuf::from("no-ui-build")).await,
+            "/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
+            &ServerReflectionRequest {
+                host: String::new(),
+                message_request: Some(MessageRequest::ListServices(String::new())),
+            },
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        let res: ServerReflectionResponse = first_message(&body);
+        let Some(MessageResponse::ListServicesResponse(list)) = res.message_response else {
+            panic!("expected a service list, got {res:?}");
+        };
+        let mut names: Vec<String> = list.service.into_iter().map(|s| s.name).collect();
+        names.sort();
+        assert_eq!(
+            names,
+            [
+                "calcifer.v1.EntityService",
+                "calcifer.v1.RichTextService",
+                "calcifer.v1.SearchService",
+                "calcifer.v1.StructureService",
+                "grpc.reflection.v1.ServerReflection",
+            ]
+        );
     }
 }

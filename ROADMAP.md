@@ -24,16 +24,6 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 |---|---|---|---|
 | 1 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
 
-## Next up
-
-### 1. Native gRPC with reflection · size: S · optional
-
-The backend serves only gRPC-Web, under `/api` through axum (see the README's "No native
-gRPC"), so `grpcurl` can't reach it and backend checks go through the browser, an MCP
-client, or `cargo test`. If a CLI path earns its keep, serve native HTTP/2 gRPC as well,
-behind the same local-only checks, and enable tonic reflection so `grpcurl` can list and
-call the RPCs without the proto files.
-
 ---
 
 ## After that

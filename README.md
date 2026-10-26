@@ -18,6 +18,7 @@ default.
 |---|---|---|
 | `CALCIFER_ADDR` (`127.0.0.1:8080`) | `/` | the built UI (`web/dist`, with `index.html` fallback for client-side routes) |
 | | `/api/*` | gRPC-Web, which the UI speaks |
+| | `/calcifer.v1.*/*` | native gRPC over HTTP/2, with reflection, for `grpcurl` and other gRPC tools |
 | `CALCIFER_MCP_ADDR` (`127.0.0.1:8081`) | `/mcp` | MCP over streamable HTTP, which agents speak; its tools call the services in-process |
 
 In development Vite serves the UI on `:5173` and proxies `/api` to the backend.
@@ -111,10 +112,20 @@ The Rust crate regenerates on `cargo build` (`proto/rs/build.rs`, tonic-build), 
   live in [`CLAUDE.md`](CLAUDE.md).
 - **Commits:** one per unit, clear message, ending with the `Co-Authored-By` trailer.
 
-### No native gRPC
+### Native gRPC
 
-The backend speaks gRPC-Web over HTTP/1.1 under `/api` only, so `grpcurl` can't reach it.
-Verify the backend through the browser, an MCP client against `/mcp`, or `cargo test`.
+Besides gRPC-Web under `/api`, the UI's listener serves native gRPC (cleartext HTTP/2) at
+each service's own path, with server reflection, so `grpcurl` needs no proto files:
+
+```bash
+grpcurl -plaintext 127.0.0.1:8080 list
+```
+
+```bash
+grpcurl -plaintext 127.0.0.1:8080 calcifer.v1.StructureService/ListStructures
+```
+
+It sits behind the same local-only check as the rest of the listener.
 
 ## Editor
 

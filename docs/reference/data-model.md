@@ -660,7 +660,9 @@ the saved doc and then `upserted` with the reloaded entity, since its links,
 `referenced_dates` and `updated_at` changed.
 
 Transport is gRPC-Web from the browser (`tonic-web` bridges), served under `/api` by the
-same process that serves the UI; the Vite dev server proxies `/api` to it.
+same process that serves the UI; the Vite dev server proxies `/api` to it. The same
+listener serves native gRPC over HTTP/2 at each service's own path
+(`/calcifer.v1.EntityService/…`), with server reflection, for `grpcurl` and other gRPC tools.
 
 **Watch contract.** `WatchEntities` is a one-way replication stream of the whole entity set
 ([ADR 9](../adr/0009-watch-fed-replica.md)); the frontend's replica comes only from it,
