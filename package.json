@@ -1,0 +1,12 @@
+{
+  "name": "calcifer-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "scripts": {
+    "proto:lint": "pnpm --filter calcifer lint",
+    "proto:gen": "pnpm --filter calcifer gen"
+  }
+}

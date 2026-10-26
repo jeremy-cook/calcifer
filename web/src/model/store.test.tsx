@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { create } from '@bufbuild/protobuf'
-import { EntitySchema, PropertyValueSchema, type Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { EntitySchema, PropertyValueSchema, type Entity } from 'calcifer/v1/entities_pb'
 import { entityClient, queryClient } from '~/model/api'
 import { replica } from '~/model/replica'
 import {

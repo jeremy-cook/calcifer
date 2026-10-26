@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { RichTextRef } from 'calcifer/v1/entities_pb'
 import { richTextRef } from '~/model/richtext'
 import {
   dailyNoteByDate,

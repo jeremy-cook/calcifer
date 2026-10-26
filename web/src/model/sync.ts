@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { WatchEntitiesResponse } from '@calcifer/proto/calcifer/v1/services_pb'
+import type { WatchEntitiesResponse } from 'calcifer/v1/services_pb'
 import { entityClient, qk, queryClient } from '~/model/api'
 import { replica } from '~/model/replica'
 import { writeRichTextIfNewer } from '~/model/richtext'

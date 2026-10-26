@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WatchEntitiesResponse } from '@calcifer/proto/calcifer/v1/services_pb'
+import type { WatchEntitiesResponse } from 'calcifer/v1/services_pb'
 import type { ConnectionState } from '~/model/replica'
 import { entity, richText, watch } from '~/model/testing'
 

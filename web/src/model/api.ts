@@ -1,7 +1,7 @@
 import { Code, ConnectError, createClient } from '@connectrpc/connect'
 import { createGrpcWebTransport } from '@connectrpc/connect-web'
 import { QueryClient } from '@tanstack/react-query'
-import { EntityService, RichTextService, StructureService } from '@calcifer/proto/calcifer/v1/services_pb'
+import { EntityService, RichTextService, StructureService } from 'calcifer/v1/services_pb'
 
 // gRPC-Web under /api: the backend serves it (and this app) in production, and
 // the Vite dev server proxies it there.

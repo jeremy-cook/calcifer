@@ -1,6 +1,6 @@
 import { Checkbox } from '~/components/ui/checkbox'
 import { todoFields, useSetTodoStatus } from '~/model/todos'
-import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { Entity } from 'calcifer/v1/entities_pb'
 
 export interface TodoStatusFieldProps {
   entity: Entity

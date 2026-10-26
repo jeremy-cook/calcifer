@@ -1,18 +1,13 @@
 import type { Icon } from '@phosphor-icons/react'
 import { CheckSquareIcon, FileIcon, HashIcon, NoteIcon, NotebookIcon } from '@phosphor-icons/react'
 import { queryOptions, useQuery } from '@tanstack/react-query'
-import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
-import type { ListStructuresResponse } from '@calcifer/proto/calcifer/v1/services_pb'
-import {
-  PropertyKind,
-  type FacetDef,
-  type PropertyDef,
-  type StructureDef,
-} from '@calcifer/proto/calcifer/v1/structures_pb'
+import type { Entity } from 'calcifer/v1/entities_pb'
+import type { ListStructuresResponse } from 'calcifer/v1/services_pb'
+import { PropertyKind, type FacetDef, type PropertyDef, type StructureDef } from 'calcifer/v1/structures_pb'
 import { queryClient, qk, structureClient } from '~/model/api'
 
-export { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
-export type { FacetDef, PropertyDef, SelectOption, StructureDef } from '@calcifer/proto/calcifer/v1/structures_pb'
+export { PropertyKind } from 'calcifer/v1/structures_pb'
+export type { FacetDef, PropertyDef, SelectOption, StructureDef } from 'calcifer/v1/structures_pb'
 
 // The registry itself (structures and facets: names, properties, options, flags) is authored in
 // server/src/structures.rs and fetched once over StructureService.ListStructures (ADR 7).

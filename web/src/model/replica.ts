@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { equals } from '@bufbuild/protobuf'
-import { EntitySchema, type Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+import { EntitySchema, type Entity } from 'calcifer/v1/entities_pb'
 import { compareTimestamps } from '~/model/dates'
 
 // The Watch-fed entity replica (ADR 9). Only model/sync.ts and the mutations

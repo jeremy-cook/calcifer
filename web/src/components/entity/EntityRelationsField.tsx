@@ -1,5 +1,5 @@
 import { PlusIcon, XIcon } from '@phosphor-icons/react'
-import type { EntityRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { EntityRef } from 'calcifer/v1/entities_pb'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { EntityPicker } from '~/components/entity/EntityPicker'

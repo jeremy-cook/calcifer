@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { Entity, LinkRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { Entity, LinkRef } from 'calcifer/v1/entities_pb'
 import { timestampMsOrZero } from '~/model/dates'
 import { RELATED_SCOPE, useAllEntities, useEntity } from '~/model/store'
 import { getFacet, getStructure, propertyDefFor, richTextPropertyIds } from '~/model/structures'

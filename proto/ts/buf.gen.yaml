@@ -1,9 +1,9 @@
 version: v2
 plugins:
   - local: protoc-gen-es
-    out: gen/ts
+    out: src
     # ts_nocheck: generated enums (e.g. PropertyKind) are not erasable syntax,
-    # which tsconfig.app.json forbids; esbuild still compiles them.
+    # which web's tsconfig.app.json forbids; esbuild still compiles them.
     opt: [target=ts, ts_nocheck=true]
 inputs:
-  - directory: ../proto
+  - directory: ..

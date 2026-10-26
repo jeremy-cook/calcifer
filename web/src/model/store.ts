@@ -15,14 +15,14 @@ import {
   type LinkRef,
   type RichTextRef,
   type PropertyValue,
-} from '@calcifer/proto/calcifer/v1/entities_pb'
-import type { ResolveEntityRequest } from '@calcifer/proto/calcifer/v1/services_pb'
+} from 'calcifer/v1/entities_pb'
+import type { ResolveEntityRequest } from 'calcifer/v1/services_pb'
 import { entityClient } from '~/model/api'
 import { timestampMsOrZero } from '~/model/dates'
 import { fetchRichText, isRichTextEmpty, whenRichTextSaved } from '~/model/richtext'
 import { replica, useReplica, type ConnectionState } from '~/model/replica'
 
-export type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+export type { Entity } from 'calcifer/v1/entities_pb'
 export type { ConnectionState } from '~/model/replica'
 
 // The reserved link scope of a direct relationship (ADR 12): the `sourcePropertyId` of the

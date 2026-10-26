@@ -6,9 +6,9 @@ import {
   PropertyValueSchema,
   type Entity,
   type PropertyValue,
-} from '@calcifer/proto/calcifer/v1/entities_pb'
-import { ListStructuresResponseSchema } from '@calcifer/proto/calcifer/v1/services_pb'
-import { PropertyKind } from '@calcifer/proto/calcifer/v1/structures_pb'
+} from 'calcifer/v1/entities_pb'
+import { ListStructuresResponseSchema } from 'calcifer/v1/services_pb'
+import { PropertyKind } from 'calcifer/v1/structures_pb'
 import { queryClient } from '~/model/api'
 import { structuresQuery } from '~/model/structures'
 import { entity } from '~/model/testing'

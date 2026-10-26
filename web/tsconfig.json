@@ -9,8 +9,7 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "~/*": ["src/*"],
-      "@calcifer/proto/*": ["gen/ts/*"]
+      "~/*": ["src/*"]
     }
   }
 }

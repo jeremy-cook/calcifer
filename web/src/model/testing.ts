@@ -7,8 +7,8 @@ import {
   type Entity,
   type LinkRef,
   type RichText,
-} from '@calcifer/proto/calcifer/v1/entities_pb'
-import { WatchEntitiesResponseSchema, type WatchEntitiesResponse } from '@calcifer/proto/calcifer/v1/services_pb'
+} from 'calcifer/v1/entities_pb'
+import { WatchEntitiesResponseSchema, type WatchEntitiesResponse } from 'calcifer/v1/services_pb'
 
 // Builders for the model tests. Not imported by the app.
 

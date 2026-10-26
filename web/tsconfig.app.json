@@ -25,9 +25,8 @@
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
     "paths": {
-      "~/*": ["src/*"],
-      "@calcifer/proto/*": ["gen/ts/*"]
+      "~/*": ["src/*"]
     }
   },
-  "include": ["src", "gen/ts"]
+  "include": ["src"]
 }

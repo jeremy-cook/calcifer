@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import type { Entity } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { Entity } from 'calcifer/v1/entities_pb'
 import {
   getOrCreateEntityForMention,
   hasFacet,

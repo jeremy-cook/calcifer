@@ -50,14 +50,14 @@ die() { echo "calcifer: $*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null || die "$1 is not installed"; }
 
 ensure_ui_deps() {
-  [ -d "$ui/node_modules" ] || (cd "$ui" && pnpm install --frozen-lockfile)
+  [ -d "$ui/node_modules" ] || (cd "$root" && pnpm install --frozen-lockfile)
 }
 
 # The UI build is stale when it is missing or any input is newer than it.
 ui_is_stale() {
   local built="$ui/dist/index.html"
   [ -f "$built" ] || return 0
-  [ -n "$(find "$ui/src" "$ui/public" "$ui/gen" "$ui/index.html" "$ui/package.json" "$ui/vite.config.ts" \
+  [ -n "$(find "$ui/src" "$ui/public" "$root/proto/ts/src" "$ui/index.html" "$ui/package.json" "$ui/vite.config.ts" \
     -type f -newer "$built" -print -quit)" ]
 }
 

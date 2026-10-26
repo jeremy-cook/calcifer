@@ -8,6 +8,3 @@ tsconfig.*
 
 # TanStack Router generates this file on every build
 src/routeTree.gen.ts
-
-# pnpm proto:gen (buf) generates this directory
-gen/

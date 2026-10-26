@@ -1,0 +1,21 @@
+{
+  "name": "calcifer",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "The Calcifer API for TypeScript: the generated protobuf types and service descriptors",
+  "exports": {
+    "./*": "./src/calcifer/*.ts"
+  },
+  "scripts": {
+    "gen": "buf generate",
+    "lint": "buf lint .."
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "2.15.0"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.68.2",
+    "@bufbuild/protoc-gen-es": "2.15.0"
+  }
+}

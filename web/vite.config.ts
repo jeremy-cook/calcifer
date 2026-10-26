@@ -22,7 +22,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '~': path.resolve(__dirname, 'src'),
-      '@calcifer/proto': path.resolve(__dirname, 'gen/ts'),
     },
   },
   build: {

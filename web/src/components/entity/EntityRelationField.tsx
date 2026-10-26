@@ -1,5 +1,5 @@
 import { XIcon } from '@phosphor-icons/react'
-import type { EntityRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { EntityRef } from 'calcifer/v1/entities_pb'
 import { Button } from '~/components/ui/button'
 import { EntityPicker } from '~/components/entity/EntityPicker'
 import { useEntity, type RelationTarget } from '~/model/store'

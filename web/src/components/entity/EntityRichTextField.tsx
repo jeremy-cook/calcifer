@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSONContent } from '@tiptap/core'
-import type { RichTextRef } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { RichTextRef } from 'calcifer/v1/entities_pb'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
 import { isNewerRichText, richTextRef, usePutRichText, useRichText, type RichTextState } from '~/model/richtext'
 

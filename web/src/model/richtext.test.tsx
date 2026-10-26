@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { Code, ConnectError } from '@connectrpc/connect'
 import { QueryClientProvider } from '@tanstack/react-query'
-import type { RichText } from '@calcifer/proto/calcifer/v1/entities_pb'
+import type { RichText } from 'calcifer/v1/entities_pb'
 import { qk, queryClient, richTextClient } from '~/model/api'
 import { replica } from '~/model/replica'
 import {
