@@ -5,8 +5,10 @@ use serde_json::{json, Value};
 
 // ---------------------------------------------------------------- markdown -> doc
 
+// Dots only between characters (`#program.apollo`), so a sentence's closing
+// period stays text: `#biology.` is the tag `biology`.
 pub(super) static TAG: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^#([\p{L}\p{N}_-]+)").unwrap());
+    LazyLock::new(|| Regex::new(r"^#([\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*)").unwrap());
 
 pub(super) static ISO_DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})").unwrap());

@@ -280,6 +280,20 @@ fn only_real_calendar_days_become_date_chips() {
 }
 
 #[test]
+fn a_tag_may_hold_dots_but_not_end_in_one() {
+    let labels = |md: &str| -> Vec<Value> {
+        chips(&to_tt(md))
+            .iter()
+            .map(|c| c["label"].clone())
+            .collect()
+    };
+    assert_eq!(labels("See #program.apollo now"), [json!("program.apollo")]);
+    assert_eq!(labels("Ship #v1.2."), [json!("v1.2")]);
+    assert_eq!(labels("Ends #biology."), [json!("biology")]);
+    assert_eq!(labels("Two #a..b"), [json!("a")]);
+}
+
+#[test]
 fn structure_prefix_targets_only_registry_types() {
     let tag = &chips(&to_tt("[[Tag/ship]]"))[0];
     assert_eq!(
