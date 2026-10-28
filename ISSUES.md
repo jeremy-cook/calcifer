@@ -13,7 +13,8 @@ date and a one-line note on the fix; don't renumber.
 a missing guard · `low` cleanup, performance, tooling.
 
 **Confirmed** means verified by reading the code. **Reproduced** means observed in the
-running app. Nothing below has been reproduced yet.
+running app. I-80 to I-88 were found in the running app by the Space Race research
+(2026-10-26, `plans/space-race-research/`) and spot-checked in the code.
 
 ---
 
@@ -82,6 +83,153 @@ the I-42 plan, confirmed by reading.
 
 **Done when:** a test where the reload after a conflict fails once shows the reload
 retried and `whenRichTextSaved` resolving only after it succeeds.
+
+---
+
+### I-80 · An open editor can save over an agent's append, losing it · high · reproduced once
+
+**Where:** `web/src/components/entity/EntityRichTextField.tsx` (the Watch adoption and the
+debounced save), `web/src/model/richtext.ts`
+
+**Problem:** With `Mission index` open in the browser and nothing typed, an
+`append_to_note` from the agent was saved over 79 ms after it returned: the stored doc is
+the pre-append content plus an empty paragraph, and the browser's network log shows a
+`GetRichText` then a `PutRichText` at that moment. The conditional save passed, so neither
+side saw a conflict, and the agent was told the append succeeded. Two retries on a freshly
+opened note didn't reproduce it; the tab had been open for minutes with its Relationships
+panel expanded. May be a sighting of I-49 (an editor saving a pre-append doc); unconfirmed.
+Found in the Space Race research, Q3 (`plans/space-race-research/issues.md`, SR-37).
+
+**Fix:** Find what makes the editor save without a user edit after it adopts a remote doc,
+and make a save carry the base version of the doc it actually holds, so a stale doc is
+refused rather than accepted.
+
+**Done when:** a test that delivers a remote append to an open editor while it holds its
+own doc shows the append kept, or a conflict surfaced.
+
+---
+
+### I-81 · MCP tools silently ignore unknown arguments · high · reproduced
+
+**Where:** `server/src/mcp/args.rs` (no `deny_unknown_fields` on any argument struct)
+
+**Problem:** `create_daily_note {date, markdown}` says "created" and drops the text; any
+misspelt optional argument (`content` for `markdown`, `title` for `name`) is dropped the
+same way, and the agent gets a success. Space Race research, SR-28.
+
+**Fix:** `#[serde(deny_unknown_fields)]` on every tool's arguments, so the call fails with
+the argument's name.
+
+**Done when:** a call with an extra argument is refused naming it, for each tool.
+
+---
+
+### I-82 · A second note with a taken name is unreachable from MCP · high · reproduced
+
+**Where:** `server/src/services/entity/resolve.rs` (name lookups take the oldest);
+`server/src/mcp/tools/` (only `link_notes` parses an id)
+
+**Problem:** With two Notes named `Mercury`, `get_note`, `append_to_note`, `edit_note` and
+`[[Mercury]]` all go silently to the oldest; `link_notes` refuses and says to use an id,
+but no other tool accepts one, and search results carry no ids. The browser makes such a
+note freely, and since I-73 two racing `create_note` calls can too. Space Race research,
+SR-19.
+
+**Fix:** Accept an id wherever a name is taken, list ids in search results, and refuse (or
+warn) on a shared name in every tool, as `link_notes` does.
+
+**Done when:** each name-taking tool reads or writes the second `Mercury` by id, and
+refuses the bare name while two exist.
+
+---
+
+### I-83 · Non-ASCII names fold three ways · medium · reproduced
+
+**Where:** `entities_name_ci` (`COLLATE NOCASE`, ASCII only); `link_notes` (Unicode
+case-fold); `server/src/mcp/markdown/mod.rs` `ref_key` (Unicode `to_lowercase`)
+
+**Problem:** `create_note "сергей королёв"` succeeds beside `Сергей Королёв`; `link_notes`
+then calls them one name, the resolver two, and a document naming both links both to
+whichever spelling comes first (`Mission index`: the original got no link). Space Race
+research, SR-12.
+
+**Fix:** One folding rule for names, used by the name key, the resolver, `link_notes` and
+the converter's reference grouping.
+
+**Done when:** the lowercase create is refused, and a doc naming both spellings links one note.
+
+---
+
+### I-84 · `get_note` drops a mention's label · medium · reproduced
+
+**Where:** `server/src/mcp/markdown/write.rs` (`chip_markdown`)
+
+**Problem:** `[[Apollo 11|the first landing]]` is accepted and the chip stores the label,
+but `get_note` writes `[[Apollo 11]]` and the editor shows `@Apollo 11`, so the sentence
+reads wrong; an `edit_note` of that block replaces the chip without its label. Space Race
+research, SR-11.
+
+**Fix:** Write `[[Name|label]]` when the label differs from the name (and show the label in
+the editor), or refuse aliases at write time.
+
+**Done when:** an aliased mention round-trips through `get_note` and `edit_note`.
+
+---
+
+### I-85 · Date fields' calendar can't change month · medium · reproduced
+
+**Where:** `web/src/components/entity/EntityDateField.tsx` (`month={selected ?? new Date()}`,
+no `onMonthChange`)
+
+**Problem:** The ‹ › arrows do nothing, so a to-do's due date or a daily note's date can
+only be set within the shown month. Space Race research, SR-17.
+
+**Fix:** Keep the shown month in state, updated by `onMonthChange`.
+
+**Done when:** a test pages the due-date calendar forward a month and picks a day.
+
+---
+
+### I-86 · Lexical search can't find ISO dates · medium · reproduced
+
+**Where:** the FTS body (chips indexed by their display label, `docs/reference/richtext-doc.md` "Text")
+
+**Problem:** The agent writes and reads `1969-07-20`, but the index holds "July 20, 1969",
+so a lexical search for the ISO date finds nothing. Space Race research, SR-33.
+
+**Fix:** Index a date chip by its ISO date as well as its label.
+
+**Done when:** `search_notes "1969-07-20"` lexical returns `Apollo 11`.
+
+---
+
+### I-87 · Search gives a note's name no weight · medium · reproduced
+
+**Where:** `search_notes` ranking (FTS and embedding text)
+
+**Problem:** The planet `Mercury` ranks 17th / 11th / 15th for "Mercury" (lexical, semantic,
+hybrid); `Королёв` finds `Сергей Королёв` 6th lexically. Tags aren't in a note's search
+text either, so a note can't be found by its tags (SR-35). Space Race research, SR-34.
+
+**Fix:** Include the name (and the note's tag names) in what's indexed and weight a name
+match.
+
+**Done when:** a note whose name is the query ranks first in each mode, and a note is
+found by a tag it carries.
+
+---
+
+### I-88 · Insert › Details in a table cell hides the cell's text · medium · reproduced
+
+**Where:** the editor's Details insert (`web/src/editors/tiptap/`)
+
+**Problem:** With the caret in a table cell, Insert › Details wraps the cell's content in a
+collapsed block with an empty summary, so the text vanishes from view (undo restores it).
+Space Race research, SR-25.
+
+**Fix:** Insert the block after the table, or refuse it inside a cell.
+
+**Done when:** a test inserting Details from a cell leaves the cell's text visible.
 
 ---
 

@@ -6,7 +6,8 @@ For what the app is and how to run it see [`README.md`](README.md); for the data
 and RPC surface see [`docs/reference/data-model.md`](docs/reference/data-model.md);
 for why the architecture is the way it is see [`docs/adr/`](docs/adr/).
 
-**Last reviewed:** 2026-10-26, against `main` @ `56d0ee6`.
+**Last reviewed:** 2026-10-27, after the Space Race research against `867e468`
+(`plans/space-race-research/findings.md`; `SR-` ids below point into its `issues.md`).
 
 The app currently works end-to-end: Rust/SQLite backend, browser on gRPC-Web, an MCP
 agent writing into the same graph, and lexical + semantic retrieval underneath it all.
@@ -22,7 +23,16 @@ them in. Race-condition entries stay deferred (single-user app, see ADR 5).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
-| 1 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting. |
+| 1 | I-80: an open editor saves over an agent's append | M | The research's one lost write, seen once. Data loss, so not deferred; reproduce first. May be the I-49 sighting. |
+| 2 | I-81: MCP tools ignore unknown arguments | S | `deny_unknown_fields` on each argument struct. |
+| 3 | I-85: date fields can't change month | S | `onMonthChange` into state. |
+| 4 | I-88: Details in a table cell hides its text | S | Insert after the table, or refuse in a cell. |
+| 5 | I-84: `get_note` drops a mention's label | S | Write `[[Name\|label]]`; show the label in the editor. |
+| 6 | I-86: lexical search can't find ISO dates | S | Index date chips by ISO date too. |
+| 7 | I-82: a second same-named note is unreachable from MCP | M | Ids in every name-taking tool and in search results. |
+| 8 | I-83: non-ASCII names fold three ways | M | One folding rule; the name index needs a migration. |
+| 9 | I-87: search gives names (and tags) no weight | M | Ranking change; re-run the research's Q1 scorecard after. |
+| 10 | I-49: out-of-order event publishing | M | The client-side guard covers most of it; the server fix waits for a sighting (see I-80). |
 
 ---
 
@@ -36,7 +46,14 @@ one tool per structure with a generic surface: an entity addressed by one `ref` 
 (`Name`, `Structure/Name`, `DailyNote/<date>` or an id), rich text by `ref` plus
 `property`, and about ten tools (`create_entity`, `update_entity`, `find_text`,
 `edit_text`, `append_text`, …). Agent tools for creating and completing to-dos belong
-here, on the facet. Destructive tools (delete, bulk-edit) would want a confirmation
+here, on the facet.
+
+The Space Race research adds to it: ids accepted everywhere a name is (I-82), unknown
+arguments refused (I-81), `link_notes` naming the real reason for a Tag or daily note
+(SR-24), the "wikilink(s)" count fixed (SR-06), and which strings became date chips
+(SR-15). Agents also need rename, delete and move-a-section: merging one note into another
+took about 33 find-and-replace calls (Q2), `append_to_note` can only add at the end, after
+`## Sources` (SR-16), and notes that link each other need a stub-then-append (SR-03). Destructive tools (delete, bulk-edit) would want a confirmation
 step the client can show.
 
 ### Markdown converter from the editor's schema · size: M
@@ -56,6 +73,21 @@ content markdown can't carry (`inexpressible`). Check first that the library run
 without a DOM and doesn't silently drop marks it can't write. The converter's tests are
 the acceptance suite, and I-61's escaping cases belong in it.
 
+### Agent markdown for what the editor holds · size: M
+
+Tables, footnotes and `$` math from the agent silently become text (SR-14, SR-10), and the
+editor's tables, Details, underline, colour and alignment reach the agent as placeholders or
+plain text; a centred paragraph can't be edited by it at all (SR-27). Either carry each one
+or refuse it at write time, and say which. Easier after the converter above.
+
+### Typed relationships · size: L
+
+A relationship carries no type, label or direction, and `get_note`'s `related:` lists only
+outgoing ones. In the research all four agents wrote every relationship twice, as a link
+and as prose, and couldn't tell "flew on" from "followed by" from "part of" reading the
+graph back (SR-23); the Relationships panel interleaves rows of different kinds (SR-30).
+Also a bulk link: one hub took 28 `link_notes` calls.
+
 ---
 
 ## Smaller items
@@ -64,16 +96,29 @@ the acceptance suite, and I-61's escaping cases belong in it.
   calendar entry point already ship, as does facet nav ("To-dos"); the sidebar is
   otherwise static.
 - **Command palette (`Cmd+K`)** — deferred. `cmdk` is already a dependency. Revisit when
-  entity count outgrows the sidebar.
+  entity count outgrows the sidebar. At 230 notes in the research, the Notes list sorted
+  by last change was the only way to find a note in the browser (SR-18).
 - **User-facing search** — FTS5 and hybrid retrieval exist and serve the MCP
   `search_notes` tool, but aren't surfaced in the UI at all. A dedicated search view is
-  the open question.
+  the open question. The research scored the agent's search on 29 questions: top-1 hits
+  10 lexical, 21 semantic, 20 hybrid. Lexical needs every word and has no stemming
+  (SR-32); see also I-86 and I-87.
 - **One tag-name rule** — tag names are letters and digits with single dots between
   them (`v1.2`); no `_` or `-`. Quick-add follows this, but the agent's markdown
   (`TAG` in `server/src/mcp/markdown/inline.rs`, documented in `docs/reference/richtext-doc.md`)
   still takes `_` and `-`, and nothing validates a Tag name on create (the editor's `#`
   menu, the relation picker, `ResolveEntity`). Enforce it on the server and match it in
-  the editor and the docs.
+  the editor and the docs. Seen in the research: `#apollo-11`, `#apollo_11` and
+  `tags: ["Apollo 11"]` all made rule-breaking Tags, the
+  picker takes a sentence-ending period into the name (SR-02, SR-07), and a dotted Tag
+  can't be found by search (SR-35).
+- **Deleting what's linked** — deleting a note, Tag or daily note never says what links
+  to it and can't be undone; leftover links become plain text for the agent and dead-end
+  grey chips in the browser (SR-36).
+- **Telling same-named notes apart** — the `@` picker, the Notes list and search show two
+  `Mercury` notes identically (SR-18); pairs with I-82.
+- **Date picker jumps** — the `/Date` picker has only month arrows (681 clicks back to
+  1969, SR-04), while the calendar's mini calendar has year and month selects.
 - **Single-line to-do entry** — quick-add reads `<name> <properties> #tags`, in that
   order, and refuses the whole line if anything is invalid; today it takes the name and
   tags. Add the properties, taking inspiration from Taskwarrior's `task add` (`due:fri`,
