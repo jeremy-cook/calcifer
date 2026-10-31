@@ -6,6 +6,7 @@ use tonic::{Request, Response, Status};
 use crate::embed::{vector_blob, EmbedHandle};
 use crate::error::AppError;
 use crate::services::entity::load_entities_by_id;
+use crate::structures;
 use calcifer::v1::{
     search_service_server::SearchService as SearchServiceTrait, MatchRange, SearchHit, SearchMode,
     SearchRequest, SearchResponse,
@@ -87,6 +88,14 @@ impl Snippet {
     }
 }
 
+/// One `entity_fts` row a MATCH found: the entity, its indexed name and its
+/// snippet, still carrying the match markers.
+struct FtsRow {
+    id: String,
+    name: String,
+    marked: String,
+}
+
 /// An entity id, its score, and its snippet, in rank order before hydration.
 type Ranked = Vec<(String, f64, Snippet)>;
 
@@ -111,23 +120,48 @@ impl SearchService {
         // Runtime (non-macro) query: sqlx's compile-time introspection chokes on
         // FTS5 virtual tables (bm25/snippet/MATCH), so this query is unchecked.
         // snippet column -1 lets FTS pick the best-matching column.
-        let rows = sqlx::query_as::<_, (String, String)>(
+        let rows = self.fts_rows(&match_query, limit).await?;
+
+        // A note whose name is the query comes first, wherever bm25 puts it
+        // (even past `limit`). Only the name column can hold such a note.
+        let named_query = format!("name : ({match_query})");
+        let named = self.fts_rows(&named_query, limit).await?;
+        let wanted = structures::fold_name(query);
+        let exact: Vec<FtsRow> = named
+            .into_iter()
+            .filter(|row| structures::fold_name(&row.name) == wanted)
+            .collect();
+
+        let exact_ids: Vec<String> = exact.iter().map(|row| row.id.clone()).collect();
+        Ok(exact
+            .into_iter()
+            .chain(rows.into_iter().filter(|row| !exact_ids.contains(&row.id)))
+            .take(limit as usize)
+            .map(|row| (row.id, Snippet::parse(&row.marked)))
+            .collect())
+    }
+
+    /// The `limit` best FTS5 rows for a MATCH expression. A note's name counts
+    /// ten times a body match: `entity_id` (unindexed) has weight 0.
+    async fn fts_rows(&self, match_query: &str, limit: i64) -> Result<Vec<FtsRow>, AppError> {
+        let rows = sqlx::query_as::<_, (String, String, String)>(
             r#"SELECT entity_id,
+                      name,
                       snippet(entity_fts, -1, ?, ?, '…', 12)
                FROM entity_fts
                WHERE entity_fts MATCH ?
-               ORDER BY bm25(entity_fts)
+               ORDER BY bm25(entity_fts, 0, 10, 1)
                LIMIT ?"#,
         )
         .bind(MATCH_OPEN.to_string())
         .bind(MATCH_CLOSE.to_string())
-        .bind(&match_query)
+        .bind(match_query)
         .bind(limit)
         .fetch_all(&self.pool)
         .await?;
         Ok(rows
             .into_iter()
-            .map(|(id, marked)| (id, Snippet::parse(&marked)))
+            .map(|(id, name, marked)| FtsRow { id, name, marked })
             .collect())
     }
 
@@ -627,6 +661,90 @@ mod tests {
             names(&search(&svc, "stub-then-app", SearchMode::Lexical).await),
             vec!["Drafting notes"]
         );
+    }
+
+    // I-87: the note named the query comes first, ahead of notes that only name
+    // it more often or mention it more in a long body.
+    #[tokio::test]
+    async fn a_note_named_the_query_ranks_first() {
+        let pool = memory_pool().await;
+        for (name, body) in [
+            ("Project Mercury Mercury Mercury", "Mercury Mercury Mercury"),
+            (
+                "Mercury Atlas",
+                "Mercury Mercury Mercury Mercury Mercury Mercury Mercury Mercury",
+            ),
+            (
+                "Early flights",
+                "The Mercury program flew Mercury capsules on Mercury-Redstone rockets.",
+            ),
+            (
+                "Capsule history",
+                "Mercury was first, then Gemini. Mercury capsules were small.",
+            ),
+            (
+                "Space race",
+                "Mercury, Vostok, Gemini, Voskhod, Apollo. Mercury came first for the US.",
+            ),
+            ("Mercury", "Planet."),
+        ] {
+            let note = create(&pool, name).await;
+            put_text(&pool, &note.id, body).await;
+        }
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        let hits = search(&svc, "mercury", SearchMode::Lexical).await;
+        assert_eq!(names(&hits).first(), Some(&"Mercury"), "{:?}", names(&hits));
+        assert_eq!(hits.len(), 6);
+
+        // Only a whole name counts: a longer name that holds the query doesn't jump the queue.
+        let hits = search(&svc, "  MERCURY ", SearchMode::Lexical).await;
+        assert_eq!(names(&hits).first(), Some(&"Mercury"));
+    }
+
+    // The exact-name boost folds case the way names are keyed, not only ASCII.
+    #[tokio::test]
+    async fn the_exact_name_boost_folds_unicode_case() {
+        let pool = memory_pool().await;
+        for (name, body) in [
+            (
+                "Сергей Королёв Сергей Королёв Сергей",
+                "Королёв Королёв Королёв",
+            ),
+            ("Сергей Королёв", "Конструктор."),
+        ] {
+            let note = create(&pool, name).await;
+            put_text(&pool, &note.id, body).await;
+        }
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        let hits = search(&svc, "СЕРГЕЙ КОРОЛЁВ", SearchMode::Lexical).await;
+        assert_eq!(names(&hits).first(), Some(&"Сергей Королёв"));
+    }
+
+    // A match that falls outside the limit by bm25 still comes first if it is the name.
+    #[tokio::test]
+    async fn the_note_named_the_query_comes_first_even_beyond_the_limit() {
+        let pool = memory_pool().await;
+        for i in 0..12 {
+            let note = create(&pool, &format!("Mercury Mercury Mercury {i}")).await;
+            put_text(&pool, &note.id, "Mercury Mercury Mercury Mercury").await;
+        }
+        create(&pool, "Mercury").await;
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        let hits = svc
+            .search(Request::new(SearchRequest {
+                query: "mercury".to_string(),
+                limit: 3,
+                mode: SearchMode::Lexical as i32,
+            }))
+            .await
+            .expect("search")
+            .into_inner()
+            .hits;
+        assert_eq!(hits.len(), 3);
+        assert_eq!(names(&hits).first(), Some(&"Mercury"));
     }
 
     /// Save `content` on `entity_id` as one paragraph of `text`.
