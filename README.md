@@ -130,13 +130,49 @@ It sits behind the same local-only check as the rest of the listener.
 ## Observability
 
 The server emits OpenTelemetry logs, traces and metrics ([ADR 13](docs/adr/0013-opentelemetry-and-lgtm.md)).
-They go to whichever OTLP/gRPC collector `OTEL_EXPORTER_OTLP_ENDPOINT` names, such as a
-Grafana LGTM stack (Loki, Tempo, Prometheus, Grafana).
+The base infrastructure that receives them, Grafana LGTM, runs in Docker Desktop's
+Kubernetes; the server itself runs natively during development and exports to it on
+localhost.
+
+Once per machine:
+
+1. Enable Kubernetes in Docker Desktop (Settings → Kubernetes).
+2. Apply the infra (`deploy/k8s/infra`, a kustomization):
+
+```bash
+kubectl --context docker-desktop apply -k deploy/k8s/infra
+```
+
+```bash
+kubectl --context docker-desktop -n calcifer-infra rollout status deploy/lgtm
+```
+
+Docker Desktop publishes the infra's ports on every interface, so Grafana (`admin` /
+`admin`) and OTLP are reachable from your local network too, not just this machine. Use
+it on a network you trust until that's settled (ADR 14, open question). Keep Docker
+Desktop's "Port binding behavior" on its default: with "Localhost only" its Kubernetes
+load balancer can't start.
+
+Then point the server at it by uncommenting `OTEL_EXPORTER_OTLP_ENDPOINT` in
+`server/.env` (see `server/.env.example`), and run `scripts/calcifer` or
+`scripts/calcifer dev` as usual. To remove the infra, data included:
+
+```bash
+kubectl --context docker-desktop delete -k deploy/k8s/infra
+```
+
+Grafana is on http://localhost:3000 (`admin` / `admin`) and opens on the provisioned
+**Calcifer** dashboard: RPC, MCP and HTTP rates, latencies and errors, the embed queue,
+Watch streams, the SQLite pool, warnings and errors, and recent traces. Explore
+covers the rest (Tempo for traces, Loki for logs, Prometheus for metrics). Its data
+lives on a persistent volume. The dashboard is `deploy/k8s/infra/dashboards/`;
+re-apply after editing it.
 
 Settings:
 
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: where to export over OTLP/gRPC. Unset, nothing is
-  exported and the server only logs to stdout.
+  exported and the server only logs to stdout. The infra listens on
+  `http://localhost:4317`.
 - `OTEL_SERVICE_NAME` (default `calcifer-server`) and the other standard `OTEL_*`
   variables, such as `OTEL_METRIC_EXPORT_INTERVAL` (default 60s).
 - `RUST_LOG` (default `info`) filters stdout and the exported logs and spans.

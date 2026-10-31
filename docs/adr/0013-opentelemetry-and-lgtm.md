@@ -14,8 +14,10 @@ start with adding print statements.
 ## Decision
 
 **The server emits OpenTelemetry logs, traces and metrics, exported over OTLP/gRPC when
-`OTEL_EXPORTER_OTLP_ENDPOINT` is set, and they're viewed in Grafana LGTM (Loki, Tempo,
-Prometheus, Grafana).**
+`OTEL_EXPORTER_OTLP_ENDPOINT` is set, to a `grafana/otel-lgtm` deployment (Loki, Tempo,
+Prometheus, Grafana) in Docker Desktop's Kubernetes, reached on localhost
+(`deploy/k8s/infra`). The cluster holds the base infrastructure; during development the
+server runs natively and exports to it.**
 
 1. **`tracing` stays the one API in our code.** `tracing-opentelemetry` turns its spans
    into OTEL spans, `opentelemetry-appender-tracing` turns its events into OTEL log

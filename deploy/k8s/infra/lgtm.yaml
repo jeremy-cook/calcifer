@@ -1,0 +1,95 @@
+# grafana/otel-lgtm: one pod with the OTLP collector, Loki, Tempo, Prometheus
+# and Grafana. Its data lives on a volume, so it survives a restart.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lgtm-data
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lgtm
+  labels:
+    app: lgtm
+spec:
+  replicas: 1
+  # The volume is ReadWriteOnce: the old pod must let go before the new one starts.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: lgtm
+  template:
+    metadata:
+      labels:
+        app: lgtm
+    spec:
+      containers:
+        - name: lgtm
+          image: grafana/otel-lgtm:0.36.0
+          ports:
+            - name: grafana
+              containerPort: 3000
+            - name: otlp-grpc
+              containerPort: 4317
+          env:
+            - name: GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH
+              value: /otel-lgtm/grafana/conf/provisioning/dashboards/calcifer/calcifer.json
+          # The image writes /tmp/ready once every component is up.
+          readinessProbe:
+            exec:
+              command: [cat, /tmp/ready]
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: dashboards
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/calcifer
+              readOnly: true
+            - name: provisioning
+              mountPath: /otel-lgtm/grafana/conf/provisioning/dashboards/calcifer.yaml
+              subPath: provisioning.yaml
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: lgtm-data
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+            items:
+              - key: calcifer.json
+                path: calcifer.json
+        - name: provisioning
+          configMap:
+            name: grafana-dashboards
+---
+# Docker Desktop publishes a LoadBalancer Service's ports on the host, which is
+# how the natively run server and the browser reach them on localhost. It binds
+# every interface, so they are reachable from the network too; keeping them on
+# this machine is still open (ADR 14). OTLP over HTTP (4318) isn't published:
+# the server exports over gRPC.
+apiVersion: v1
+kind: Service
+metadata:
+  name: lgtm
+spec:
+  type: LoadBalancer
+  selector:
+    app: lgtm
+  ports:
+    - name: grafana
+      port: 3000
+      targetPort: grafana
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc

@@ -1,0 +1,21 @@
+# The base infrastructure Calcifer runs against, for Docker Desktop's
+# Kubernetes: Grafana LGTM (Loki, Tempo, Prometheus, Grafana, and an OTLP
+# collector). During development the server runs natively and exports to it on
+# localhost (ADR 13).
+#
+#   kubectl --context docker-desktop apply -k deploy/k8s/infra
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: calcifer-infra
+
+resources:
+  - namespace.yaml
+  - lgtm.yaml
+
+# The provisioned dashboard. A change gets a new name, which rolls the pod.
+configMapGenerator:
+  - name: grafana-dashboards
+    files:
+      - dashboards/calcifer.json
+      - dashboards/provisioning.yaml
