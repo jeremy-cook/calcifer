@@ -8,7 +8,8 @@
 #
 # Environment: CALCIFER_ADDR (default 127.0.0.1:8080), CALCIFER_MCP_ADDR (default
 # 127.0.0.1:8081), CALCIFER_UI_DIR,
-# DATABASE_URL (default sqlite://./calcifer.db, a file in server/). A node older
+# DATABASE_URL (default sqlite://./calcifer.db, a file in server/), RUST_LOG
+# (default info), OTEL_EXPORTER_OTLP_ENDPOINT (unset: no export). A node older
 # than 18 on PATH is replaced by the newest one nvm has installed.
 set -euo pipefail
 

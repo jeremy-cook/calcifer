@@ -84,7 +84,8 @@ pub fn spawn(pool: SqlitePool) -> EmbedHandle {
         Ok(e) => Arc::new(e) as Arc<dyn Embedder>,
         Err(e) => {
             tracing::warn!(
-                "semantic embeddings disabled: {e}. Semantic and hybrid search fall back to lexical."
+                error = %e,
+                "semantic embeddings disabled; semantic and hybrid search fall back to lexical"
             );
             return EmbedHandle::disabled();
         }
@@ -92,7 +93,11 @@ pub fn spawn(pool: SqlitePool) -> EmbedHandle {
 
     let (tx, rx) = mpsc::unbounded_channel::<String>();
     tokio::spawn(run(pool, rx, embedder.clone()));
-    tracing::info!("semantic embed worker started (local all-MiniLM-L6-v2, 384-d)");
+    tracing::info!(
+        model = "all-MiniLM-L6-v2",
+        dim = EMBED_DIM,
+        "semantic embed worker started"
+    );
 
     EmbedHandle {
         inner: Some(Arc::new(HandleInner { tx, embedder })),
@@ -104,7 +109,7 @@ pub fn spawn(pool: SqlitePool) -> EmbedHandle {
 async fn run(pool: SqlitePool, mut rx: UnboundedReceiver<String>, embedder: Arc<dyn Embedder>) {
     while let Some(entity_id) = rx.recv().await {
         if let Err(e) = reembed_entity(&pool, &embedder, &entity_id).await {
-            tracing::warn!("embed failed for entity {entity_id}: {e}");
+            tracing::warn!(entity_id = %entity_id, error = %e, "embed failed");
         }
     }
 }

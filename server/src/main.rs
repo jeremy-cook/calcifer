@@ -6,11 +6,14 @@
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
+use futures::FutureExt;
 use tonic::service::Routes;
 use tower::Layer;
 use tower_http::services::{ServeDir, ServeFile};
 
+mod boot;
 mod dates;
 mod db;
 mod embed;
@@ -20,6 +23,7 @@ mod mcp;
 mod security;
 mod services;
 mod structures;
+mod telemetry;
 #[cfg(test)]
 mod test_support;
 mod tiptap;
@@ -44,6 +48,10 @@ const DEFAULT_MCP_ADDR: &str = "127.0.0.1:8081";
 /// directory, unless `CALCIFER_UI_DIR` says otherwise.
 const DEFAULT_UI_DIR: &str = "../web/dist";
 
+/// How long shutdown waits for open requests, such as a browser tab's
+/// `WatchEntities` stream, which never ends on its own.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(5);
+
 /// The built UI with client-side routing: any path that isn't a file is
 /// answered with `index.html`, so a deep link like `/e/<id>` loads the app.
 /// `None` when there is no build, which leaves the API and MCP running alone.
@@ -51,8 +59,8 @@ fn ui_service(dir: PathBuf) -> Option<ServeDir<ServeFile>> {
     let index = dir.join("index.html");
     if !index.is_file() {
         tracing::warn!(
-            "no UI build at {} (run `pnpm build` in web/, or set CALCIFER_UI_DIR); serving the API and MCP only",
-            dir.display()
+            ui_dir = %dir.display(),
+            "no UI build (run `pnpm build` in web/, or set CALCIFER_UI_DIR); serving the API and MCP only"
         );
         return None;
     }
@@ -61,12 +69,22 @@ fn ui_service(dir: PathBuf) -> Option<ServeDir<ServeFile>> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
-
+    // .env may set OTEL_EXPORTER_OTLP_ENDPOINT, so read it first.
     dotenvy::dotenv().ok();
+    let telemetry = boot::Telemetry::start()?;
+    // Everything below records on this meter, handed down explicitly.
+    let meter = telemetry.meter();
+
     let database_url = std::env::var("DATABASE_URL")?;
     let pool = db::connect(&database_url).await?;
+    telemetry::metrics::observe_pool(&meter, &pool);
     let hub = WatchHub::new();
+    let (subscribers, revision) = (hub.clone(), hub.clone());
+    telemetry::metrics::observe_watch(
+        &meter,
+        move || subscribers.subscriber_count() as u64,
+        move || revision.current_revision(),
+    );
     // Background embed worker (M8): loads the local model and drains the embed
     // queue. A disabled handle (model unavailable) keeps the server lexical-only.
     let embed = embed::spawn(pool.clone());
@@ -98,15 +116,51 @@ async fn main() -> anyhow::Result<()> {
 
     let app_listener = tokio::net::TcpListener::bind(app_addr).await?;
     let mcp_listener = tokio::net::TcpListener::bind(mcp_addr).await?;
-    tracing::info!("UI and API listening on {}", app_addr);
-    tracing::info!("MCP listening on {}", mcp_addr);
-    // Either server ending (it only does on error) takes the process down.
-    tokio::try_join!(
-        axum::serve(app_listener, app),
-        axum::serve(mcp_listener, mcp)
-    )?;
+    tracing::info!(addr = %app_addr, "UI and API listening");
+    tracing::info!(addr = %mcp_addr, "MCP listening");
 
-    Ok(())
+    // Ctrl-C or SIGTERM stops both listeners, waits up to SHUTDOWN_GRACE for open
+    // requests, then flushes telemetry. Either server ending on its own (it
+    // only does on error) takes the process down.
+    let shutdown = async {
+        stop_signal().await;
+        tracing::info!("shutting down");
+    }
+    .shared();
+    let serving = async {
+        tokio::try_join!(
+            axum::serve(app_listener, app).with_graceful_shutdown(shutdown.clone()),
+            axum::serve(mcp_listener, mcp).with_graceful_shutdown(shutdown.clone()),
+        )
+    };
+    let grace = async {
+        shutdown.clone().await;
+        tokio::time::sleep(SHUTDOWN_GRACE).await;
+    };
+    let served = tokio::select! {
+        served = serving => served.map(|_| ()),
+        () = grace => Ok(()),
+    };
+    telemetry.shutdown();
+    Ok(served?)
+}
+
+/// Ctrl-C, or SIGTERM (what `scripts/calcifer dev` stops the server with).
+async fn stop_signal() {
+    let mut terminate =
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+    let terminated = async {
+        match terminate.as_mut() {
+            Some(signal) => {
+                signal.recv().await;
+            }
+            None => std::future::pending().await,
+        }
+    };
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        () = terminated => {}
+    }
 }
 
 /// gRPC-Web for the browser (GrpcWebLayer lets it speak over HTTP/1.1). A path

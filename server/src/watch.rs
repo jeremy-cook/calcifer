@@ -62,6 +62,11 @@ impl WatchHub {
         *self.revision.lock().expect("watch revision lock")
     }
 
+    /// How many `WatchEntities` streams are open.
+    pub fn subscriber_count(&self) -> usize {
+        self.tx.receiver_count()
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<WatchEntitiesResponse> {
         self.tx.subscribe()
     }
