@@ -17,6 +17,7 @@ import {
 } from '@phosphor-icons/react'
 import type { SlashCommandItem } from '~/lib/tiptap-extension-slash-command'
 import { showDatePicker } from '../date/show-date-picker'
+import { insertDetails } from '../insert-details'
 import { shiftIso, todayIso } from '~/model/dates'
 
 export const SLASH_ITEMS: SlashCommandItem[] = [
@@ -84,7 +85,7 @@ export const SLASH_ITEMS: SlashCommandItem[] = [
     group: 'Text',
     icon: CaretRightIcon,
     searchTerms: ['disclosure', 'accordion', 'collapse', 'toggle', 'summary'],
-    command: ({ editor, range }) => editor.chain().focus().deleteRange(range).setDetails().run(),
+    command: ({ editor, range }) => insertDetails(editor, range),
   },
   // Headings
   {

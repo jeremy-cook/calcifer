@@ -5,6 +5,7 @@ import { Button } from '~/components/ui/button'
 import { PlusIcon, TableIcon, ImageIcon, CaretRightIcon, CheckIcon } from '@phosphor-icons/react'
 import { readFileAsDataURL } from '~/lib/tiptap-extension-resize-image'
 import { cn } from '~/lib/utils'
+import { insertDetails } from '../insert-details'
 
 type View = 'menu' | 'table' | 'image'
 
@@ -116,7 +117,7 @@ function InsertMenu({ editor, sections, close, setView }: InsertMenuProps) {
           className="flex w-full cursor-pointer items-center gap-2.5 rounded px-2.5 py-1.5 text-left text-sm hover:bg-accent"
           onClick={() => {
             if (label === 'Details') {
-              editor.chain().focus().setDetails().run()
+              insertDetails(editor)
               close()
             } else {
               setView(label.toLowerCase() as View)
