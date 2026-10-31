@@ -429,3 +429,76 @@ async fn get_note_missing_note_is_an_error() {
     }
     assert_eq!(f.entity_count().await, before, "nothing was created");
 }
+
+// I-89: the wikilink count in a write's result is the body's links, not every link.
+#[tokio::test]
+async fn write_results_count_only_the_bodys_links() {
+    let f = fixture().await;
+    f.k.create_note("Target", "", None).await.unwrap();
+    f.k.create_note("Partner", "", None).await.unwrap();
+    f.k.create_note(
+        "Tagged",
+        "See [[Target]].",
+        Some(&tag_args(&["ml", "papers"])),
+    )
+    .await
+    .unwrap();
+    f.k.link_notes("Tagged", "Partner").await.unwrap();
+    f.k.create_daily_note("2026-06-13").await.unwrap();
+
+    let appended = f.k.append_to_note("Tagged", "More.").await.unwrap();
+    assert!(appended.ends_with("now 1 wikilink(s)."), "{appended}");
+
+    let version = version(&f.k.get_note(NoteKey::Name("Tagged")).await.unwrap());
+    let edited =
+        f.k.edit_note(
+            NoteKey::Name("Tagged"),
+            1,
+            1,
+            "See [[Target]] and [[Partner]].",
+            version,
+        )
+        .await
+        .unwrap();
+    assert!(edited.ends_with("now 2 wikilink(s)."), "{edited}");
+
+    let daily =
+        f.k.append_to_daily_note("2026-06-13", "With [[Target]].")
+            .await
+            .unwrap();
+    assert!(daily.ends_with("now 1 wikilink(s)."), "{daily}");
+}
+
+#[tokio::test]
+async fn create_note_counts_only_the_tags_property_as_tags() {
+    let f = fixture().await;
+    f.k.create_note("Target", "", None).await.unwrap();
+
+    let created =
+        f.k.create_note(
+            "Tagged",
+            "See [[Target]] and #inline on 2026-06-13.",
+            Some(&tag_args(&["ml", "papers"])),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        created.contains("Wikilinks: 2 [") && created.ends_with("]; dates: 1; tags: 2."),
+        "{created}"
+    );
+}
+
+#[tokio::test]
+async fn create_note_refuses_a_blank_tag_naming_the_argument() {
+    let f = fixture().await;
+    let before = f.entity_count().await;
+
+    for tags in [&[""][..], &["ml", "  "][..]] {
+        let failure = err(f.k.create_note("New", "Body.", Some(&tag_args(tags))).await);
+        assert!(failure.contains("`tags`"), "{failure}");
+        assert!(failure.contains("nothing was written"), "{failure}");
+    }
+    assert_eq!(f.entity_count().await, before, "not even the Tag `ml`");
+    assert!(err(f.k.get_note(NoteKey::Name("New")).await).starts_with("No note named"));
+}

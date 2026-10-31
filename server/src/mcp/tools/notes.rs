@@ -36,6 +36,9 @@ impl Knowledge {
         markdown: &str,
         tags: Option<&[String]>,
     ) -> ToolResult {
+        if let Some(tags) = tags {
+            check_tag_names(tags)?;
+        }
         let exists = || {
             ToolError(format!(
                 "A note named \"{name}\" already exists; nothing was written. Use get_note, then edit_note or append_to_note to change it."
@@ -55,6 +58,7 @@ impl Knowledge {
             Some(tags) => tags.to_vec(),
             None => frontmatter_tags(markdown)?.unwrap_or_default(),
         };
+        check_tag_names(&tags)?;
         let parsed = markdown::parse(strip_frontmatter(markdown));
         if !parsed.aliases.is_empty() {
             return Err(aliased_links(&parsed.aliases));
@@ -100,6 +104,11 @@ impl Knowledge {
             .iter()
             .filter(|l| l.source_property_id == body.property_id)
             .collect();
+        let tagged = ent
+            .links
+            .iter()
+            .filter(|l| l.source_property_id == "tags")
+            .count();
         let linked = wikilinks
             .iter()
             .map(|l| l.target.as_ref().map_or("", |t| t.structure_type.as_str()))
@@ -114,7 +123,7 @@ impl Knowledge {
             ent.name,
             wikilinks.len(),
             ent.referenced_dates.len(),
-            ent.links.len() - wikilinks.len()
+            tagged
         ))
     }
 
@@ -133,17 +142,14 @@ impl Knowledge {
     pub async fn append_to_note(&self, name: &str, markdown: &str) -> ToolResult {
         let id = self.existing_note_id(name).await?;
         let addition = self.parse_markdown(markdown).await?;
-        self.append_doc(
-            &doc_ref("Note", &id)?,
-            &format!("Note \"{name}\""),
-            &addition,
-        )
-        .await?;
+        let body = doc_ref("Note", &id)?;
+        self.append_doc(&body, &format!("Note \"{name}\""), &addition)
+            .await?;
         let ent = self.entity(&id).await?;
         Ok(format!(
             "Appended to \"{}\" ({id}); now {} wikilink(s).",
             ent.name,
-            ent.links.len()
+            body.link_count(&ent)
         ))
     }
 
@@ -317,6 +323,17 @@ pub(super) fn mark_matches(snippet: &str, matches: &[MatchRange]) -> String {
         at = end;
     }
     out + &slice(at, units.len())
+}
+
+/// A blank tag name is a mistake in the `tags` argument, caught before the
+/// entity service rejects it as "name is required".
+fn check_tag_names(tags: &[String]) -> Result<(), ToolError> {
+    if tags.iter().any(|t| t.trim().is_empty()) {
+        return fail(
+            "`tags` has an empty tag name; give each tag a name or leave it out; nothing was written.",
+        );
+    }
+    Ok(())
 }
 
 /// A `tags` value naming these Tags.

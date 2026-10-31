@@ -98,35 +98,43 @@ impl Knowledge {
     /// The Note `value` names: an id when it parses as a UUID and names an
     /// existing Note, else a name matched case-insensitively over every Note.
     /// Nothing is created. Notes have no name key, so several matches is an error
-    /// that lists them for the agent to call again by id.
+    /// that lists them for the agent to call again by id. A value that names only
+    /// something else (a Tag, a day) is told only Notes can be related.
     pub(super) async fn note_by_name_or_id(&self, value: &str) -> Result<Entity, ToolError> {
         let value = value.trim();
+        let mut other: Option<String> = None;
         if uuid::Uuid::parse_str(value).is_ok() {
             match self.entity(value).await {
                 Ok(entity) if entity.structure_type == "Note" => return Ok(entity),
-                Ok(_) => {}
+                Ok(entity) => other = Some(entity.structure_type),
                 Err(e) if is_code(&e, Code::NotFound) => {}
                 Err(e) => return Err(e.into()),
             }
         }
         let req = ListEntitiesRequest {
-            structure_type: "Note".into(),
+            structure_type: String::new(),
         };
-        let notes = self
+        let entities = self
             .entity
             .list_entities(Request::new(req))
             .await?
             .into_inner()
             .entities;
         let folded = structures::fold_name(value);
-        let mut matches: Vec<Entity> = notes
+        let (notes, others): (Vec<Entity>, Vec<Entity>) = entities
             .into_iter()
             .filter(|n| structures::fold_name(&n.name) == folded)
-            .collect();
+            .partition(|n| n.structure_type == "Note");
+        let mut matches = notes;
         match matches.len() {
-            0 => fail(format!(
-                "No note named or with id \"{value}\". Use search_notes."
-            )),
+            0 => match other.or_else(|| others.into_iter().next().map(|e| e.structure_type)) {
+                Some(kind) => fail(format!(
+                    "\"{value}\" is a {kind}, not a Note; only Notes can be related."
+                )),
+                None => fail(format!(
+                    "No note named or with id \"{value}\". Use search_notes."
+                )),
+            },
             1 => Ok(matches.remove(0)),
             _ => {
                 let listed: Vec<String> = matches

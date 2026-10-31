@@ -43,16 +43,13 @@ impl Knowledge {
         // Links first, so a bad one doesn't leave a new, empty day behind.
         let addition = self.parse_markdown(markdown).await?;
         let (id, name, _) = self.resolve_daily_note(date).await?;
-        self.append_doc(
-            &doc_ref("DailyNote", &id)?,
-            &format!("Daily note \"{name}\""),
-            &addition,
-        )
-        .await?;
+        let body = doc_ref("DailyNote", &id)?;
+        self.append_doc(&body, &format!("Daily note \"{name}\""), &addition)
+            .await?;
         let ent = self.entity(&id).await?;
         Ok(format!(
             "Appended to daily note \"{name}\" ({id}); now {} wikilink(s).",
-            ent.links.len()
+            body.link_count(&ent)
         ))
     }
 }

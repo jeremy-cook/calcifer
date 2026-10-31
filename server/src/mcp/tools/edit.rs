@@ -191,7 +191,7 @@ impl Knowledge {
             "{action} of {} ({}); now {} wikilink(s).",
             found.label(),
             found.id,
-            ent.links.len()
+            r.link_count(&ent)
         ))
     }
 }

@@ -10,7 +10,7 @@ use crate::structures::{self};
 use calcifer::v1::entity_service_server::EntityService as EntityServiceTrait;
 use calcifer::v1::rich_text_service_server::RichTextService as RichTextServiceTrait;
 use calcifer::v1::{
-    resolve_entity_request, GetRichTextRequest, PutRichTextRequest, ResolveEntityRequest,
+    resolve_entity_request, Entity, GetRichTextRequest, PutRichTextRequest, ResolveEntityRequest,
     ResolveEntityResponse,
 };
 
@@ -56,6 +56,18 @@ pub(super) fn aliased_links(aliases: &[String]) -> ToolError {
 pub(in crate::mcp) struct DocRef {
     pub(super) entity_id: String,
     pub(super) property_id: String,
+}
+
+impl DocRef {
+    /// How many of `entity`'s links come from this doc's text, not from its
+    /// tags or relationships.
+    pub(super) fn link_count(&self, entity: &Entity) -> usize {
+        entity
+            .links
+            .iter()
+            .filter(|l| l.source_property_id == self.property_id)
+            .count()
+    }
 }
 
 pub(in crate::mcp) fn doc_ref(structure_type: &str, entity_id: &str) -> Result<DocRef, ToolError> {

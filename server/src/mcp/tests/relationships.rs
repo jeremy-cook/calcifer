@@ -158,12 +158,13 @@ async fn link_notes_missing_note_is_an_error() {
             "{failure}"
         );
     }
+    // A Tag exists, so the reason isn't a missing note (see relating_a_non_note_says_only_notes_relate).
     assert!(
-        err(f.k.link_notes("A", &tag).await).starts_with("No note named or with id"),
+        err(f.k.link_notes("A", &tag).await).contains("only Notes can be related"),
         "the id of a Tag isn't a note's"
     );
     assert!(
-        err(f.k.link_notes("A", "ml").await).starts_with("No note named or with id"),
+        err(f.k.link_notes("A", "ml").await).contains("only Notes can be related"),
         "a Tag's name isn't a note's"
     );
     assert_eq!(f.entity_count().await, before, "nothing is created");
@@ -232,4 +233,37 @@ async fn create_note_ignores_frontmatter_related() {
         1,
         "the original keeps its relationship"
     );
+}
+
+// I-89: a name that belongs to a Tag or a day is not "no note named".
+#[tokio::test]
+async fn relating_a_non_note_says_only_notes_relate() {
+    let f = fixture().await;
+    f.k.create_note("A", "", None).await.unwrap();
+    f.create("Tag", "ship").await;
+    f.k.create_daily_note("2026-06-13").await.unwrap();
+    let tag = tag_id(&f, "ship").await;
+
+    for (value, kind) in [
+        ("ship", "Tag"),
+        ("SHIP", "Tag"),
+        (tag.as_str(), "Tag"),
+        ("June 13, 2026", "DailyNote"),
+    ] {
+        for failure in [
+            err(f.k.link_notes("A", value).await),
+            err(f.k.link_notes(value, "A").await),
+            err(f.k.unlink_notes("A", value).await),
+        ] {
+            assert!(
+                failure.contains(&format!("is a {kind}, not a Note"))
+                    && failure.contains("only Notes can be related"),
+                "{value}: {failure}"
+            );
+            assert!(!failure.contains("No note named"), "{value}: {failure}");
+        }
+    }
+    // A name nothing has is still "no note".
+    let missing = err(f.k.link_notes("A", "Ghost").await);
+    assert!(missing.starts_with("No note named or with id"), "{missing}");
 }
