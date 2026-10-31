@@ -36,6 +36,22 @@ pub(super) fn unknown_targets(missing: &[&Reference]) -> ToolError {
     ))
 }
 
+/// What a write that uses `[[Name|label]]` tells the agent: aliases aren't
+/// supported, and what to write instead.
+pub(super) fn aliased_links(aliases: &[String]) -> ToolError {
+    let fixes: Vec<String> = aliases
+        .iter()
+        .map(|alias| {
+            let name = alias[2..alias.len() - 2].split('|').next().unwrap_or("");
+            format!("{alias} (write [[{}]])", name.trim())
+        })
+        .collect();
+    ToolError(format!(
+        "Nothing was written: aliases aren't supported, so [[Name|label]] can't be used: {}. A link is always shown by its target's name; put any other words in the text around it.",
+        fixes.join(", ")
+    ))
+}
+
 /// The body doc of an entity: its structure's first declared rich-text property.
 pub(in crate::mcp) struct DocRef {
     pub(super) entity_id: String,
@@ -109,6 +125,9 @@ impl Knowledge {
     /// doesn't exist fails the whole write, so nothing is saved half-linked.
     pub(super) async fn parse_markdown(&self, markdown: &str) -> Result<Value, ToolError> {
         let parsed = markdown::parse(markdown);
+        if !parsed.aliases.is_empty() {
+            return Err(aliased_links(&parsed.aliases));
+        }
         let (ids, missing) = self.resolve_references(&parsed.references).await?;
         if !missing.is_empty() {
             return Err(unknown_targets(&missing));

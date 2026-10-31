@@ -4,9 +4,10 @@
 //! `RichTextService.PutRichText` derives the graph. `block_markdown` goes the
 //! other way, writing each chip from its target's current name.
 //!
-//! [[Name]] and [[Name|label]] mention a Note; [[Structure/Name]] mentions
-//! another structure when Structure is exactly a registry type (e.g.
-//! [[Tag/ship]]). Emphasis (`**bold**`, `*italic*`), `~~strike~~`, inline
+//! [[Name]] mentions a Note; [[Structure/Name]] mentions another structure when
+//! Structure is exactly a registry type (e.g. [[Tag/ship]]). [[Name|label]] is
+//! read but reported in `Parsed::aliases`, for the caller to refuse: a chip is
+//! always shown by its target's name. Emphasis (`**bold**`, `*italic*`), `~~strike~~`, inline
 //! `code` and `[text](href)` links become ProseMirror marks. `_` is deliberately
 //! not emphasis, so snake_case survives. `\X` is a literal X (for punctuation or
 //! a digit), and text that would read as syntax is written escaped, so markdown
@@ -104,6 +105,9 @@ pub struct Parsed {
     doc: Value,
     /// Each distinct (structure, name) the markdown refers to.
     pub references: Vec<Reference>,
+    /// Each distinct `[[Name|label]]` link as written. Aliases aren't a feature,
+    /// so a caller refuses markdown that has any rather than save the doc.
+    pub aliases: Vec<String>,
 }
 
 pub fn parse(markdown: &str) -> Parsed {
@@ -129,12 +133,21 @@ pub fn parse(markdown: &str) -> Parsed {
             return;
         };
         let target = split_structure_prefix(raw);
-        let aliased = attrs.remove("_aliased") == Some(Value::Bool(true));
         attrs.insert("structureType".into(), target.structure_type.into());
         attrs.insert("_name".into(), target.name.clone().into());
-        // An unaliased [[Tag/ship]] is labelled "ship", not the prefixed text.
-        if !aliased {
-            attrs.insert("label".into(), target.name.into());
+        // [[Tag/ship]] is labelled "ship", not the prefixed text.
+        attrs.insert("label".into(), target.name.into());
+    });
+
+    let mut aliases: Vec<String> = Vec::new();
+    walk_mut(&mut doc, &mut |n| {
+        let Some(attrs) = n.get_mut("attrs").and_then(Value::as_object_mut) else {
+            return;
+        };
+        if let Some(Value::String(alias)) = attrs.remove("_alias") {
+            if !aliases.contains(&alias) {
+                aliases.push(alias);
+            }
         }
     });
 
@@ -154,7 +167,11 @@ pub fn parse(markdown: &str) -> Parsed {
             references.push(reference);
         }
     });
-    Parsed { doc, references }
+    Parsed {
+        doc,
+        references,
+        aliases,
+    }
 }
 
 impl Parsed {

@@ -222,7 +222,8 @@ pub(super) fn date_at(text: &str) -> Option<&str> {
 
 /// Splits a text run into marked text, mention, hashtag, dateChip and hardBreak
 /// nodes; a `\n` is a hard break (see `join_lines`). mention and hashtag carry a
-/// temporary `_name` attr that `Parsed::resolve` turns into an id. `\X` is a
+/// temporary `_name` attr that `Parsed::resolve` turns into an id; a mention
+/// written `[[Name|label]]` also carries `_alias`. `\X` is a
 /// literal X. Inline code is verbatim: no chips, escapes or emphasis inside it.
 /// A link's text is parsed like any other run, but holds no link of its own.
 pub(super) fn parse_inline(text: &str, marks: &[Mark]) -> Vec<Value> {
@@ -269,7 +270,9 @@ pub(super) fn parse_inline(text: &str, marks: &[Mark]) -> Vec<Value> {
                         "type": "mention",
                         "attrs": {
                             "id": "", "label": label, "structureType": "Note", "char": "@",
-                            "_name": name, "_aliased": pipe.is_some(),
+                            "_name": name,
+                            // The link as written, for `Parsed::aliases`.
+                            "_alias": pipe.map(|_| &rest[..2 + end + 2]),
                         },
                     }));
                     i += 2 + end + 2;

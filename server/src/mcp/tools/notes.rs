@@ -15,7 +15,7 @@ use calcifer::v1::{
     SearchRequest,
 };
 
-use super::doc::{doc_ref, unknown_targets};
+use super::doc::{aliased_links, doc_ref, unknown_targets};
 use super::edit::{frontmatter_tags, strip_frontmatter};
 use super::{fail, is_code, timestamp_ms, Knowledge, NoteKey, ToolError, ToolResult};
 
@@ -56,6 +56,9 @@ impl Knowledge {
             None => frontmatter_tags(markdown)?.unwrap_or_default(),
         };
         let parsed = markdown::parse(strip_frontmatter(markdown));
+        if !parsed.aliases.is_empty() {
+            return Err(aliased_links(&parsed.aliases));
+        }
         let (mut ids, missing) = self.resolve_references(&parsed.references).await?;
         let own_key = Reference {
             structure_type: "Note".into(),

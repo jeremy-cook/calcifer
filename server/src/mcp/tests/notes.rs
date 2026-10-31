@@ -95,7 +95,7 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
     f.k.create_daily_note("2026-06-13").await.unwrap();
     f.k.create_note("RT Note", "", None).await.unwrap();
     f.k.create_note("RT Alias", "", None).await.unwrap();
-    let md = "Uses [[RT Note]] and [[RT Alias|the alias]]. #rt\n\n- do [[Tag/ship]] on [[DailyNote/June 13, 2026]]";
+    let md = "Uses [[RT Note]] and [[RT Alias]]. #rt\n\n- do [[Tag/ship]] on [[DailyNote/June 13, 2026]]";
     let tags = ["rt-a".to_string(), "rt-b".to_string()];
     f.k.create_note("Round Trip", md, Some(&tags))
         .await
@@ -116,7 +116,7 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
         "{note}"
     );
     assert!(
-        note.contains("[[RT Alias]]") && !note.contains("the alias") && note.contains("#rt"),
+        note.contains("[[RT Alias]]") && note.contains("#rt"),
         "{note}"
     );
     assert!(
@@ -320,6 +320,59 @@ async fn a_link_to_a_missing_target_fails_the_write_and_creates_nothing() {
         "Body."
     );
     assert!(err(f.k.get_note(NoteKey::Name("New")).await).starts_with("No note named"));
+}
+
+// I-84: `[[Name|label]]` is no feature; the write is refused and says so.
+#[tokio::test]
+async fn an_aliased_link_is_refused_by_every_write_tool() {
+    let f = fixture().await;
+    f.k.create_note("Existing", "Body.", None).await.unwrap();
+    f.k.create_note("Apollo 11", "", None).await.unwrap();
+    let before = f.entity_count().await;
+    let existing = f.k.get_note(NoteKey::Name("Existing")).await.unwrap();
+    let md = "Landed: [[Apollo 11|the first landing]]. Also `[[X|y]]`.";
+    for failure in [
+        err(f.k.create_note("New", md, None).await),
+        err(f.k.append_to_note("Existing", md).await),
+        err(f.k.append_to_daily_note("2026-06-13", md).await),
+        err(f
+            .k
+            .edit_note(NoteKey::Name("Existing"), 1, 1, md, version(&existing))
+            .await),
+    ] {
+        assert!(failure.starts_with("Nothing was written: "), "{failure}");
+        assert!(
+            failure.contains("[[Apollo 11|the first landing]]")
+                && failure.contains("aliases aren't supported")
+                && failure.contains("[[Apollo 11]]"),
+            "{failure}"
+        );
+        assert!(!failure.contains("X|y"), "{failure}");
+    }
+    assert_eq!(f.entity_count().await, before, "not even the day");
+    assert_eq!(
+        f.k.get_note(NoteKey::Name("Existing")).await.unwrap(),
+        existing
+    );
+    assert!(err(f.k.get_note(NoteKey::Name("New")).await).starts_with("No note named"));
+}
+
+#[tokio::test]
+async fn a_pipe_in_code_is_not_an_alias() {
+    let f = fixture().await;
+    f.k.create_note("Apollo 11", "", None).await.unwrap();
+    f.k.create_note(
+        "Code",
+        "Inline `[[Apollo 11|x]]` here.\n\n```\n[[Apollo 11|y]]\n```\n\nA | B and [[Apollo 11]].",
+        None,
+    )
+    .await
+    .unwrap();
+
+    let note = f.k.get_note(NoteKey::Name("Code")).await.unwrap();
+
+    assert!(body(&note).contains("`[[Apollo 11|x]]`"), "{note}");
+    assert!(body(&note).contains("[[Apollo 11|y]]\n```"), "{note}");
 }
 
 #[tokio::test]

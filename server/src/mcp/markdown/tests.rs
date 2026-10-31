@@ -313,10 +313,23 @@ fn structure_prefix_targets_only_registry_types() {
 }
 
 #[test]
-fn alias_is_accepted_but_written_from_the_target_name() {
-    let aliased = to_tt("See [[Attention|attn]].");
-    assert_eq!(chips(&aliased)[0]["id"], "Note:Attention");
-    assert_eq!(to_md(&aliased), "See [[Attention]].");
+fn an_aliased_link_is_reported_as_written() {
+    let parsed =
+        parse("See [[Attention|attn]] and [[Tag/ship | the ship]], [[Attention|attn]] again.");
+    assert_eq!(
+        parsed.aliases,
+        ["[[Attention|attn]]", "[[Tag/ship | the ship]]"]
+    );
+    assert!(parse("See [[Attention]], [[|x]] and a | b.")
+        .aliases
+        .is_empty());
+}
+
+#[test]
+fn a_pipe_in_code_is_not_an_alias() {
+    assert!(parse("`[[A|b]]` and\n\n```\n[[A|b]]\n```")
+        .aliases
+        .is_empty());
 }
 
 #[test]
