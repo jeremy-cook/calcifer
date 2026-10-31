@@ -15,10 +15,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The descriptor set, for the server's gRPC reflection.
     let descriptor = PathBuf::from(std::env::var("OUT_DIR")?).join("calcifer_descriptor.bin");
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(true)
         .build_client(false)
         .file_descriptor_set_path(descriptor)
-        .compile_protos(&protos, &[".."])?;
+        .compile_protos(&protos, &[PathBuf::from("..")])?;
     Ok(())
 }
