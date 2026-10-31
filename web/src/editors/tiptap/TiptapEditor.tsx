@@ -47,7 +47,9 @@ interface TiptapEditorProps {
   // changes after mount.
   externalDoc?: string
   externalVersion?: number
-  onUpdate?: (docJSON: JSONContent) => void
+  // `appliedVersion` is the externalVersion the content was last set from: the
+  // one mounted with, or the last one replaced in.
+  onUpdate?: (docJSON: JSONContent, appliedVersion: number | undefined) => void
   autoFocus?: boolean
   hideToolbar?: boolean
   // Rendered between the toolbar and the content, e.g. a status note.
@@ -88,11 +90,13 @@ export function TiptapEditor({
   hideToolbar,
   notice,
 }: TiptapEditorProps) {
+  // The version mounted with `doc` counts as applied.
+  const appliedVersionRef = useRef(externalVersion)
   const editor = useEditor({
     shouldRerenderOnTransaction: false,
     autofocus: autoFocus ? 'end' : false,
     content: parseDoc(doc),
-    onUpdate: ({ editor: e }) => onUpdate?.(e.getJSON()),
+    onUpdate: ({ editor: e }) => onUpdate?.(e.getJSON(), appliedVersionRef.current),
     extensions: [
       StarterKit.configure({
         codeBlock: false,
@@ -162,8 +166,6 @@ export function TiptapEditor({
     },
   })
 
-  // The version mounted with `doc` counts as applied.
-  const appliedVersionRef = useRef(externalVersion)
   useEffect(() => {
     if (!editor || externalDoc === undefined) return
     if (externalVersion === appliedVersionRef.current) return

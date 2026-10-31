@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { Timestamp } from '@bufbuild/protobuf/wkt'
 import type { JSONContent } from '@tiptap/core'
 import type { RichTextRef } from 'calcifer/v1/entities_pb'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
@@ -44,11 +45,21 @@ interface LiveRichTextEditorProps {
 }
 
 interface SyncedVersion {
-  // The server version the editor's content is based on.
+  // The server version `doc` is based on; moves up when our own save lands.
   updatedAt: RichTextState['updatedAt']
-  // The doc to push into the editor; bumping `version` pushes it.
+  // The doc to push into the editor, and to start a fresh editor from; bumping
+  // `version` pushes it into one that is open.
   doc: string
   version: number
+  // The server version this `version` was loaded at, which a save of content
+  // set from it is built on. Unlike `updatedAt` it doesn't move.
+  loadedAt: RichTextState['updatedAt']
+}
+
+// What the editor last emitted, for flushing a pending save on unmount.
+interface EditorDoc {
+  json: JSONContent
+  appliedVersion: number | undefined
 }
 
 // Keeps an open editor in step with the server: debounced conditional saves,
@@ -56,17 +67,30 @@ interface SyncedVersion {
 // edits in play, and a reload plus notice when a save loses a conflict.
 function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: LiveRichTextEditorProps) {
   const { data = initial } = useRichText(propertyRef)
-  const [synced, setSynced] = useState<SyncedVersion>({ updatedAt: initial.updatedAt, doc: initial.doc, version: 0 })
+  const [synced, setSynced] = useState<SyncedVersion>({
+    updatedAt: initial.updatedAt,
+    doc: initial.doc,
+    version: 0,
+    loadedAt: initial.updatedAt,
+  })
+  // `loadedAt` of every version pushed into the editor, so a save is built on
+  // the version the editor says its content was set from, not the newest one.
+  const loadedAtRef = useRef(new Map<number, Timestamp | undefined>())
+  useEffect(() => {
+    loadedAtRef.current.set(synced.version, synced.loadedAt)
+  }, [synced.version, synced.loadedAt])
   // True while a debounced save is waiting to fire.
   const [dirty, setDirty] = useState(false)
   const [conflicted, setConflicted] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The latest editor doc, for flushing a pending save on unmount.
-  const latestDocRef = useRef<JSONContent | null>(null)
+  const latestDocRef = useRef<EditorDoc | null>(null)
 
   const handleSaved = useCallback((saved: RichTextState) => {
-    // Our own save: the editor already shows it, so only the base moves.
-    setSynced((s) => (isNewerRichText(saved.updatedAt, s.updatedAt) ? { ...s, updatedAt: saved.updatedAt } : s))
+    // Our own save: the editor already shows it, so only the base and the doc a
+    // fresh editor would start from move, not the version.
+    setSynced((s) =>
+      isNewerRichText(saved.updatedAt, s.updatedAt) ? { ...s, updatedAt: saved.updatedAt, doc: saved.doc } : s,
+    )
   }, [])
 
   const handleConflict = useCallback((latest: RichTextState) => {
@@ -74,7 +98,12 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
     timerRef.current = null
     setDirty(false)
     setConflicted(true)
-    setSynced((s) => ({ updatedAt: latest.updatedAt, doc: latest.doc, version: s.version + 1 }))
+    setSynced((s) => ({
+      updatedAt: latest.updatedAt,
+      doc: latest.doc,
+      version: s.version + 1,
+      loadedAt: latest.updatedAt,
+    }))
   }, [])
 
   const { save, adopt, busy, unsaved } = usePutRichText(propertyRef, {
@@ -86,13 +115,22 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
   // Load a newer cached version (from Watch) only when no local save is
   // pending or in flight; otherwise the next save's conflict check covers it.
   if (!dirty && !busy && isNewerRichText(data.updatedAt, synced.updatedAt)) {
-    setSynced({ updatedAt: data.updatedAt, doc: data.doc, version: synced.version + 1 })
+    setSynced({ updatedAt: data.updatedAt, doc: data.doc, version: synced.version + 1, loadedAt: data.updatedAt })
   }
 
   // The next save expects the version now in the editor.
   useEffect(() => {
     adopt(synced.updatedAt)
   }, [adopt, synced.updatedAt])
+
+  // The doc goes out built on the version the editor's content was set from.
+  const saveEditorDoc = useCallback(
+    ({ json, appliedVersion }: EditorDoc) => {
+      const base = appliedVersion === undefined ? undefined : loadedAtRef.current.get(appliedVersion)
+      save(JSON.stringify(json), base)
+    },
+    [save],
+  )
 
   // Leaving with a debounced save pending (e.g. navigating to another day)
   // sends it now, so the text isn't lost and a pending prune can wait for it.
@@ -101,13 +139,14 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
       if (!timerRef.current || !latestDocRef.current) return
       clearTimeout(timerRef.current)
       timerRef.current = null
-      save(JSON.stringify(latestDocRef.current))
+      saveEditorDoc(latestDocRef.current)
     }
-  }, [save])
+  }, [saveEditorDoc])
 
   const handleUpdate = useCallback(
-    (json: JSONContent) => {
-      latestDocRef.current = json
+    (json: JSONContent, appliedVersion: number | undefined) => {
+      const edited = { json, appliedVersion }
+      latestDocRef.current = edited
       setConflicted(false)
       setDirty(true)
       if (timerRef.current) clearTimeout(timerRef.current)
@@ -115,10 +154,10 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
         timerRef.current = null
         setDirty(false)
         // Link/date derivation happens server-side inside Put — the FE just saves the doc.
-        save(JSON.stringify(json))
+        saveEditorDoc(edited)
       }, RICHTEXT_DEBOUNCE_MS)
     },
-    [save],
+    [saveEditorDoc],
   )
 
   // A save being retried comes first; a conflict ends the retrying and takes its place.
@@ -136,7 +175,7 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
 
   return (
     <TiptapEditor
-      doc={initial.doc}
+      doc={synced.doc}
       externalDoc={synced.doc}
       externalVersion={synced.version}
       onUpdate={handleUpdate}

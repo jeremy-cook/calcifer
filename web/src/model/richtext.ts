@@ -144,13 +144,16 @@ export interface UsePutRichTextOptions {
 }
 
 export interface RichTextSaver {
-  // Queue a save of `doc`. Saves are serialised: while one is in flight only
-  // the latest queued doc is kept, and it goes out once the in-flight one
-  // resolves, expecting the version that one produced. A save that fails is
-  // retried with backoff until it lands (see `usePutRichText`).
-  save: (doc: string) => void
+  // Queue a save of `doc`, built on the server version `base` (the saver's own
+  // latest if omitted). Saves are serialised: while one is in flight only the
+  // latest queued doc is kept, with its base, and it goes out once the in-flight
+  // one resolves. It expects the newer of its base and the version this saver's
+  // own Puts produced, so a doc built on a version before an outside change
+  // conflicts instead of landing. A save that fails is retried with backoff
+  // until it lands (see `usePutRichText`).
+  save: (doc: string, base?: Timestamp) => void
   // The caller's content now reflects `updatedAt` (e.g. an outside change was
-  // loaded into the editor), so the next save expects it.
+  // loaded into the editor), so a save that doesn't name its base expects it.
   adopt: (updatedAt: Timestamp | undefined) => void
   // True while a Put is in flight or a doc is queued behind one.
   busy: boolean
@@ -159,11 +162,20 @@ export interface RichTextSaver {
   unsaved: boolean
 }
 
-interface SaveQueue {
-  // The version the next Put expects (`expected_updated_at`).
+// A doc waiting to be sent and the server version it was built on.
+interface PendingSave {
+  doc: string
   base: Timestamp | undefined
+}
+
+interface SaveQueue {
+  // The version a save that names no base is built on.
+  base: Timestamp | undefined
+  // The newest version this saver's own Puts produced. A doc built on an older
+  // version of the same editor content expects this, not the older one.
+  ownBase: Timestamp | undefined
   inFlight: boolean
-  pending: string | null
+  pending: PendingSave | null
   // Failed attempts in a row, for the backoff. Zero after a save lands or is given up on.
   failures: number
 }
@@ -181,17 +193,26 @@ interface SaveTarget {
 // latest version reloaded.
 type SaveOutcome = 'saved' | 'retry' | 'dropped' | 'conflict'
 
-async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict }: SaveTarget): Promise<SaveOutcome> {
+function newerOf(a: Timestamp | undefined, b: Timestamp | undefined): Timestamp | undefined {
+  return isNewerRichText(b, a) ? b : a
+}
+
+async function putOnce(
+  queue: SaveQueue,
+  sent: PendingSave,
+  { ref, onSaved, onConflict }: SaveTarget,
+): Promise<SaveOutcome> {
   try {
     const saved = requireRichText(
       await richTextClient.putRichText({
         entityId: ref.entityId,
         propertyId: ref.propertyId,
-        doc,
-        expectedUpdatedAt: queue.base ?? EPOCH,
+        doc: sent.doc,
+        expectedUpdatedAt: newerOf(sent.base, queue.ownBase) ?? EPOCH,
       }),
     )
     queue.base = saved.updatedAt
+    queue.ownBase = saved.updatedAt
     queue.failures = 0
     writeRichTextIfNewer(saved)
     // Put also changed the entity's links, referenced_dates and updated_at on
@@ -208,7 +229,7 @@ async function putOnce(queue: SaveQueue, doc: string, { ref, onSaved, onConflict
     }
     if (isRetryable(err)) {
       // Keep the doc unless a newer one was queued while this Put was in flight.
-      queue.pending ??= doc
+      queue.pending ??= sent
       queue.failures += 1
       return 'retry'
     }
@@ -267,8 +288,8 @@ export function whenRichTextSaved(ref: RichTextRef): Promise<void> {
 }
 
 // Conditional saves for one rich-text doc. Each Put sends `expected_updated_at`
-// = the version the content is based on (the epoch if nothing is saved), so a
-// save built on a stale version fails instead of overwriting an outside change.
+// = the version its doc is built on (the epoch if nothing is saved), so a save
+// built on a stale version fails instead of overwriting an outside change.
 // A Put that fails for a reason that may pass (the server is unreachable, say)
 // is retried forever, backing off 1 s doubling to 30 s and going at once when
 // the Watch stream turns live, always with the newest queued doc. The doc keeps
@@ -280,16 +301,22 @@ export function usePutRichText(
 ): RichTextSaver {
   const [busy, setBusy] = useState(false)
   const [unsaved, setUnsaved] = useState(false)
-  const queueRef = useRef<SaveQueue>({ base: initialBase, inFlight: false, pending: null, failures: 0 })
+  const queueRef = useRef<SaveQueue>({
+    base: initialBase,
+    ownBase: undefined,
+    inFlight: false,
+    pending: null,
+    failures: 0,
+  })
   // Latest ref and callbacks without re-creating `save` on every render.
   const targetRef = useRef<SaveTarget>({ ref, onSaved, onConflict })
   useEffect(() => {
     targetRef.current = { ref, onSaved, onConflict }
   })
 
-  const save = useCallback((doc: string) => {
+  const save = useCallback((doc: string, base?: Timestamp) => {
     const queue = queueRef.current
-    queue.pending = doc
+    queue.pending = { doc, base: base ?? queue.base }
     if (queue.inFlight) return
     queue.inFlight = true
     setBusy(true)
