@@ -98,8 +98,9 @@ async fn json_rpc_speaks_mcp() {
         INVALID_PARAMS
     );
     assert_eq!(
-        call("get_note", json!({ "name": 5 })).await.unwrap()["error"]["code"],
-        INVALID_PARAMS
+        call("get_note", json!({ "name": 5 })).await.unwrap()["result"]["isError"],
+        true,
+        "arguments that don't fit are a failed tool the agent can read"
     );
     let start_zero = call(
         "edit_note",
@@ -119,6 +120,71 @@ async fn json_rpc_speaks_mcp() {
             .unwrap()["error"]["code"],
         METHOD_NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn every_tool_refuses_an_unknown_argument() {
+    let f = fixture().await;
+    let call = |name: &str, arguments: Value| {
+        handle_message(
+            &f.k,
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } }),
+        )
+    };
+    f.k.create_note("A", "Body.", None).await.unwrap();
+    f.k.create_note("B", "", None).await.unwrap();
+
+    // Each tool with arguments that would succeed, so only the extra one is wrong.
+    let valid = [
+        ("search_notes", json!({ "query": "Body" })),
+        ("get_note", json!({ "name": "A" })),
+        (
+            "query_text_location",
+            json!({ "name": "A", "query": "Body" }),
+        ),
+        (
+            "edit_note",
+            json!({ "name": "A", "start": 1, "end": 1, "markdown": "New.", "version": 0 }),
+        ),
+        ("create_note", json!({ "name": "C", "markdown": "" })),
+        (
+            "append_to_note",
+            json!({ "name": "A", "markdown": "More." }),
+        ),
+        ("tag_entity", json!({ "name": "A", "add": ["ml"] })),
+        ("link_notes", json!({ "from": "A", "to": "B" })),
+        ("unlink_notes", json!({ "from": "A", "to": "B" })),
+        ("get_backlinks", json!({ "name": "A" })),
+        ("create_daily_note", json!({ "date": "2026-06-13" })),
+        (
+            "append_to_daily_note",
+            json!({ "date": "2026-06-13", "markdown": "Hi." }),
+        ),
+        ("list_structures", json!({})),
+    ];
+    let defined: Vec<String> = tool_definitions()
+        .iter()
+        .map(|t| t["name"].as_str().unwrap().to_string())
+        .collect();
+    let covered: Vec<&str> = valid.iter().map(|(name, _)| *name).collect();
+    assert_eq!(covered, defined, "a tool is missing from this test");
+
+    for (name, mut arguments) in valid {
+        let accepted = call(name, arguments.clone()).await.unwrap();
+        // `edit_note` and the like may fail for their own reasons, but never on the arguments.
+        let text = accepted["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(!text.contains("invalid arguments"), "{name}: {accepted}");
+        arguments["content"] = json!("typo for markdown");
+
+        let refused = call(name, arguments).await.unwrap();
+        assert_eq!(refused["result"]["isError"], true, "{name}: {refused}");
+        let text = refused["result"]["content"][0]["text"].as_str().unwrap();
+        assert!(
+            text.starts_with(&format!("invalid arguments for {name}:"))
+                && text.contains("`content`"),
+            "{name}: {text}"
+        );
+    }
 }
 
 #[tokio::test]
@@ -156,7 +222,7 @@ async fn json_rpc_tag_entity_tags_a_note() {
     let none_given = call("tag_entity", json!({ "name": "A" })).await.unwrap();
     assert_eq!(none_given["result"]["isError"], true, "{none_given}");
     let no_name = call("tag_entity", json!({ "add": ["ml"] })).await.unwrap();
-    assert_eq!(no_name["error"]["code"], INVALID_PARAMS);
+    assert_eq!(no_name["result"]["isError"], true, "{no_name}");
     let read = call("get_note", json!({ "name": "A" })).await.unwrap();
     assert!(text(&read).contains("\ntags: [\"papers\"]\n"), "{read}");
 }
@@ -213,7 +279,7 @@ async fn json_rpc_unlink_notes_removes_a_relationship() {
         "{missing}"
     );
     let no_to = call("unlink_notes", json!({ "from": "A" })).await.unwrap();
-    assert_eq!(no_to["error"]["code"], INVALID_PARAMS);
+    assert_eq!(no_to["result"]["isError"], true, "{no_to}");
 }
 
 #[tokio::test]

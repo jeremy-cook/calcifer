@@ -133,6 +133,7 @@ async fn call_tool(knowledge: &Knowledge, params: &Value) -> Result<Value, (i64,
     let name = params["name"].as_str().unwrap_or_default();
     let args = params
         .get("arguments")
+        .filter(|a| !a.is_null())
         .cloned()
         .unwrap_or_else(|| json!({}));
     let outcome = match dispatch(knowledge, name, args).await {
@@ -147,6 +148,9 @@ async fn call_tool(knowledge: &Knowledge, params: &Value) -> Result<Value, (i64,
     Ok(json!({ "content": [{ "type": "text", "text": text }], "isError": is_error }))
 }
 
-fn parse_args<T: DeserializeOwned>(tool: &str, args: Value) -> Result<T, String> {
-    serde_json::from_value(args).map_err(|e| format!("invalid arguments for {tool}: {e}"))
+/// Arguments that don't fit the tool (a misspelt or unknown one, a missing one)
+/// are a failed tool the agent can read and fix, not a protocol error.
+fn parse_args<T: DeserializeOwned>(tool: &str, args: Value) -> Result<T, ToolError> {
+    serde_json::from_value(args)
+        .map_err(|e| ToolError(format!("invalid arguments for {tool}: {e}")))
 }
