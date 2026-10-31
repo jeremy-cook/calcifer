@@ -25,18 +25,23 @@ const MATCH_CLOSE: char = '\u{E001}';
 
 /// Turn a raw user query into a prefix-matching FTS5 MATCH expression so a
 /// partial term like "trans" finds "Transformers". Each whitespace-separated
-/// term is stripped of FTS operator chars, wrapped in double-quotes (so it is a
-/// literal string token), and suffixed with `*` for a prefix scan. Terms are
+/// term is split on the characters the index's tokenizer (`unicode61`) splits
+/// on, so "1969-07-20" is the tokens `1969 07 20` it was indexed as. The pieces
+/// are wrapped in double-quotes (a literal phrase, no FTS operator survives) and
+/// suffixed with `*`, a prefix scan on the phrase's last piece. Terms are
 /// space-joined → implicit AND. Returns "" when nothing usable remains.
 fn to_prefix_match(query: &str) -> String {
     query
         .split_whitespace()
         .filter_map(|term| {
-            let cleaned: String = term.chars().filter(|c| c.is_alphanumeric()).collect();
-            if cleaned.is_empty() {
+            let pieces: Vec<&str> = term
+                .split(|c: char| !c.is_alphanumeric())
+                .filter(|piece| !piece.is_empty())
+                .collect();
+            if pieces.is_empty() {
                 None
             } else {
-                Some(format!("\"{cleaned}\"*"))
+                Some(format!("\"{}\"*", pieces.join(" ")))
             }
         })
         .collect::<Vec<_>>()
@@ -403,6 +408,16 @@ mod tests {
         assert_eq!(to_prefix_match("()*-"), "");
     }
 
+    // I-86: the tokenizer splits "1969-07-20" into three tokens, so the query
+    // must be those tokens as a phrase, not one run-together word.
+    #[test]
+    fn a_term_with_punctuation_is_a_phrase_of_its_pieces() {
+        assert_eq!(to_prefix_match("1969-07-20"), "\"1969 07 20\"*");
+        assert_eq!(to_prefix_match("stub-then-append"), "\"stub then append\"*");
+        assert_eq!(to_prefix_match("v1.2 K-2"), "\"v1 2\"* \"K 2\"*");
+        assert_eq!(to_prefix_match("-apollo- (11)"), "\"apollo\"* \"11\"*");
+    }
+
     #[test]
     fn rrf_rewards_agreement_across_lists() {
         let snip = Snippet::parse("\u{E000}snip\u{E001}");
@@ -577,6 +592,41 @@ mod tests {
             let hits = search(&svc, query, SearchMode::Lexical).await;
             assert_eq!(names(&hits), vec!["Journal"], "{query}");
         }
+    }
+
+    // I-86: a date chip is indexed as its ISO date, and a hyphenated word as the
+    // words it joins; both are found by the string the user would type.
+    #[tokio::test]
+    async fn lexical_search_finds_iso_dates_and_hyphenated_terms() {
+        let pool = memory_pool().await;
+        let landing = create(&pool, "Apollo 11").await;
+        let draft = create(&pool, "Drafting notes").await;
+        create(&pool, "Unrelated 1969").await;
+        richtext_service(pool.clone(), WatchHub::new())
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: landing.id.clone(),
+                property_id: "content".to_string(),
+                doc: r#"{"type":"doc","content":[{"type":"paragraph","content":[
+                    {"type":"text","text":"Lunar landing "},
+                    {"type":"dateChip","attrs":{"date":"1969-07-20"}}
+                ]}]}"#
+                    .to_string(),
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put");
+        put_text(&pool, &draft.id, "Use the stub-then-append pattern").await;
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        let by_date = search(&svc, "1969-07-20", SearchMode::Lexical).await;
+        assert_eq!(names(&by_date), vec!["Apollo 11"]);
+        let by_word = search(&svc, "stub-then-append", SearchMode::Lexical).await;
+        assert_eq!(names(&by_word), vec!["Drafting notes"]);
+        // A prefix of the last piece still matches, as for any term.
+        assert_eq!(
+            names(&search(&svc, "stub-then-app", SearchMode::Lexical).await),
+            vec!["Drafting notes"]
+        );
     }
 
     /// Save `content` on `entity_id` as one paragraph of `text`.
