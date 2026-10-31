@@ -27,6 +27,8 @@ export function EntityDateField({
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const selected = iso ? dateFromIso(iso) : undefined
+  // The month the calendar shows; it opens on the selected date's.
+  const [month, setMonth] = useState(() => selected ?? new Date())
 
   const handleSelect = (date: Date | undefined) => {
     if (!date) return
@@ -47,7 +49,8 @@ export function EntityDateField({
 
   const handleOpenChange = (next: boolean) => {
     setOpen(next)
-    if (!next) setError(null)
+    if (next) setMonth(selected ?? new Date())
+    else setError(null)
   }
 
   const handleClear = (e: React.MouseEvent) => {
@@ -70,7 +73,8 @@ export function EntityDateField({
             mode="single"
             selected={selected}
             onSelect={handleSelect}
-            month={selected ?? new Date()}
+            month={month}
+            onMonthChange={setMonth}
             weekStartsOn={1}
           />
           {error && <div className="px-2 pb-1 text-sm text-destructive">{error}</div>}

@@ -15,6 +15,8 @@ export function DatePickerPopup({ onSelect, onClose, initialDate }: DatePickerPo
     return new Date(y, m - 1, d)
   })
 
+  const [month, setMonth] = useState(selected ?? new Date())
+
   function confirm() {
     if (!selected) return onClose()
     const iso = [
@@ -25,6 +27,10 @@ export function DatePickerPopup({ onSelect, onClose, initialDate }: DatePickerPo
     onSelect(iso)
   }
 
+  // Dates reach well back (a note can be about 1957) and some way ahead.
+  const startMonth = new Date(1900, 0)
+  const endMonth = new Date(new Date().getFullYear() + 10, 11)
+
   return (
     <div
       className="date-picker-popup"
@@ -33,7 +39,17 @@ export function DatePickerPopup({ onSelect, onClose, initialDate }: DatePickerPo
         if (e.key === 'Escape') onClose()
       }}
     >
-      <Calendar mode="single" selected={selected} onSelect={setSelected} />
+      <Calendar
+        mode="single"
+        selected={selected}
+        onSelect={setSelected}
+        month={month}
+        onMonthChange={setMonth}
+        captionLayout="dropdown"
+        startMonth={startMonth}
+        endMonth={endMonth}
+        classNames={{ dropdowns: 'flex items-center justify-center gap-4 text-sm font-medium' }}
+      />
       <div className="date-picker-popup-footer">
         <Button variant="ghost" size="sm" onClick={onClose}>
           Cancel
