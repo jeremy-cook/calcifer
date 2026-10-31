@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use futures::FutureExt;
+use opentelemetry::metrics::Meter;
 use tonic::service::Routes;
 use tower::Layer;
 use tower_http::services::{ServeDir, ServeFile};
@@ -97,21 +98,31 @@ async fn main() -> anyhow::Result<()> {
     //   CALCIFER_ADDR      /api/*  gRPC-Web, for the browser; /calcifer.v1.*/* native
     //                      gRPC with reflection, for grpcurl; and /* the built UI
     //   CALCIFER_MCP_ADDR  /mcp    MCP over HTTP, for agents, calling the services in-process
-    let api = api_router(entity.clone(), richtext.clone(), search.clone());
-    let grpc = grpc_router(entity.clone(), richtext.clone(), search.clone())?;
+    let api = api_router(entity.clone(), richtext.clone(), search.clone(), &meter);
+    let grpc = grpc_router(entity.clone(), richtext.clone(), search.clone(), &meter)?;
 
     let app_addr = bind_addr("CALCIFER_ADDR", DEFAULT_ADDR)?;
     let mcp_addr = bind_addr("CALCIFER_MCP_ADDR", DEFAULT_MCP_ADDR)?;
 
     // Both listeners only answer requests addressed to this machine (ADR 5).
-    let mcp = security::local::mcp(
-        mcp::router(mcp::Knowledge::new(entity, richtext, search)),
-        mcp_addr,
+    // Telemetry wraps that check, so a refused request is seen too.
+    let mcp = telemetry::http::layer(
+        security::local::mcp(
+            telemetry::mcp::layer(
+                mcp::router(mcp::Knowledge::new(entity, richtext, search)),
+                &meter,
+            ),
+            mcp_addr,
+        ),
+        &meter,
     );
     let ui_dir = std::env::var("CALCIFER_UI_DIR").unwrap_or_else(|_| DEFAULT_UI_DIR.to_string());
-    let app = security::local::app(
-        app_router(api, grpc, ui_service(PathBuf::from(ui_dir))),
-        app_addr,
+    let app = telemetry::http::layer(
+        security::local::app(
+            app_router(api, grpc, ui_service(PathBuf::from(ui_dir))),
+            app_addr,
+        ),
+        &meter,
     );
 
     let app_listener = tokio::net::TcpListener::bind(app_addr).await?;
@@ -169,14 +180,16 @@ fn api_router(
     entity: Arc<EntityService>,
     richtext: Arc<RichTextService>,
     search: Arc<SearchService>,
+    meter: &Meter,
 ) -> axum::Router {
     let web = tonic_web::GrpcWebLayer::new();
-    Routes::new(web.layer(EntityServiceServer::from_arc(entity)))
+    let routes = Routes::new(web.layer(EntityServiceServer::from_arc(entity)))
         .add_service(web.layer(RichTextServiceServer::from_arc(richtext)))
         .add_service(web.layer(SearchServiceServer::from_arc(search)))
         .add_service(web.layer(StructureServiceServer::new(StructureService)))
         .into_axum_router()
-        .fallback(|| async { axum::http::StatusCode::NOT_FOUND })
+        .fallback(|| async { axum::http::StatusCode::NOT_FOUND });
+    telemetry::grpc::layer(routes, meter)
 }
 
 /// Native gRPC, for tools like grpcurl, with reflection so they need no proto
@@ -187,16 +200,18 @@ fn grpc_router(
     entity: Arc<EntityService>,
     richtext: Arc<RichTextService>,
     search: Arc<SearchService>,
+    meter: &Meter,
 ) -> anyhow::Result<axum::Router> {
     let reflection = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(calcifer::FILE_DESCRIPTOR_SET)
         .build_v1()?;
-    Ok(Routes::new(EntityServiceServer::from_arc(entity))
+    let routes = Routes::new(EntityServiceServer::from_arc(entity))
         .add_service(RichTextServiceServer::from_arc(richtext))
         .add_service(SearchServiceServer::from_arc(search))
         .add_service(StructureServiceServer::new(StructureService))
         .add_service(reflection)
-        .into_axum_router())
+        .into_axum_router();
+    Ok(telemetry::grpc::layer(routes, meter))
 }
 
 /// gRPC-Web under `/api`, native gRPC at its services' paths, and the UI, when
@@ -233,13 +248,16 @@ mod tests {
     /// The app as `main` builds it, without the local-only layer, serving the UI
     /// from `ui_dir` when it has a build.
     async fn app(ui_dir: PathBuf) -> axum::Router {
+        use opentelemetry::metrics::{MeterProvider, NoopMeterProvider};
+
+        let meter = NoopMeterProvider::new().meter("test");
         let pool = memory_pool().await;
         let entity = Arc::new(entity_service(pool.clone()));
         let richtext = Arc::new(richtext_service(pool.clone(), WatchHub::new()));
         let search = Arc::new(SearchService::new(pool, EmbedHandle::disabled()));
         app_router(
-            api_router(entity.clone(), richtext.clone(), search.clone()),
-            grpc_router(entity, richtext, search).unwrap(),
+            api_router(entity.clone(), richtext.clone(), search.clone(), &meter),
+            grpc_router(entity, richtext, search, &meter).unwrap(),
             ui_service(ui_dir),
         )
     }

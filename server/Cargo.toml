@@ -40,7 +40,7 @@ libsqlite3-sys = "0.37"
 fastembed = "5"
 # Telemetry (ADR 13): OTLP over gRPC on our own tonic, exported only when
 # OTEL_EXPORTER_OTLP_ENDPOINT is set. `tracing` stays the one API in our code;
-# these bridge its spans and events to OTEL.
+# these bridge its spans and events to OTEL and add the per-request layers.
 opentelemetry = "0.33"
 opentelemetry_sdk = { version = "0.33", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.33", default-features = false, features = ["grpc-tonic", "trace", "metrics", "logs"] }
@@ -48,10 +48,16 @@ opentelemetry-otlp = { version = "0.33", default-features = false, features = ["
 opentelemetry-semantic-conventions = { version = "0.33", features = ["semconv_experimental"] }
 opentelemetry-appender-tracing = "0.33"
 tracing-opentelemetry = "0.34"
+# `tracing_level_info`: their spans are TRACE otherwise, below the default filter.
+tonic-tracing-opentelemetry = { version = "0.42", features = ["tracing_level_info"] }
+axum-tracing-opentelemetry = { version = "0.42", features = ["tracing_level_info"] }
+http-body = "1"
 
 [dev-dependencies]
 # Reads a gRPC response's trailers in the routing tests.
 http-body-util = "0.1"
+# In-memory exporters for the telemetry tests.
+opentelemetry_sdk = { version = "0.33", features = ["testing"] }
 
 [lints.clippy]
 # Beyond clippy's default set: lints that have caught real noise here and

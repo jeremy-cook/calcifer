@@ -1,13 +1,23 @@
 //! Logs, traces and metrics (ADR 13). `tracing` is the one API the rest of the
 //! server writes to; this module routes it to whatever sinks its caller hands
-//! over.
+//! over, and provides the per-request layers.
 //!
 //! It knows nothing about configuration, exporters or where the telemetry
 //! goes: the caller (`crate::boot`) builds the sinks and the meter and passes
 //! them in. A missing sink is simply not installed, and a no-op meter records
 //! nothing, so stdout-only, OTLP and a test's in-memory exporter all look the
 //! same from here. Nothing in this module reads a global.
+//!
+//! Per-request telemetry lives in layers, not in handlers: [`grpc`] for the
+//! gRPC and gRPC-Web routes, [`mcp`] for `/mcp`, and [`http`] around each
+//! listener for everything else. Each starts the request's span and records
+//! its metrics. None logs the request or the response with `tracing`: the
+//! span's start is that record, and an event there would only repeat it.
+//! Events belong inside the request, where something happens.
 
+pub mod grpc;
+pub mod http;
+pub mod mcp;
 pub mod metrics;
 
 use std::fmt;
