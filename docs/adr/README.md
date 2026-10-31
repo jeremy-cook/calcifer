@@ -18,6 +18,7 @@ supersedes the old one rather than editing history. The one exception is a path:
 | [10](0010-natural-keys-declared-by-the-registry.md) | Natural keys are declared by the registry and stored in `entity_keys` | Accepted (replaces ADR 4's `date_key` uniqueness) |
 | [11](0011-facets.md) | To-dos are a facet that Notes attach, not a structure | Accepted (removes the `Todo` structure) |
 | [12](0012-direct-relationships.md) | Direct relationships are rows that links are derived from, beside content links | Accepted (amends ADR 3) |
+| [13](0013-opentelemetry-and-lgtm.md) | OpenTelemetry logs, traces and metrics, exported opt-in to a local Grafana LGTM | Accepted |
 
 Related: [`../reference/data-model.md`](../reference/data-model.md) for the shapes
 themselves, [`../specs/`](../specs/) for how built features work, and

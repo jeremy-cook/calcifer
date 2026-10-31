@@ -45,6 +45,7 @@ fn require_ids(r: &RichTextRef) -> Result<(), Status> {
 /// Check that `r` names a declared rich-text property of an existing entity:
 /// `NotFound` if the entity is missing, `InvalidArgument` if its structure
 /// declares no such rich-text property.
+#[tracing::instrument(skip_all)]
 async fn check_declared(conn: &mut SqliteConnection, r: &RichTextRef) -> Result<(), Status> {
     let structure_type = sqlx::query_scalar!(
         "SELECT structure_type FROM entities WHERE id = ?",

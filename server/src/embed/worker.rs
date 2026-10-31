@@ -16,9 +16,16 @@
 //! retrieval degrades to lexical-only and the rest of the server is unaffected.
 
 use std::sync::Arc;
+use std::time::Instant;
 
+use opentelemetry::metrics::{Counter, Histogram, Meter, UpDownCounter};
+use opentelemetry::trace::{SpanContext, TraceContextExt};
+use opentelemetry::KeyValue;
+use opentelemetry_semantic_conventions::attribute::ERROR_TYPE;
 use sqlx::SqlitePool;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tracing::{Instrument, Span};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::embed::chunk::chunk_doc;
 use crate::embed::provider::{Embedder, LocalEmbedder, EMBED_DIM};
@@ -32,8 +39,54 @@ pub struct EmbedHandle {
 }
 
 struct HandleInner {
-    tx: UnboundedSender<String>,
+    tx: UnboundedSender<Job>,
     embedder: Arc<dyn Embedder>,
+    queued: UpDownCounter<i64>,
+}
+
+/// An entity to embed, and the span of the write that queued it, which the
+/// job's span links back to.
+struct Job {
+    entity_id: String,
+    queued_by: SpanContext,
+}
+
+/// `calcifer.embed.*`: the queue's depth, and per job its duration, its
+/// failures and the chunks it wrote.
+struct Instruments {
+    duration: Histogram<f64>,
+    failures: Counter<u64>,
+    chunks: Counter<u64>,
+}
+
+fn queue_depth(meter: &Meter) -> UpDownCounter<i64> {
+    meter
+        .i64_up_down_counter("calcifer.embed.queue.depth")
+        .with_description("Entities waiting to be embedded")
+        .with_unit("{entity}")
+        .build()
+}
+
+impl Instruments {
+    fn new(meter: &Meter) -> Self {
+        Self {
+            duration: meter
+                .f64_histogram("calcifer.embed.duration")
+                .with_description("Time to chunk, embed and store one entity")
+                .with_unit("s")
+                .build(),
+            failures: meter
+                .u64_counter("calcifer.embed.failures")
+                .with_description("Embed jobs that failed")
+                .with_unit("{entity}")
+                .build(),
+            chunks: meter
+                .u64_counter("calcifer.embed.chunks")
+                .with_description("Chunks embedded and stored")
+                .with_unit("{chunk}")
+                .build(),
+        }
+    }
 }
 
 impl EmbedHandle {
@@ -46,9 +99,15 @@ impl EmbedHandle {
     /// `enqueue` is a no-op. For tests that search against hand-written vectors.
     #[cfg(test)]
     pub(crate) fn with_embedder(embedder: Arc<dyn Embedder>) -> Self {
-        let (tx, _rx) = mpsc::unbounded_channel::<String>();
+        use opentelemetry::metrics::{MeterProvider, NoopMeterProvider};
+
+        let (tx, _rx) = mpsc::unbounded_channel::<Job>();
         Self {
-            inner: Some(Arc::new(HandleInner { tx, embedder })),
+            inner: Some(Arc::new(HandleInner {
+                tx,
+                embedder,
+                queued: queue_depth(&NoopMeterProvider::new().meter("test")),
+            })),
         }
     }
 
@@ -56,14 +115,21 @@ impl EmbedHandle {
     /// caller on model work. Silently no-ops when embeddings are disabled.
     pub fn enqueue(&self, entity_id: impl Into<String>) {
         if let Some(inner) = &self.inner {
+            let job = Job {
+                entity_id: entity_id.into(),
+                queued_by: Span::current().context().span().span_context().clone(),
+            };
             // Send only fails if the worker is gone; nothing useful to do then.
-            let _ = inner.tx.send(entity_id.into());
+            if inner.tx.send(job).is_ok() {
+                inner.queued.add(1, &[]);
+            }
         }
     }
 
     /// Embed a query string for vector KNN. Returns None when embeddings are
     /// disabled, so callers fall back to lexical search. Runs the CPU-bound model
     /// on a blocking thread to avoid stalling the async runtime.
+    #[tracing::instrument(skip_all)]
     pub async fn embed_query(&self, query: &str) -> Result<Option<Vec<f32>>, AppError> {
         let Some(inner) = &self.inner else {
             return Ok(None);
@@ -77,9 +143,10 @@ impl EmbedHandle {
     }
 }
 
-/// Build the embedder and spawn the drain loop. On embedder-init failure (logged)
-/// returns a disabled handle so the server still boots and serves lexical search.
-pub fn spawn(pool: SqlitePool) -> EmbedHandle {
+/// Build the embedder and spawn the drain loop, recording `calcifer.embed.*` on
+/// `meter`. On embedder-init failure (logged) returns a disabled handle so the
+/// server still boots and serves lexical search.
+pub fn spawn(pool: SqlitePool, meter: &Meter) -> EmbedHandle {
     let embedder = match LocalEmbedder::try_new() {
         Ok(e) => Arc::new(e) as Arc<dyn Embedder>,
         Err(e) => {
@@ -91,8 +158,15 @@ pub fn spawn(pool: SqlitePool) -> EmbedHandle {
         }
     };
 
-    let (tx, rx) = mpsc::unbounded_channel::<String>();
-    tokio::spawn(run(pool, rx, embedder.clone()));
+    let (tx, rx) = mpsc::unbounded_channel::<Job>();
+    let queued = queue_depth(meter);
+    tokio::spawn(run(
+        pool,
+        rx,
+        embedder.clone(),
+        queued.clone(),
+        Instruments::new(meter),
+    ));
     tracing::info!(
         model = "all-MiniLM-L6-v2",
         dim = EMBED_DIM,
@@ -100,26 +174,59 @@ pub fn spawn(pool: SqlitePool) -> EmbedHandle {
     );
 
     EmbedHandle {
-        inner: Some(Arc::new(HandleInner { tx, embedder })),
+        inner: Some(Arc::new(HandleInner {
+            tx,
+            embedder,
+            queued,
+        })),
     }
 }
 
 /// Drain loop: one entity at a time. A failure for one entity is logged and
 /// skipped so it never wedges the queue.
-async fn run(pool: SqlitePool, mut rx: UnboundedReceiver<String>, embedder: Arc<dyn Embedder>) {
-    while let Some(entity_id) = rx.recv().await {
-        if let Err(e) = reembed_entity(&pool, &embedder, &entity_id).await {
-            tracing::warn!(entity_id = %entity_id, error = %e, "embed failed");
+async fn run(
+    pool: SqlitePool,
+    mut rx: UnboundedReceiver<Job>,
+    embedder: Arc<dyn Embedder>,
+    queued: UpDownCounter<i64>,
+    instruments: Instruments,
+) {
+    while let Some(job) = rx.recv().await {
+        queued.add(-1, &[]);
+        // A trace of its own, linked to the write: the request has long ended.
+        let span = tracing::info_span!("embed", entity_id = %job.entity_id);
+        if job.queued_by.is_valid() {
+            span.add_link(job.queued_by);
+        }
+        let started = Instant::now();
+        let result = reembed_entity(&pool, &embedder, &job.entity_id)
+            .instrument(span.clone())
+            .await;
+        let elapsed = started.elapsed().as_secs_f64();
+        match result {
+            Ok(chunks) => {
+                instruments.duration.record(elapsed, &[]);
+                instruments.chunks.add(chunks as u64, &[]);
+            }
+            Err(e) => {
+                let error_type = [KeyValue::new(ERROR_TYPE, "embed_failed")];
+                instruments.duration.record(elapsed, &error_type);
+                instruments.failures.add(1, &[]);
+                span.in_scope(|| {
+                    tracing::warn!(entity_id = %job.entity_id, error = %e, "embed failed");
+                });
+            }
         }
     }
 }
 
 /// Re-chunk and re-embed one entity, replacing its `chunks`/`entity_vec` rows.
+/// Returns how many chunks it stored.
 async fn reembed_entity(
     pool: &SqlitePool,
     embedder: &Arc<dyn Embedder>,
     entity_id: &str,
-) -> Result<(), AppError> {
+) -> Result<usize, AppError> {
     // Concatenate the entity's richtext docs (it may have several properties),
     // then chunk the combined content. Runtime query: plain table, but keep the
     // whole module consistent on the unchecked API.
@@ -189,7 +296,7 @@ async fn reembed_entity(
             // tx already wrote and skip it.
             Err(sqlx::Error::Database(db)) if db.is_foreign_key_violation() => {
                 tx.rollback().await?;
-                return Ok(());
+                return Ok(0);
             }
             Err(e) => return Err(e.into()),
         };
@@ -203,7 +310,7 @@ async fn reembed_entity(
     }
 
     tx.commit().await?;
-    Ok(())
+    Ok(chunks.len())
 }
 
 /// Encode a query embedding as the little-endian f32 blob sqlite-vec's MATCH

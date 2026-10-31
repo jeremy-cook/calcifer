@@ -370,6 +370,7 @@ dependencies = [
  "http-body",
  "http-body-util",
  "libsqlite3-sys",
+ "log",
  "opentelemetry",
  "opentelemetry-appender-tracing",
  "opentelemetry-otlp",

@@ -88,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
     );
     // Background embed worker (M8): loads the local model and drains the embed
     // queue. A disabled handle (model unavailable) keeps the server lexical-only.
-    let embed = embed::spawn(pool.clone());
+    let embed = embed::spawn(pool.clone(), &meter);
 
     let entity = Arc::new(EntityService::new(pool.clone(), hub.clone(), embed.clone()));
     let richtext = Arc::new(RichTextService::new(pool.clone(), hub, embed.clone()));

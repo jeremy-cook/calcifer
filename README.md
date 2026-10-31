@@ -127,6 +127,32 @@ grpcurl -plaintext 127.0.0.1:8080 calcifer.v1.StructureService/ListStructures
 
 It sits behind the same local-only check as the rest of the listener.
 
+## Observability
+
+The server emits OpenTelemetry logs, traces and metrics ([ADR 13](docs/adr/0013-opentelemetry-and-lgtm.md)).
+They go to whichever OTLP/gRPC collector `OTEL_EXPORTER_OTLP_ENDPOINT` names, such as a
+Grafana LGTM stack (Loki, Tempo, Prometheus, Grafana).
+
+Settings:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT`: where to export over OTLP/gRPC. Unset, nothing is
+  exported and the server only logs to stdout.
+- `OTEL_SERVICE_NAME` (default `calcifer-server`) and the other standard `OTEL_*`
+  variables, such as `OTEL_METRIC_EXPORT_INTERVAL` (default 60s).
+- `RUST_LOG` (default `info`) filters stdout and the exported logs and spans.
+
+Every request starts a trace: a span for the gRPC call, the MCP operation or the HTTP
+request, with the method or tool, status and duration. The request itself isn't logged
+with `tracing`, since that would only repeat the span; log records come from events
+inside a request (an error, a warning) and carry its `trace_id`, which in Loki jumps to the
+trace. A request with a W3C `traceparent` header joins that trace,
+for example `grpcurl -H 'traceparent: 00-<trace id>-<span id>-01' …`. Telemetry never
+carries note content: no documents, markdown, search queries or tool arguments.
+
+The instrumentation is middleware in `server/src/telemetry/`, composed in `main.rs`;
+handlers carry none. `server/src/boot.rs` reads the settings above, builds the exporters
+and hands the telemetry code its sinks and meter.
+
 ## Editor
 
 `src/editors/` contains `tiptap/` only. An earlier plan compared TipTap against

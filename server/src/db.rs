@@ -3,7 +3,7 @@ use std::sync::Once;
 use std::time::Duration;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
-use sqlx::{Sqlite, SqlitePool, Transaction};
+use sqlx::{ConnectOptions, Sqlite, SqlitePool, Transaction};
 
 static VEC_INIT: Once = Once::new();
 
@@ -56,7 +56,9 @@ pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
         .synchronous(SqliteSynchronous::Normal)
-        .busy_timeout(Duration::from_secs(5));
+        .busy_timeout(Duration::from_secs(5))
+        // A slow statement is a warning, logged with its SQL (no bound values).
+        .log_slow_statements(log::LevelFilter::Warn, Duration::from_millis(100));
     let pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect_with(options)

@@ -97,6 +97,7 @@ impl SearchService {
 
     /// FTS5 lexical hits as ordered (entity_id, snippet) pairs, best first.
     /// Shared by the lexical and hybrid modes.
+    #[tracing::instrument(skip_all)]
     async fn fts_hits(&self, query: &str, limit: i64) -> Result<Vec<(String, Snippet)>, AppError> {
         let match_query = to_prefix_match(query);
         if match_query.is_empty() {
@@ -127,6 +128,7 @@ impl SearchService {
 
     /// Lexical ranking: FTS5 order, scored by position so callers get a stable
     /// descending ordering (the raw bm25 value isn't surfaced).
+    #[tracing::instrument(skip_all)]
     async fn lexical(&self, query: &str, limit: i64) -> Result<Ranked, AppError> {
         let fts = self.fts_hits(query, limit).await?;
         Ok(fts
@@ -141,6 +143,7 @@ impl SearchService {
     /// `query_vec` is the already-embedded search string. Over-fetches chunks
     /// (k * 4) before collapsing so several chunks of one entity don't crowd out
     /// other entities from the top-k.
+    #[tracing::instrument(skip_all)]
     async fn vector_hits(&self, query_vec: &[f32], k: i64) -> Result<Vec<(String, f64)>, AppError> {
         let blob = vector_blob(query_vec);
         let rows = sqlx::query_as::<_, (String, f64)>(
@@ -181,6 +184,7 @@ impl SearchService {
     /// fuses that ranking with FTS5 via reciprocal-rank fusion (score =
     /// Σ 1/(RRF_K + rank) across the lists an entity appears in). Both degrade to
     /// lexical when embeddings are disabled. Unspecified means hybrid.
+    #[tracing::instrument(skip_all)]
     async fn rank(&self, query: &str, limit: i64, mode: SearchMode) -> Result<Ranked, AppError> {
         let hybrid = match mode {
             SearchMode::Lexical => return self.lexical(query, limit).await,
@@ -209,6 +213,7 @@ impl SearchService {
 
     /// Hydrate ranked tuples into SearchHits in one batch load, keeping rank
     /// order and skipping entities deleted out from under a stale index.
+    #[tracing::instrument(skip_all)]
     async fn hydrate(&self, ranked: Ranked) -> Result<Vec<SearchHit>, AppError> {
         let ids: Vec<String> = ranked.iter().map(|(id, _, _)| id.clone()).collect();
         let mut entities: HashMap<String, _> = load_entities_by_id(&self.pool, &ids)

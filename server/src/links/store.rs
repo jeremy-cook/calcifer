@@ -15,6 +15,7 @@ pub(crate) struct LinkTarget {
 /// `entities` row. Safe because the server is authoritative — unlike the FE, where
 /// such a chip is a tombstone, not a deletion. Links record the target's real type,
 /// never a type the caller claims (I-51).
+#[tracing::instrument(skip_all)]
 pub(crate) async fn live_targets(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     refs: &[MentionRef],
@@ -45,6 +46,7 @@ pub(crate) async fn live_targets(
 /// `relations::check_relation_targets`, so they exist and carry their real type.
 /// Runs inside an already-open transaction. Shared by `RichTextService.PutRichText`
 /// (content-derived links) and `relations::sync_relation_property` (relation-property links).
+#[tracing::instrument(skip_all)]
 pub(crate) async fn replace_scoped_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     entity_id: &str,
