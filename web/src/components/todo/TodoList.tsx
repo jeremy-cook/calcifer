@@ -14,7 +14,7 @@ export function TodoList({ entities }: TodoListProps) {
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags])
 
   if (entities.length === 0) {
-    return <p className="text-sm text-muted-foreground">No to-dos match these filters.</p>
+    return <p className="text-sm text-muted-foreground">No ToDos match these filters.</p>
   }
 
   const resolveTags = (entity: Entity) =>

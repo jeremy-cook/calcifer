@@ -64,7 +64,7 @@ async fn list_structures_shows_facets() {
         note.lines().take(3).any(|l| l == "  facets: todo"),
         "{listed}"
     );
-    let facet = &listed[listed.find("- facet todo (To-do): ").unwrap()..];
+    let facet = &listed[listed.find("- facet todo (ToDo): ").unwrap()..];
     assert!(
         facet.contains("todo.status (select: open|done, default open)"),
         "{listed}"

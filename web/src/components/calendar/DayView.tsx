@@ -24,7 +24,7 @@ export function DayView({ iso }: DayViewProps) {
       <Divider />
       <DailyNoteSection iso={iso} />
       <Divider />
-      <CalendarItemsSection title="Due" icon={todo.icon} color={todo.color} emptyText="No to-dos due." items={due} />
+      <CalendarItemsSection title="Due" icon={todo.icon} color={todo.color} emptyText="No ToDos due." items={due} />
       <Divider />
       <CalendarItemsSection
         title="Date references"

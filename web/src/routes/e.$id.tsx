@@ -107,7 +107,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
       {canMakeTodo && (
         <Button variant="ghost" size="sm" onClick={() => void attachFacet(entity.id, TODO_FACET)}>
           <CheckSquareIcon />
-          Make a to-do
+          Make a ToDo
         </Button>
       )}
       <AlertDialog>

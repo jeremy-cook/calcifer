@@ -23,7 +23,7 @@ export function TodoQuickAdd() {
       setValue((current) => (current === text ? '' : current))
     } catch (err) {
       console.error('quick add failed', err)
-      setError("Couldn't add the to-do.")
+      setError("Couldn't add the ToDo.")
     } finally {
       setPending(false)
     }
@@ -45,8 +45,8 @@ export function TodoQuickAdd() {
         value={value}
         onChange={(e) => handleChange(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Add a to-do…"
-        aria-label="Quick add to-do"
+        placeholder="Add a ToDo…"
+        aria-label="Quick add ToDo"
         aria-invalid={error !== null}
         aria-describedby={error ? 'todo-quick-add-error' : undefined}
         className="h-9 rounded-md bg-muted px-3 dark:bg-muted"

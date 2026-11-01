@@ -50,7 +50,7 @@ export function NewButton() {
           })}
           <DropdownMenuItem onSelect={() => void handleCreate('Note', [TODO_FACET])}>
             <TodoIcon weight="duotone" style={{ color: todoColor }} />
-            To-do
+            ToDo
           </DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>

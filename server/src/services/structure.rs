@@ -206,7 +206,7 @@ mod tests {
         let todo = &response.facets[0];
         assert_eq!(
             (todo.name.as_str(), todo.plural.as_str()),
-            ("To-do", "To-dos")
+            ("ToDo", "ToDos")
         );
         assert!(!todo.description.is_empty());
         let props: Vec<&str> = todo.properties.iter().map(|p| p.id.as_str()).collect();

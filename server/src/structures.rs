@@ -200,8 +200,8 @@ pub const STRUCTURES: &[StructureDef] = &[
 /// Every facet, in the order clients list them.
 pub const FACETS: &[FacetDef] = &[FacetDef {
     id: "todo",
-    name: "To-do",
-    plural: "To-dos",
+    name: "ToDo",
+    plural: "ToDos",
     description: "makes an entity actionable: status, priority and a due date",
     properties: &[
         select(
