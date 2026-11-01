@@ -18,15 +18,16 @@ describe('DatePickerPopup', () => {
     expect(onSelect).toHaveBeenCalledWith('1957-10-04')
   })
 
-  it('offers years from 1900 to ten years ahead', () => {
+  it("offers the mini calendar's years: a century back to this year", () => {
     render(<DatePickerPopup initialDate="2026-10-31" onSelect={vi.fn()} onClose={vi.fn()} />)
 
     const years = Array.from(screen.getByRole('combobox', { name: /year/i }).querySelectorAll('option')).map((o) =>
       Number(o.value),
     )
 
-    expect(years[0]).toBe(1900)
-    expect(years.at(-1)).toBe(new Date().getFullYear() + 10)
+    const thisYear = new Date().getFullYear()
+    expect(years[0]).toBe(thisYear - 100)
+    expect(years.at(-1)).toBe(thisYear)
   })
 
   it('opens on the initial date', () => {
