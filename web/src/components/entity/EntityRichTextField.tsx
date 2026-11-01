@@ -14,9 +14,17 @@ export interface EntityRichTextFieldProps {
   propertyId: string
   autoFocus?: boolean
   hideToolbar?: boolean
+  // Extra classes for the editor's frame.
+  className?: string
 }
 
-export function EntityRichTextField({ entityId, propertyId, autoFocus, hideToolbar }: EntityRichTextFieldProps) {
+export function EntityRichTextField({
+  entityId,
+  propertyId,
+  autoFocus,
+  hideToolbar,
+  className,
+}: EntityRichTextFieldProps) {
   const propertyRef = useMemo(() => richTextRef(entityId, propertyId), [entityId, propertyId])
   const { data, isError } = useRichText(propertyRef)
 
@@ -33,6 +41,7 @@ export function EntityRichTextField({ entityId, propertyId, autoFocus, hideToolb
       initial={data}
       autoFocus={autoFocus}
       hideToolbar={hideToolbar}
+      className={className}
     />
   )
 }
@@ -42,6 +51,7 @@ interface LiveRichTextEditorProps {
   initial: RichTextState
   autoFocus?: boolean
   hideToolbar?: boolean
+  className?: string
 }
 
 interface SyncedVersion {
@@ -65,7 +75,7 @@ interface EditorDoc {
 // Keeps an open editor in step with the server: debounced conditional saves,
 // outside changes (e.g. an agent's append) loaded while there are no local
 // edits in play, and a reload plus notice when a save loses a conflict.
-function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: LiveRichTextEditorProps) {
+function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar, className }: LiveRichTextEditorProps) {
   const { data = initial } = useRichText(propertyRef)
   const [synced, setSynced] = useState<SyncedVersion>({
     updatedAt: initial.updatedAt,
@@ -182,6 +192,7 @@ function LiveRichTextEditor({ propertyRef, initial, autoFocus, hideToolbar }: Li
       autoFocus={autoFocus}
       hideToolbar={hideToolbar}
       notice={notice}
+      className={className}
     />
   )
 }

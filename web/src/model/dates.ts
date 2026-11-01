@@ -38,6 +38,11 @@ export function formatShortDate(iso: string): string {
   return format(date, date.getFullYear() === new Date().getFullYear() ? 'EEE d MMM' : 'd MMM yyyy')
 }
 
+// "Sunday 1 November": a day as a page title.
+export function formatDayTitle(iso: string): string {
+  return format(dateFromIso(iso), 'EEEE d MMMM')
+}
+
 export function formatWeekday(iso: string): string {
   return format(dateFromIso(iso), 'EEEE')
 }

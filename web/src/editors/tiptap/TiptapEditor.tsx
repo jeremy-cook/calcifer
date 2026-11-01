@@ -39,6 +39,7 @@ import { DotsSixVerticalIcon } from '@phosphor-icons/react'
 import { LinkActionMenu } from './components/link/LinkActionMenu'
 import { TableActionMenu } from './components/table/TableActionMenu'
 import { ImageActionMenu } from './components/image/ImageActionMenu'
+import { cn } from '~/lib/utils'
 
 interface TiptapEditorProps {
   // Initial content only; later changes come in through externalDoc.
@@ -54,6 +55,8 @@ interface TiptapEditorProps {
   hideToolbar?: boolean
   // Rendered between the toolbar and the content, e.g. a status note.
   notice?: ReactNode
+  // Extra classes for the frame, e.g. to drop its border where the page draws its own.
+  className?: string
 }
 
 function parseDoc(doc: string | undefined): Content {
@@ -89,6 +92,7 @@ export function TiptapEditor({
   autoFocus,
   hideToolbar,
   notice,
+  className,
 }: TiptapEditorProps) {
   // The version mounted with `doc` counts as applied.
   const appliedVersionRef = useRef(externalVersion)
@@ -176,7 +180,7 @@ export function TiptapEditor({
   if (!editor) return null
 
   return (
-    <div className="flex h-full w-full flex-col border border-border">
+    <div className={cn('flex h-full w-full flex-col border border-border', className)}>
       {!hideToolbar && <Toolbar editor={editor} />}
       {notice}
       <TableActionMenu editor={editor} />
