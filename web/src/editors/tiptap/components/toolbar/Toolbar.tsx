@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
 import { Toggle } from '~/components/ui/toggle'
-import { Separator } from '~/components/ui/separator'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
 import { Button } from '~/components/ui/button'
 import { Popover, PopoverAnchor, PopoverContent } from '~/components/ui/popover'
@@ -13,18 +12,16 @@ import {
   CodeIcon,
   TextAaIcon,
   HighlighterIcon,
-  TextSubscriptIcon,
-  TextSuperscriptIcon,
-  EraserIcon,
   ListBulletsIcon,
   ListNumbersIcon,
   ListChecksIcon,
   LinkIcon,
   CheckIcon,
 } from '@phosphor-icons/react'
-import { ColorPickerPopover } from './ColorPickerPopover'
-import { FONT_FAMILIES, BLOCK_TYPES, ALIGNMENTS, type Alignment } from '../formatting-options'
+import { BLOCK_TYPES, type Alignment } from '../formatting-options'
 import { InsertPopover, type InsertSection } from './InsertPopover'
+import { MorePopover } from './MorePopover'
+import { TextColorPopover } from './TextColorPopover'
 
 export type ToolbarSize = 'sm' | 'md' | 'lg'
 
@@ -35,16 +32,18 @@ type ToolbarGroup = {
 }
 
 // Groups visible at each size; anything absent collapses into the Insert popover.
+// Alignment, subscript and superscript, and clear formatting live in the More menu.
 const VISIBLE: Record<ToolbarSize, ReadonlySet<string>> = {
-  lg: new Set(['eraser', 'alignment', 'lists', 'subscript', 'colors', 'fontFamily', 'inline']),
-  md: new Set(['colors', 'fontFamily', 'inline']),
+  lg: new Set(['lists', 'colors', 'inline']),
+  md: new Set(['colors', 'inline']),
   sm: new Set(['inline']),
 }
 
-// Breakpoints checked in descending order; falls back to 'sm'.
+// Breakpoints checked in descending order; falls back to 'sm'. Widths are inside
+// the toolbar's padding.
 const BREAKPOINTS: [ToolbarSize, number][] = [
-  ['lg', 1000],
-  ['md', 630],
+  ['lg', 700],
+  ['md', 540],
 ]
 
 function getAutoSize(width: number): ToolbarSize {
@@ -139,7 +138,7 @@ function LinkPopover({ editor, isLink }: LinkPopoverProps) {
       }}
     >
       <PopoverAnchor asChild>
-        <Toggle size="default" pressed={isLink} onClick={handleToggle} aria-label="Link">
+        <Toggle variant="tool" pressed={isLink} onClick={handleToggle} aria-label="Link">
           <LinkIcon />
         </Toggle>
       </PopoverAnchor>
@@ -219,7 +218,6 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
         isLink: ctx.editor.isActive('link'),
         fontColor: (ctx.editor.getAttributes('textStyle').color as string) ?? '',
         highlight: (ctx.editor.getAttributes('highlight').color as string) ?? '',
-        fontFamily: (ctx.editor.getAttributes('textStyle').fontFamily as string) ?? '',
         blockType,
         alignment: ((ctx.editor.getAttributes(attrNodeName).textAlign as string) || 'left') as Alignment,
       }
@@ -241,7 +239,6 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
     isLink,
     fontColor,
     highlight,
-    fontFamily,
     blockType,
     alignment,
   } = state
@@ -252,53 +249,11 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
   // Collapse behaviour is controlled entirely by VISIBLE — not by array position.
   const groups: ToolbarGroup[] = [
     {
-      id: 'fontFamily',
-      toolbar: (
-        <Select
-          value={fontFamily}
-          onValueChange={(v) => {
-            if (v === '__default__') editor.chain().focus().unsetFontFamily().run()
-            else editor.chain().focus().setFontFamily(v).run()
-          }}
-          disabled={disableInline}
-        >
-          <SelectTrigger className="h-8 w-28 text-xs" aria-label="Font family">
-            <SelectValue placeholder="Font" />
-          </SelectTrigger>
-          <SelectContent>
-            {FONT_FAMILIES.map((f) => (
-              <SelectItem
-                key={f.value || '__default__'}
-                value={f.value || '__default__'}
-                style={{ fontFamily: f.value || undefined }}
-              >
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ),
-      insert: {
-        id: 'fontFamily',
-        items: FONT_FAMILIES.map((f) => ({
-          key: f.value || '__default__',
-          label: f.label,
-          icon: null,
-          active: fontFamily === f.value,
-          fontFamily: f.value || undefined,
-          onClick: () =>
-            f.value === ''
-              ? editor.chain().focus().unsetFontFamily().run()
-              : editor.chain().focus().setFontFamily(f.value).run(),
-        })),
-      },
-    },
-    {
       id: 'inline',
       toolbar: (
         <>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isBold}
             disabled={disableInline}
             onPressedChange={() => editor.chain().focus().toggleBold().run()}
@@ -307,7 +262,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
             <TextBIcon weight="bold" />
           </Toggle>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isItalic}
             disabled={disableInline}
             onPressedChange={() => editor.chain().focus().toggleItalic().run()}
@@ -316,7 +271,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
             <TextItalicIcon />
           </Toggle>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isUnderline}
             disabled={disableInline}
             onPressedChange={() => editor.chain().focus().toggleUnderline().run()}
@@ -325,7 +280,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
             <TextUnderlineIcon />
           </Toggle>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isStrike}
             disabled={disableInline}
             onPressedChange={() => editor.chain().focus().toggleStrike().run()}
@@ -334,7 +289,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
             <TextStrikethroughIcon />
           </Toggle>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isCode}
             onPressedChange={() => editor.chain().focus().toggleCode().run()}
             aria-label="Inline code"
@@ -390,26 +345,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
     },
     {
       id: 'colors',
-      toolbar: (
-        <>
-          <ColorPickerPopover
-            color={fontColor}
-            onChange={(c) => editor.chain().focus().setColor(c).run()}
-            onClear={() => editor.chain().focus().unsetColor().run()}
-            icon={<TextAaIcon />}
-            label="Font color"
-            disabled={disableInline}
-          />
-          <ColorPickerPopover
-            color={highlight}
-            onChange={(c) => editor.chain().focus().setHighlight({ color: c }).run()}
-            onClear={() => editor.chain().focus().unsetHighlight().run()}
-            icon={<HighlighterIcon />}
-            label="Highlight color"
-            disabled={disableInline}
-          />
-        </>
-      ),
+      toolbar: <TextColorPopover editor={editor} color={fontColor} highlight={highlight} disabled={disableInline} />,
       insert: {
         id: 'colors',
         items: [
@@ -436,85 +372,11 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
       },
     },
     {
-      id: 'subscript',
-      toolbar: (
-        <>
-          <Toggle
-            size="default"
-            pressed={isSubscript}
-            disabled={disableInline}
-            onPressedChange={() => editor.chain().focus().toggleSubscript().run()}
-            aria-label="Subscript"
-          >
-            <TextSubscriptIcon />
-          </Toggle>
-          <Toggle
-            size="default"
-            pressed={isSuperscript}
-            disabled={disableInline}
-            onPressedChange={() => editor.chain().focus().toggleSuperscript().run()}
-            aria-label="Superscript"
-          >
-            <TextSuperscriptIcon />
-          </Toggle>
-        </>
-      ),
-      insert: {
-        id: 'subscript',
-        items: [
-          {
-            key: 'subscript',
-            label: 'Subscript',
-            icon: <TextSubscriptIcon />,
-            active: isSubscript,
-            disabled: disableInline,
-            onClick: () => editor.chain().focus().toggleSubscript().run(),
-          },
-          {
-            key: 'superscript',
-            label: 'Superscript',
-            icon: <TextSuperscriptIcon />,
-            active: isSuperscript,
-            disabled: disableInline,
-            onClick: () => editor.chain().focus().toggleSuperscript().run(),
-          },
-        ],
-      },
-    },
-    {
-      id: 'alignment',
-      toolbar: (
-        <>
-          {ALIGNMENTS.map(({ value, icon, label }) => (
-            <Toggle
-              key={value}
-              size="default"
-              pressed={alignment === value}
-              onPressedChange={() => editor.chain().focus().setTextAlign(value).run()}
-              aria-label={label}
-            >
-              {icon}
-            </Toggle>
-          ))}
-        </>
-      ),
-      insert: {
-        id: 'alignment',
-        items: ALIGNMENTS.map(({ value, icon, label }) => ({
-          key: value,
-          label,
-          icon,
-          active: alignment === value,
-          onClick: () => editor.chain().focus().setTextAlign(value).run(),
-        })),
-      },
-    },
-    {
       id: 'lists',
       toolbar: (
         <>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isBulletList}
             onPressedChange={() => editor.chain().focus().toggleBulletList().run()}
             aria-label="Bullet list"
@@ -522,7 +384,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
             <ListBulletsIcon />
           </Toggle>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isOrderedList}
             onPressedChange={() => editor.chain().focus().toggleOrderedList().run()}
             aria-label="Numbered list"
@@ -530,7 +392,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
             <ListNumbersIcon />
           </Toggle>
           <Toggle
-            size="default"
+            variant="tool"
             pressed={isTaskList}
             onPressedChange={() => editor.chain().focus().toggleTaskList().run()}
             aria-label="Checklist"
@@ -566,31 +428,6 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
         ],
       },
     },
-    {
-      id: 'eraser',
-      toolbar: (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 min-w-8 px-1.5"
-          onClick={() => editor.chain().focus().unsetAllMarks().run()}
-          aria-label="Clear formatting"
-        >
-          <EraserIcon />
-        </Button>
-      ),
-      insert: {
-        id: 'eraser',
-        items: [
-          {
-            key: 'eraser',
-            label: 'Clear formatting',
-            icon: <EraserIcon />,
-            onClick: () => editor.chain().focus().unsetAllMarks().run(),
-          },
-        ],
-      },
-    },
   ]
 
   const visibleGroups = groups.filter(({ id }) => show.has(id))
@@ -599,11 +436,14 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
   return (
     <div
       ref={containerRef}
-      className="flex shrink-0 items-center gap-0.5 overflow-hidden border-b border-border px-2 py-1"
+      className="flex shrink-0 items-center gap-0.5 overflow-hidden border-b border-border px-14 py-1"
     >
       {/* Block type — always visible */}
       <Select value={blockType} onValueChange={(v) => setBlockType(editor, v)}>
-        <SelectTrigger className="h-8 w-32 text-xs" aria-label="Block type">
+        <SelectTrigger
+          className="h-8 w-auto gap-2 border-0 bg-transparent px-2.5 text-sm font-semibold text-secondary-foreground shadow-none hover:bg-accent dark:bg-transparent dark:hover:bg-accent"
+          aria-label="Block type"
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
@@ -618,19 +458,28 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
       {/* Collapsible groups */}
       {visibleGroups.map(({ id, toolbar }) => (
         <Fragment key={id}>
-          <Separator orientation="vertical" className="mx-1 self-stretch" />
+          <ToolbarDivider />
           {toolbar}
         </Fragment>
       ))}
 
-      {/* Link — always visible */}
-      <Separator orientation="vertical" className="mx-1 self-stretch" />
+      {/* Link and More — always visible */}
+      <ToolbarDivider />
       <LinkPopover editor={editor} isLink={isLink} />
+      <MorePopover
+        editor={editor}
+        alignment={alignment}
+        isSubscript={isSubscript}
+        isSuperscript={isSuperscript}
+        disableInline={disableInline}
+      />
 
-      <Separator orientation="vertical" className="mx-1 self-stretch" />
-
-      {/* Insert — always visible, receives overflow items */}
+      {/* Insert — always visible, on the right, receives overflow items */}
       <InsertPopover editor={editor} sections={insertSections} />
     </div>
   )
+}
+
+function ToolbarDivider() {
+  return <span className="mx-1.5 h-4 w-px shrink-0 bg-border" aria-hidden />
 }

@@ -22,7 +22,6 @@ export type InsertItem = {
     value: string
     onChange: (color: string) => void
   }
-  fontFamily?: string
 }
 
 export type InsertSection = {
@@ -84,7 +83,7 @@ function renderButtonItem(item: InsertItem) {
       <span className="flex size-3.75 items-center justify-center text-muted-foreground [&_svg]:size-3.75">
         {item.icon}
       </span>
-      <span style={item.fontFamily ? { fontFamily: item.fontFamily } : undefined}>{item.label}</span>
+      <span>{item.label}</span>
       {item.active && <CheckIcon size={12} className="ml-auto text-foreground" />}
     </button>
   )
@@ -270,12 +269,17 @@ export function InsertPopover({ editor, sections = [] }: InsertPopoverProps) {
       }}
     >
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" aria-label="Insert">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-8 gap-1.5 px-2.5 text-sm font-semibold"
+          aria-label="Insert"
+        >
           <PlusIcon />
           Insert
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-1.5" align="start">
+      <PopoverContent className="w-auto p-1.5" align="end">
         {view === 'menu' && <InsertMenu editor={editor} sections={sections} close={close} setView={setView} />}
         {view === 'table' && <TablePicker editor={editor} close={close} />}
         {view === 'image' && (

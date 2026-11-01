@@ -11,6 +11,8 @@ const toggleVariants = cva(
       variant: {
         default: 'bg-transparent',
         outline: 'border border-input bg-transparent hover:bg-muted',
+        // An editor toolbar button: muted until hovered, ember when on.
+        tool: 'rounded-md bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground aria-pressed:bg-primary/15 data-[state=on]:bg-primary/15 data-[state=on]:text-primary',
         segmented:
           'rounded-md bg-transparent px-3 font-semibold text-secondary-foreground hover:bg-transparent data-[state=on]:bg-background data-[state=on]:text-accent-foreground data-[state=on]:shadow-[0_1px_0_var(--border)]',
       },
