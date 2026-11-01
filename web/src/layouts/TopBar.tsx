@@ -1,6 +1,7 @@
 import { SidebarSimpleIcon } from '@phosphor-icons/react'
 import { Button } from '~/components/ui/button'
 import { SearchPalette } from '~/components/search/SearchPalette'
+import { ConnectionPill } from './ConnectionPill'
 
 export interface TopBarProps {
   onToggleSidebar: () => void
@@ -21,7 +22,10 @@ export function TopBar({ onToggleSidebar }: TopBarProps) {
         </Button>
         <div className="hearth-logo size-5 shrink-0" aria-hidden />
         <div className="font-heading text-base font-bold">Calcifer</div>
-        <SearchPalette />
+        <div className="ml-auto flex items-center gap-2">
+          <ConnectionPill />
+          <SearchPalette />
+        </div>
       </div>
       <div className="hearth-stripe h-[5px]" aria-hidden />
     </header>

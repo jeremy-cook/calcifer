@@ -3,7 +3,6 @@ import type { ReactNode } from 'react'
 import type { Layout } from 'react-resizable-panels'
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '~/components/ui/resizable'
 import { useSidebarState } from './sidebar-state'
-import { ConnectionBanner } from '~/layouts/ConnectionBanner'
 import { Sidebar } from '~/layouts/Sidebar'
 import { TopBar } from '~/layouts/TopBar'
 
@@ -56,7 +55,6 @@ export function AppShell({ children }: AppShellProps) {
   return (
     <div className="flex h-screen flex-col">
       <TopBar onToggleSidebar={toggle} />
-      <ConnectionBanner />
       <AppBody collapsed={collapsed}>{children}</AppBody>
     </div>
   )

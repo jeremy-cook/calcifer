@@ -1,6 +1,6 @@
 import { RouterProvider } from '@tanstack/react-router'
 import { QueryClientProvider, useQuery } from '@tanstack/react-query'
-import { ServerUnreachableNotice } from '~/components/ServerUnreachableNotice'
+import { ServerWaiting } from '~/components/ServerWaiting'
 import { router } from '~/router'
 import { queryClient } from '~/model/api'
 import { structuresQuery } from '~/model/structures'
@@ -17,7 +17,7 @@ function WatchedRouter() {
 // the server answers, and says so once an attempt has failed.
 function StructureRegistryGate() {
   const { isPending, failureCount } = useQuery(structuresQuery)
-  if (isPending) return failureCount > 0 ? <ServerUnreachableNotice /> : null
+  if (isPending) return failureCount > 0 ? <ServerWaiting /> : null
   return <WatchedRouter />
 }
 

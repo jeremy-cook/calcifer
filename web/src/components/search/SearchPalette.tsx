@@ -88,7 +88,7 @@ export function SearchPalette() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="ml-auto flex h-8 w-64 items-center gap-2 rounded-lg bg-muted px-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+        className="flex h-8 w-64 items-center gap-2 rounded-lg bg-muted px-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <MagnifyingGlassIcon className="size-4" />
         Search
