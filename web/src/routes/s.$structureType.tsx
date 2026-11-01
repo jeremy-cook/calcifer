@@ -1,10 +1,11 @@
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { FileDashedIcon, PlusIcon } from '@phosphor-icons/react'
 import { EmptyState } from '~/components/empty-state/EmptyState'
+import { LoadingRows } from '~/components/loading/LoadingRows'
 import { AlphabeticalIndex } from '~/components/structure-list/AlphabeticalIndex'
 import { EntityRows } from '~/components/structure-list/EntityRows'
 import { Button } from '~/components/ui/button'
-import { listByStructure, useAllEntities, useCreateEntity } from '~/model/store'
+import { listByStructure, useAllEntities, useCreateEntity, useReplicaReady } from '~/model/store'
 import { structurePresentation, useStructure } from '~/model/structures'
 
 export const Route = createFileRoute('/s/$structureType')({
@@ -13,6 +14,7 @@ export const Route = createFileRoute('/s/$structureType')({
     const navigate = useNavigate()
     const createEntity = useCreateEntity()
     const entities = useAllEntities()
+    const ready = useReplicaReady()
     const structure = useStructure(structureType)
 
     if (!structure) {
@@ -67,10 +69,16 @@ export const Route = createFileRoute('/s/$structureType')({
 
     const renderList = () => (alphabetical ? <AlphabeticalIndex entities={items} /> : <EntityRows entities={items} />)
 
+    // Before the first snapshot an empty list says nothing, so it isn't called empty.
+    const renderBody = () => {
+      if (!ready) return <LoadingRows />
+      return items.length === 0 ? renderEmpty() : renderList()
+    }
+
     return (
       <div className="flex flex-col gap-4 px-16 py-10">
         <h1 className="font-heading text-3xl font-semibold text-heading">{structure.plural}</h1>
-        {items.length === 0 ? renderEmpty() : renderList()}
+        {renderBody()}
       </div>
     )
   },

@@ -13,6 +13,8 @@ import {
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog'
 import { Button } from '~/components/ui/button'
+import { LoadingText } from '~/components/loading/LoadingText'
+import { useShownAfterDelay } from '~/components/loading/use-shown-after'
 import { EmptyState } from '~/components/empty-state/EmptyState'
 import {
   DropdownMenu,
@@ -67,7 +69,7 @@ export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
     const { id } = Route.useParams()
     const { entity, status } = useEntity(id)
-    if (status === 'loading') return null
+    if (status === 'loading') return <EntityLoading />
     if (!entity) return <EntityNotFound />
 
     return (
@@ -80,6 +82,22 @@ export const Route = createFileRoute('/e/$id')({
     )
   },
 })
+
+// The note page's shape, faint, until the first snapshot says whether the note exists.
+function EntityLoading() {
+  const shown = useShownAfterDelay()
+  if (!shown) return null
+
+  return (
+    <div className="flex flex-col">
+      <header className="flex flex-col gap-3 px-16 pt-8 pb-5">
+        <div className="loading-bar h-3 w-40" />
+        <div className="loading-bar h-8 w-80" />
+      </header>
+      <LoadingText className="px-16 py-10" />
+    </div>
+  )
+}
 
 function EntityNotFound() {
   return (

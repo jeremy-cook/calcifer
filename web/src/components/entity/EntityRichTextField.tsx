@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Timestamp } from '@bufbuild/protobuf/wkt'
 import type { JSONContent } from '@tiptap/core'
 import type { RichTextRef } from 'calcifer/v1/entities_pb'
+import { LoadingText } from '~/components/loading/LoadingText'
 import { TiptapEditor } from '~/editors/tiptap/TiptapEditor'
+import { cn } from '~/lib/utils'
 import { isNewerRichText, richTextRef, usePutRichText, useRichText, type RichTextState } from '~/model/richtext'
 
 export const RICHTEXT_DEBOUNCE_MS = 300
@@ -32,7 +34,13 @@ export function EntityRichTextField({
   // remounts cleanly per entity/property). Once it has data, a failed background
   // refetch keeps that data, so the open editor stays mounted.
   if (!data && isError) return <p className="p-4 text-sm text-muted-foreground">Couldn't load this text.</p>
-  if (!data) return <div className="flex h-full w-full flex-col border border-border" />
+  if (!data) {
+    return (
+      <div className={cn('flex h-full w-full flex-col border border-border', className)}>
+        <LoadingText className="px-16 py-10" />
+      </div>
+    )
+  }
 
   return (
     <LiveRichTextEditor

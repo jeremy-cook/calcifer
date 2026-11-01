@@ -3,6 +3,8 @@ import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import { ArrowUpRightIcon, ClockCounterClockwiseIcon, FeatherIcon, type Icon } from '@phosphor-icons/react'
 import { EmptyLine } from '~/components/empty-state/EmptyLine'
+import { LoadingRows } from '~/components/loading/LoadingRows'
+import { LoadingText } from '~/components/loading/LoadingText'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityRows } from '~/components/structure-list/EntityRows'
 import { HomeTodos } from '~/components/home/HomeTodos'
@@ -75,6 +77,7 @@ function TodayNote() {
         <h1 className="font-heading text-4xl leading-tight font-semibold text-heading">{formatDayTitle(today)}</h1>
       </header>
       <div className="min-h-0 flex-1">
+        {!ready && <LoadingText className="border-t border-border px-16 py-10" />}
         {contentRef && (
           <EntityRichTextField
             key={contentRef.entityId}
@@ -116,6 +119,7 @@ function SideSection({ icon: SectionIcon, color, title, link, children }: SideSe
 
 function RecentlyEdited() {
   const entities = useAllEntities()
+  const ready = useReplicaReady()
 
   const RECENT_COUNT = 6
   // Daily notes are left out: today's is on this page, and older ones are on the calendar.
@@ -128,6 +132,7 @@ function RecentlyEdited() {
     [entities],
   )
 
+  if (!ready) return <LoadingRows count={RECENT_COUNT} />
   if (recent.length === 0) {
     return (
       <EmptyLine icon={FeatherIcon} color="var(--chart-1)">

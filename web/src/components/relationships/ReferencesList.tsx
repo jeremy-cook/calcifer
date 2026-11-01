@@ -2,11 +2,12 @@ import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
 import { CellSignalHighIcon, LinkSimpleIcon } from '@phosphor-icons/react'
 import { EmptyLine } from '~/components/empty-state/EmptyLine'
+import { LoadingRows } from '~/components/loading/LoadingRows'
 import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
 import { formatShortDate, timestampMsOrZero, useToday } from '~/model/dates'
 import { useIncomingReferences, type Reference } from '~/model/relationships'
-import { entityUpdatedAtDate, hasFacet, type Entity } from '~/model/store'
+import { entityUpdatedAtDate, hasFacet, useReplicaReady, type Entity } from '~/model/store'
 import { facetPresentation, getFacet, structurePresentation, useStructures } from '~/model/structures'
 import { TODO_FACET, todoFields, useSetTodoStatus } from '~/model/todos'
 
@@ -20,7 +21,9 @@ interface ReferencesListProps {
 export function ReferencesList({ entity }: ReferencesListProps) {
   const references = useIncomingReferences(entity.id)
   const structures = useStructures()
+  const ready = useReplicaReady()
 
+  if (!ready) return <LoadingRows className="max-w-3xl" />
   if (references.length === 0) {
     return (
       <EmptyLine icon={LinkSimpleIcon} color="var(--muted-foreground)" className="px-0">

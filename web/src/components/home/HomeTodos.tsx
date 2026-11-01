@@ -1,10 +1,11 @@
 import { Link } from '@tanstack/react-router'
 import { CellSignalHighIcon, SunHorizonIcon } from '@phosphor-icons/react'
 import { EmptyLine } from '~/components/empty-state/EmptyLine'
+import { LoadingRows } from '~/components/loading/LoadingRows'
 import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
 import { formatShortDate, useToday } from '~/model/dates'
-import type { Entity } from '~/model/store'
+import { useReplicaReady, type Entity } from '~/model/store'
 import {
   groupTodos,
   todoFields,
@@ -23,6 +24,9 @@ const BY_DUE: TodoOrder = { keys: ['due', 'priority', 'name'], reversed: false }
 export function HomeTodos() {
   const today = useToday()
   const todos = useTodos(DUE_THIS_WEEK, BY_DUE)
+  const ready = useReplicaReady()
+
+  if (!ready) return <LoadingRows count={3} />
 
   if (todos.length === 0) {
     return (

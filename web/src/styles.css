@@ -144,6 +144,30 @@
     );
   }
 
+  /* A placeholder bar while data loads: faint, with a slow sheen across it. */
+  .loading-bar {
+    border-radius: 5px;
+    background:
+      linear-gradient(
+          90deg,
+          transparent 0,
+          color-mix(in srgb, var(--secondary-foreground) 12%, transparent) 80px,
+          transparent 160px
+        )
+        no-repeat,
+      var(--card);
+    background-size:
+      160px 100%,
+      100% 100%;
+    animation: loading-sheen 1.6s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .loading-bar {
+      animation: none;
+    }
+  }
+
   /* The logo's rings, faint, behind an empty page's icon. */
   .hearth-rings {
     border-radius: 9999px;
@@ -168,5 +192,18 @@
       var(--stripe-3) 55% 78%,
       var(--stripe-4) 78%
     );
+  }
+}
+
+@keyframes loading-sheen {
+  from {
+    background-position:
+      -160px 0,
+      0 0;
+  }
+  to {
+    background-position:
+      calc(100% + 160px) 0,
+      0 0;
   }
 }

@@ -1,11 +1,12 @@
 import { useMemo } from 'react'
 import { CaretDownIcon, CheckCircleIcon, FunnelIcon } from '@phosphor-icons/react'
 import { EmptyState } from '~/components/empty-state/EmptyState'
+import { LoadingRows } from '~/components/loading/LoadingRows'
 import { Button } from '~/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible'
 import { cn } from '~/lib/utils'
 import { formatMonth, useToday } from '~/model/dates'
-import { useEntitiesOfType, type Entity } from '~/model/store'
+import { useEntitiesOfType, useReplicaReady, type Entity } from '~/model/store'
 import { groupTodos, todoFields, todoMonth, type TodoGroup, type TodoMonthKey } from '~/model/todos'
 import { TodoRow } from './TodoRow'
 
@@ -21,6 +22,9 @@ export function TodoList({ entities, filtered, onClearFilters }: TodoListProps) 
   const today = useToday()
   const tags = useEntitiesOfType('Tag')
   const tagsById = useMemo(() => new Map(tags.map((tag) => [tag.id, tag])), [tags])
+  const ready = useReplicaReady()
+
+  if (!ready) return <LoadingRows className="max-w-4xl" />
 
   if (entities.length === 0 && filtered) {
     return (
