@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
+import { createFileRoute, Link, useLocation, useNavigate } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
-import { CaretDownIcon, DotsThreeIcon, TrashIcon } from '@phosphor-icons/react'
+import { CaretDownIcon, DotsThreeIcon, FileDashedIcon, TrashIcon } from '@phosphor-icons/react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
 } from '~/components/ui/alert-dialog'
 import { Button } from '~/components/ui/button'
+import { EmptyState } from '~/components/empty-state/EmptyState'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,9 +83,18 @@ export const Route = createFileRoute('/e/$id')({
 
 function EntityNotFound() {
   return (
-    <div className="flex flex-col gap-2 px-16 py-10">
-      <h1 className="text-2xl font-semibold">Entity not found</h1>
-      <p className="text-sm text-muted-foreground">This entity doesn't exist or was deleted.</p>
+    <div className="px-16 py-10">
+      <EmptyState
+        icon={FileDashedIcon}
+        color="var(--muted-foreground)"
+        title="Gone up the chimney"
+        description="This note doesn't exist, or was deleted."
+        action={
+          <Button variant="outline" asChild>
+            <Link to="/">Go home</Link>
+          </Button>
+        }
+      />
     </div>
   )
 }

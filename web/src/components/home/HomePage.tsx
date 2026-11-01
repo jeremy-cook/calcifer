@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
-import { ArrowUpRightIcon, ClockCounterClockwiseIcon, type Icon } from '@phosphor-icons/react'
+import { ArrowUpRightIcon, ClockCounterClockwiseIcon, FeatherIcon, type Icon } from '@phosphor-icons/react'
+import { EmptyLine } from '~/components/empty-state/EmptyLine'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityRows } from '~/components/structure-list/EntityRows'
 import { HomeTodos } from '~/components/home/HomeTodos'
@@ -127,6 +128,12 @@ function RecentlyEdited() {
     [entities],
   )
 
-  if (recent.length === 0) return <p className="px-2.5 text-sm text-muted-foreground">Nothing yet.</p>
+  if (recent.length === 0) {
+    return (
+      <EmptyLine icon={FeatherIcon} color="var(--chart-1)">
+        Nothing yet. Notes you edit show up here.
+      </EmptyLine>
+    )
+  }
   return <EntityRows entities={recent} />
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from '@tanstack/react-router'
-import { ArrowBendDownRightIcon, CaretRightIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
+import { ArrowBendDownRightIcon, CaretRightIcon, GraphIcon, PlusIcon, XIcon } from '@phosphor-icons/react'
+import { EmptyLine } from '~/components/empty-state/EmptyLine'
 import { Button } from '~/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible'
 import { EntityPicker } from '~/components/entity/EntityPicker'
@@ -89,7 +90,13 @@ interface RelationshipsListProps {
 function RelationshipsList({ entity, rows }: RelationshipsListProps) {
   const [showAll, setShowAll] = useState(false)
   const removeRelationship = useRemoveRelationship()
-  if (rows.length === 0) return <p className="text-sm text-muted-foreground">No relationships.</p>
+  if (rows.length === 0) {
+    return (
+      <EmptyLine icon={GraphIcon} color="var(--chart-1)" className="px-0">
+        No relationships yet. Mention a note with @, or add one.
+      </EmptyLine>
+    )
+  }
 
   // After this many rows the rest wait behind "Show all", so a hub note stays readable.
   const collapsedRowCount = 20

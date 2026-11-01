@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
-import { CellSignalHighIcon } from '@phosphor-icons/react'
+import { CellSignalHighIcon, SunHorizonIcon } from '@phosphor-icons/react'
+import { EmptyLine } from '~/components/empty-state/EmptyLine'
 import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
 import { formatShortDate, useToday } from '~/model/dates'
@@ -21,7 +22,11 @@ export function HomeTodos() {
   const week = useTodos(WEEK, BY_DUE).filter((e) => todoFields(e).due !== today)
 
   if (overdue.length + dueToday.length + week.length === 0) {
-    return <p className="px-2.5 text-sm text-muted-foreground">Nothing due this week.</p>
+    return (
+      <EmptyLine icon={SunHorizonIcon} color="var(--chart-4)">
+        Nothing due this week.
+      </EmptyLine>
+    )
   }
 
   return (

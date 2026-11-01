@@ -114,7 +114,7 @@ describe('RelationshipsPanel', () => {
 
   it('says so when there is nothing to list', () => {
     renderOpenPanel(entity('a', 'Alpha'))
-    expect(screen.getByText('No relationships.')).toBeTruthy()
+    expect(screen.getByText(/No relationships yet/)).toBeTruthy()
   })
 
   it('shows a remove control only on related rows', () => {

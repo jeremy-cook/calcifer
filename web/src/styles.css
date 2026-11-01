@@ -182,6 +182,21 @@
     );
   }
 
+  /* The logo's rings, faint, behind an empty page's icon. */
+  .hearth-rings {
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle,
+      transparent 0 46%,
+      color-mix(in srgb, var(--stripe-1) 14%, transparent) 46% 56%,
+      transparent 56% 64%,
+      color-mix(in srgb, var(--stripe-2) 11%, transparent) 64% 74%,
+      transparent 74% 82%,
+      color-mix(in srgb, var(--stripe-3) 9%, transparent) 82% 92%,
+      transparent 92%
+    );
+  }
+
   .hearth-logo {
     border-radius: 9999px;
     background: radial-gradient(

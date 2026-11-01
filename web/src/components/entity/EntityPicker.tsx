@@ -99,28 +99,31 @@ function EntityPickerList({ structures, createStructure, excludeIds, query, onPi
   const itemClassName =
     'flex cursor-default items-center gap-2 rounded-[9px] px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-primary/15 data-[selected=true]:text-accent-foreground'
 
+  const trimmed = query.trim()
+  const matches = candidates.filter((e) => e.name.toLowerCase().includes(trimmed.toLowerCase()))
+
   return (
     <Command.List className="max-h-56 overflow-y-auto">
-      {candidates
-        .filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase()))
-        .map((e) => (
-          <Command.Item
-            key={e.id}
-            value={e.id}
-            onSelect={() => onPick({ id: e.id, structureType: e.structureType })}
-            className={itemClassName}
-          >
-            {e.name}
-          </Command.Item>
-        ))}
+      {matches.map((e) => (
+        <Command.Item
+          key={e.id}
+          value={e.id}
+          onSelect={() => onPick({ id: e.id, structureType: e.structureType })}
+          className={itemClassName}
+        >
+          {e.name}
+        </Command.Item>
+      ))}
+      {matches.length === 0 && (
+        <p className="px-2 py-1.5 text-sm text-muted-foreground">
+          {trimmed ? `Nothing called "${trimmed}"` : 'Nothing to pick'}
+        </p>
+      )}
       {canCreate && (
         <Command.Item value={`__create__${query}`} onSelect={onCreate} className={itemClassName}>
           <PlusIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          Create &quot;{query.trim()}&quot;
+          Create &quot;{trimmed}&quot;
         </Command.Item>
-      )}
-      {candidates.length === 0 && !canCreate && (
-        <Command.Empty className="px-2 py-1.5 text-sm text-muted-foreground">No results</Command.Empty>
       )}
     </Command.List>
   )
