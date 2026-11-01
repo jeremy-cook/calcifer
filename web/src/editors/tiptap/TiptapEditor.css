@@ -4,7 +4,7 @@
 }
 
 .tiptap .tiptap-code-block {
-  background-color: var(--shiki-light-bg, color-mix(in oklch, var(--muted) 60%, transparent));
+  background-color: var(--shiki-dark-bg, color-mix(in oklch, var(--muted) 60%, transparent));
 }
 
 .tiptap .tiptap-code-block pre {
@@ -25,14 +25,6 @@
 }
 
 .tiptap .shiki span {
-  color: var(--shiki-light);
-}
-
-.dark .tiptap .tiptap-code-block {
-  background-color: var(--shiki-dark-bg, color-mix(in oklch, var(--muted) 60%, transparent));
-}
-
-.dark .tiptap .shiki span {
   color: var(--shiki-dark) !important;
   background-color: transparent !important;
   font-style: var(--shiki-dark-font-style) !important;
@@ -164,7 +156,9 @@
   flex-shrink: 0;
 }
 
-/* Round, like the app's other checkboxes. */
+/* Round, like the app's other checkboxes. The tick's stroke is --primary-foreground
+   (#1e1510); a data URI can't read a variable, and inputs can't take a pseudo-element
+   in every browser, so it's written out. */
 .tiptap ul[data-type='taskList'] input[type='checkbox'] {
   appearance: none;
   display: grid;

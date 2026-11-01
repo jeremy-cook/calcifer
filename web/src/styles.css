@@ -60,49 +60,9 @@
 }
 
 :root {
+  /* Calcifer is dark only. index.html keeps class="dark" on <html>, so the
+     components' dark: variants apply. */
   /* the hearth stripe, top band to bottom */
-  --stripe-1: #e0a020;
-  --stripe-2: #f08a24;
-  --stripe-3: #d9581f;
-  --stripe-4: #7a3417;
-  --background: #fbf1e1;
-  --foreground: #3a2414;
-  --heading: #7a3417;
-  --link: #b5440f;
-  --card: #f5e6cf;
-  --card-foreground: #3a2414;
-  --popover: #fff8ee;
-  --popover-foreground: #3a2414;
-  --primary: #d9581f;
-  --primary-foreground: #fff6e8;
-  --secondary: #f2e1c6;
-  --secondary-foreground: #6a4a33;
-  --muted: #f2e1c6;
-  --muted-foreground: #a2856a;
-  --accent: #f0d7b2;
-  --accent-foreground: #4a1f0c;
-  --destructive: #c2410c;
-  --border: #e6d2b4;
-  --input: #e6d2b4;
-  --ring: #d9581f;
-  /* structure tints: Note, Tag, Daily Note, ToDo, spare */
-  --chart-1: #f08a24;
-  --chart-2: #b7860f;
-  --chart-3: #d9581f;
-  --chart-4: #7d7a2e;
-  --chart-5: #7a3417;
-  --radius: 0.5rem;
-  --sidebar: #f5e6cf;
-  --sidebar-foreground: #6a4a33;
-  --sidebar-primary: #d9581f;
-  --sidebar-primary-foreground: #fff6e8;
-  --sidebar-accent: #f0d7b2;
-  --sidebar-accent-foreground: #4a1f0c;
-  --sidebar-border: #e6d2b4;
-  --sidebar-ring: #d9581f;
-}
-
-.dark {
   --stripe-1: #f2b630;
   --stripe-2: #f08a24;
   --stripe-3: #d9581f;
@@ -127,11 +87,13 @@
   --border: #3d2b20;
   --input: #3d2b20;
   --ring: #f08a24;
+  /* structure tints: Note, Tag, Daily Note, ToDo, spare */
   --chart-1: #f08a24;
   --chart-2: #f2b630;
   --chart-3: #d9581f;
   --chart-4: #a9a65a;
   --chart-5: #7a3417;
+  --radius: 0.5rem;
   --sidebar: #251a14;
   --sidebar-foreground: #d6bfa6;
   --sidebar-primary: #f08a24;
