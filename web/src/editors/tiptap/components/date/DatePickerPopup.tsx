@@ -27,6 +27,9 @@ export function DatePickerPopup({ onSelect, onClose, initialDate }: DatePickerPo
     onSelect(iso)
   }
 
+  // Opens on this year; the years run from react-day-picker's default start (a century back) to ten years ahead.
+  const endMonth = new Date(new Date().getFullYear() + 10, 11)
+
   return (
     <div
       className="date-picker-popup"
@@ -42,6 +45,7 @@ export function DatePickerPopup({ onSelect, onClose, initialDate }: DatePickerPo
         month={month}
         onMonthChange={setMonth}
         captionLayout="dropdown"
+        endMonth={endMonth}
         classNames={{ dropdowns: 'flex items-center justify-center gap-4 text-sm font-medium' }}
       />
       <div className="date-picker-popup-footer">

@@ -18,16 +18,16 @@ describe('DatePickerPopup', () => {
     expect(onSelect).toHaveBeenCalledWith('1957-10-04')
   })
 
-  it("offers the mini calendar's years: a century back to this year", () => {
-    render(<DatePickerPopup initialDate="2026-10-31" onSelect={vi.fn()} onClose={vi.fn()} />)
+  it('opens on this year and offers a century back and ten years ahead', () => {
+    render(<DatePickerPopup onSelect={vi.fn()} onClose={vi.fn()} />)
 
-    const years = Array.from(screen.getByRole('combobox', { name: /year/i }).querySelectorAll('option')).map((o) =>
-      Number(o.value),
-    )
+    const select = screen.getByRole('combobox', { name: /year/i }) as HTMLSelectElement
+    const years = Array.from(select.querySelectorAll('option')).map((o) => Number(o.value))
 
     const thisYear = new Date().getFullYear()
+    expect(Number(select.value)).toBe(thisYear)
     expect(years[0]).toBe(thisYear - 100)
-    expect(years.at(-1)).toBe(thisYear)
+    expect(years.at(-1)).toBe(thisYear + 10)
   })
 
   it('opens on the initial date', () => {
