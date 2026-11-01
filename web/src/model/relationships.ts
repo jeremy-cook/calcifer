@@ -153,3 +153,27 @@ export function useRelationshipRows(entityId: string): RelationshipRow[] {
   const { entity } = useEntity(entityId)
   return useMemo(() => (entity ? selectRelationshipRows(entities, entity) : []), [entities, entity])
 }
+
+// An entity that refers to this one, and whether it does so only in its text.
+export interface Reference {
+  entity: Entity
+  inTextOnly: boolean
+}
+
+// The entities that link to `entityId`, by a relation property or in their text: the
+// incoming relationship rows, resolved against the replica.
+export function useIncomingReferences(entityId: string): Reference[] {
+  const rows = useRelationshipRows(entityId)
+  const entities = useAllEntities()
+  return useMemo(() => {
+    const byId = new Map(entities.map((e) => [e.id, e]))
+    return rows
+      .filter((row) => row.direction === 'incoming')
+      .flatMap((row) => {
+        const entity = byId.get(row.entityId)
+        if (!entity) return []
+        const inTextOnly = row.reasons.every((reason) => reason.kind === 'mentioned')
+        return [{ entity, inTextOnly }]
+      })
+  }, [rows, entities])
+}

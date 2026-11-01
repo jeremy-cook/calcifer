@@ -32,9 +32,11 @@ import { PILL_CLASS } from '~/components/entity/property-pill'
 import { TodoPriorityField } from '~/components/todo/TodoPriorityField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
+import { ReferencesList } from '~/components/relationships/ReferencesList'
 import { RelationshipsPanel } from '~/components/relationships/RelationshipsPanel'
 import { cn } from '~/lib/utils'
 import { formatShortDate, weekNumber } from '~/model/dates'
+import { useIncomingReferences } from '~/model/relationships'
 import {
   dailyNoteDate,
   deleteEntity,
@@ -53,6 +55,7 @@ import {
   facetPresentation,
   isNameEditable,
   optionLabel,
+  richTextPropertyIds,
   structurePresentation,
   useFacets,
   useStructure,
@@ -72,9 +75,6 @@ export const Route = createFileRoute('/e/$id')({
         <EntityHeader key={entity.id} entity={entity} />
         <div className="min-h-0 flex-1 overflow-y-auto">
           <EntityBody entity={entity} />
-          <div className="border-t border-border px-16 py-6">
-            <RelationshipsPanel entity={entity} />
-          </div>
         </div>
       </div>
     )
@@ -141,8 +141,12 @@ function EntityByline({ entity, onFacetAttached }: EntityBylineProps) {
   const { icon: Icon, color } = structurePresentation(entity.structureType)
 
   const dateIso = dailyNoteDate(entity)
+  // An entity with no text of its own is about what refers to it, so the byline counts them.
+  const referenceCount = useIncomingReferences(entity.id).length
+  const hasText = richTextPropertyIds(entity.structureType).length > 0
   const details = [
     dateIso ? `Week ${weekNumber(dateIso)}` : null,
+    hasText ? null : `${referenceCount} ${referenceCount === 1 ? 'note' : 'notes'}`,
     `edited ${formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}`,
   ].filter((detail) => detail !== null)
 
@@ -546,16 +550,28 @@ interface EntityBodyProps {
   entity: Entity
 }
 
-// The structure's rich-text properties, below the header.
+// The structure's rich-text properties and the relationships section below them. An
+// entity with no text of its own (a tag) shows what refers to it instead.
 function EntityBody({ entity }: EntityBodyProps) {
   const structure = useStructure(entity.structureType)
   const richText = structure?.properties.filter((def) => def.kind === PropertyKind.RICHTEXT) ?? []
+
+  if (richText.length === 0) {
+    return (
+      <div className="px-16 pb-10">
+        <ReferencesList entity={entity} />
+      </div>
+    )
+  }
 
   return (
     <>
       {richText.map((def) => (
         <EntityRichTextField key={def.id} entityId={entity.id} propertyId={def.id} />
       ))}
+      <div className="border-t border-border px-16 py-6">
+        <RelationshipsPanel entity={entity} />
+      </div>
     </>
   )
 }
