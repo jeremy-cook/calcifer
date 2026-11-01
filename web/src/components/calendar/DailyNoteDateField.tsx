@@ -9,5 +9,5 @@ export interface DailyNoteDateFieldProps {
 export function DailyNoteDateField({ entity }: DailyNoteDateFieldProps) {
   const { iso, validate, error, move } = useDailyNoteDate(entity)
   if (!iso) return null
-  return <EntityDateField label="Date" iso={iso} validate={validate} error={error} onChange={move} />
+  return <EntityDateField label="Date" showLabel={false} iso={iso} validate={validate} error={error} onChange={move} />
 }

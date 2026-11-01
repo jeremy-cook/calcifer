@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, useLocation, useNavigate } from '@tanstack/react-router'
-import { CheckSquareIcon, TrashIcon } from '@phosphor-icons/react'
+import { formatDistanceToNow } from 'date-fns'
+import { CaretDownIcon, DotsThreeIcon, TrashIcon } from '@phosphor-icons/react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,9 +11,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '~/components/ui/alert-dialog'
 import { Button } from '~/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu'
 import { Input } from '~/components/ui/input'
 import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityDateField } from '~/components/entity/EntityDateField'
@@ -20,11 +27,17 @@ import { EntitySelectField } from '~/components/entity/EntitySelectField'
 import { EntityRelationField } from '~/components/entity/EntityRelationField'
 import { EntityRelationsField } from '~/components/entity/EntityRelationsField'
 import { EntityTextField } from '~/components/entity/EntityTextField'
+import { PILL_CLASS } from '~/components/entity/property-pill'
+import { TodoPriorityField } from '~/components/todo/TodoPriorityField'
 import { TodoStatusField } from '~/components/todo/TodoStatusField'
 import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { RelationshipsPanel } from '~/components/relationships/RelationshipsPanel'
+import { cn } from '~/lib/utils'
+import { formatShortDate, weekNumber } from '~/model/dates'
 import {
+  dailyNoteDate,
   deleteEntity,
+  entityUpdatedAtDate,
   hasFacet,
   propertyValueOf,
   useAttachFacet,
@@ -36,13 +49,15 @@ import {
 } from '~/model/store'
 import {
   PropertyKind,
+  facetPresentation,
   isNameEditable,
+  optionLabel,
+  structurePresentation,
   useFacets,
   useStructure,
   type FacetDef,
   type PropertyDef,
 } from '~/model/structures'
-import { TODO_FACET } from '~/model/todos'
 
 export const Route = createFileRoute('/e/$id')({
   component: function EntityRoute() {
@@ -53,10 +68,10 @@ export const Route = createFileRoute('/e/$id')({
 
     return (
       <div className="flex h-full flex-col">
-        <EntityHeader entity={entity} />
+        <EntityHeader key={entity.id} entity={entity} />
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <EntityProperties entity={entity} />
-          <div className="border-t border-border px-12 py-6">
+          <EntityBody entity={entity} />
+          <div className="border-t border-border px-16 py-6">
             <RelationshipsPanel entity={entity} />
           </div>
         </div>
@@ -78,44 +93,111 @@ interface EntityHeaderProps {
   entity: Entity
 }
 
+// The byline (kind, when edited, the ⋯ menu), the title, then the properties as a row
+// of pills: the structure's own, then one summary pill per attached facet. A facet's
+// pill opens its fields in a band under the header.
 function EntityHeader({ entity }: EntityHeaderProps) {
+  const [openFacetId, setOpenFacetId] = useState<string | null>(null)
+  const openFacet = useFacets().find((f) => f.id === openFacetId && hasFacet(entity, f.id))
+
+  const toggleFacet = (facetId: string) => setOpenFacetId((open) => (open === facetId ? null : facetId))
+
+  const renderTitle = () =>
+    isNameEditable(entity.structureType) ? (
+      <EntityTitleInput key={entity.id} entity={entity} />
+    ) : (
+      <h1 className="font-heading text-4xl leading-tight font-semibold text-heading">{entity.name}</h1>
+    )
+
+  return (
+    <div>
+      <header className="flex flex-col gap-1.5 px-16 pt-7 pb-5">
+        <EntityByline entity={entity} onFacetAttached={setOpenFacetId} />
+        {renderTitle()}
+        <EntityPills entity={entity} openFacetId={openFacet?.id ?? null} onToggleFacet={toggleFacet} />
+      </header>
+      {openFacet && <FacetBand entity={entity} facet={openFacet} />}
+    </div>
+  )
+}
+
+interface EntityBylineProps {
+  entity: Entity
+  onFacetAttached: (facetId: string) => void
+}
+
+function EntityByline({ entity, onFacetAttached }: EntityBylineProps) {
+  const structure = useStructure(entity.structureType)
+  const { icon: Icon, color } = structurePresentation(entity.structureType)
+
+  const dateIso = dailyNoteDate(entity)
+  const details = [
+    dateIso ? `Week ${weekNumber(dateIso)}` : null,
+    `edited ${formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}`,
+  ].filter((detail) => detail !== null)
+
+  return (
+    <div className="flex h-7 items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
+      <Icon weight="duotone" className="size-4.5 shrink-0" style={{ color }} aria-hidden />
+      {structure?.name ?? entity.structureType}
+      <span className="font-medium tracking-normal normal-case">· {details.join(' · ')}</span>
+      <EntityMenu entity={entity} onFacetAttached={onFacetAttached} />
+    </div>
+  )
+}
+
+interface EntityMenuProps {
+  entity: Entity
+  // Called after a facet is attached, so its band can open.
+  onFacetAttached: (facetId: string) => void
+}
+
+// Attaching a facet the structure allows, and deleting the entity behind a confirmation.
+function EntityMenu({ entity, onFacetAttached }: EntityMenuProps) {
   const navigate = useNavigate()
   const attachFacet = useAttachFacet()
   const structure = useStructure(entity.structureType)
+  const facets = useFacets().filter((f) => structure?.facets.includes(f.id) && !hasFacet(entity, f.id))
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const structureName = structure?.name ?? entity.structureType
-  const nameEditable = isNameEditable(entity.structureType)
-  const canMakeTodo = (structure?.facets.includes(TODO_FACET) ?? false) && !hasFacet(entity, TODO_FACET)
+
+  const handleAttach = (facetId: string) => {
+    void attachFacet(entity.id, facetId)
+    onFacetAttached(facetId)
+  }
 
   const handleDelete = () => {
     deleteEntity(entity.id)
     void navigate({ to: '/' })
   }
 
-  const renderTitle = () =>
-    nameEditable ? (
-      <EntityTitleInput key={entity.id} entity={entity} />
-    ) : (
-      <h1 className="flex h-12 flex-1 items-center px-3 font-heading text-3xl font-semibold text-heading">
-        {entity.name}
-      </h1>
-    )
-
   return (
-    <div className="flex items-center gap-2 border-b border-border px-12 py-6">
-      {renderTitle()}
-      {canMakeTodo && (
-        <Button variant="ghost" size="sm" onClick={() => void attachFacet(entity.id, TODO_FACET)}>
-          <CheckSquareIcon />
-          Make a ToDo
-        </Button>
-      )}
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="icon" aria-label="Delete entity">
-            <TrashIcon />
+    <>
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="ml-auto text-muted-foreground" aria-label="More actions">
+            <DotsThreeIcon weight="bold" />
           </Button>
-        </AlertDialogTrigger>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          {facets.map((facet) => {
+            const { icon: FacetIcon, color } = facetPresentation(facet.id)
+            return (
+              <DropdownMenuItem key={facet.id} onSelect={() => handleAttach(facet.id)}>
+                <FacetIcon weight="duotone" style={{ color }} />
+                Make a {facet.name}
+              </DropdownMenuItem>
+            )
+          })}
+          {facets.length > 0 && <DropdownMenuSeparator />}
+          <DropdownMenuItem variant="destructive" onSelect={() => setConfirmOpen(true)}>
+            <TrashIcon />
+            Delete {structureName.toLowerCase()}…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {structureName.toLowerCase()}?</AlertDialogTitle>
@@ -129,7 +211,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </>
   )
 }
 
@@ -195,21 +277,17 @@ function EntityTitleInput({ entity }: EntityTitleInputProps) {
       onFocus={() => setFocused(true)}
       onBlur={handleBlur}
       onChange={(e) => handleChange(e.target.value)}
-      className="h-12 border-0 bg-transparent font-heading text-3xl font-semibold text-heading shadow-none focus-visible:ring-0 md:text-3xl dark:bg-transparent"
+      className="h-auto rounded-none border-0 bg-transparent p-0 font-heading text-4xl leading-tight font-semibold text-heading shadow-none focus-visible:ring-0 md:text-4xl dark:bg-transparent"
       aria-label="Entity title"
     />
   )
 }
 
-interface EntityPropertiesProps {
-  entity: Entity
-}
-
-function EntityProperties({ entity }: EntityPropertiesProps) {
+// Renders a property's editor as a pill. Facet properties render in the facet's band,
+// under their own label, so a date there leaves its label out of the pill.
+function usePropertyRenderer(entity: Entity) {
   const { setText, setNumber, setDate, setSelect, setRelation, addRelationTarget, removeRelationTarget } =
     usePropertyWriters()
-  const structure = useStructure(entity.structureType)
-  const facets = useFacets().filter((f) => hasFacet(entity, f.id))
 
   // Properties whose editor isn't the generic one for their type. Structure
   // properties are keyed "Structure.propertyId"; facet properties by their full
@@ -217,6 +295,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
   const overrides: Record<string, () => React.ReactNode> = {
     'DailyNote.date': () => <DailyNoteDateField key="date" entity={entity} />,
     'todo.status': () => <TodoStatusField key="todo.status" entity={entity} />,
+    'todo.priority': () => <TodoPriorityField key="todo.priority" entity={entity} />,
   }
 
   const renderProperty = (def: PropertyDef, facet?: FacetDef) => {
@@ -226,8 +305,6 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
     const value = propertyValueOf(entity, def.id)
 
     switch (def.kind) {
-      case PropertyKind.RICHTEXT:
-        return <EntityRichTextField key={def.id} entityId={entity.id} propertyId={def.id} />
       case PropertyKind.TEXT:
         return (
           <EntityTextField
@@ -261,6 +338,7 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
           <EntityDateField
             key={def.id}
             label={def.label || 'Date'}
+            showLabel={!facet}
             iso={iso}
             onChange={(next) => setDate(entity, def.id, next)}
             onClear={iso ? () => setDate(entity, def.id, null) : undefined}
@@ -305,40 +383,167 @@ function EntityProperties({ entity }: EntityPropertiesProps) {
             onChange={(target) => setRelation(entity, def.id, target)}
           />
         )
-      // UNSPECIFIED, or a kind added to the server after this build.
+      // RICHTEXT renders in the body; UNSPECIFIED, or a kind added to the server after this build.
       default:
         return null
     }
   }
 
+  return renderProperty
+}
+
+interface EntityPillsProps {
+  entity: Entity
+  openFacetId: string | null
+  onToggleFacet: (facetId: string) => void
+}
+
+// The structure's properties, then a summary pill per attached facet after a divider.
+function EntityPills({ entity, openFacetId, onToggleFacet }: EntityPillsProps) {
+  const renderProperty = usePropertyRenderer(entity)
+  const structure = useStructure(entity.structureType)
+  const attached = useFacets().filter((f) => hasFacet(entity, f.id))
+
+  const structureProperties = structure?.properties.filter((def) => def.kind !== PropertyKind.RICHTEXT) ?? []
+
+  const groups = [
+    structureProperties.length > 0 && (
+      <PillGroup key="structure">{structureProperties.map((def) => renderProperty(def))}</PillGroup>
+    ),
+    attached.length > 0 && (
+      <PillGroup key="facets">
+        {attached.map((facet) => (
+          <FacetPill
+            key={facet.id}
+            entity={entity}
+            facet={facet}
+            open={facet.id === openFacetId}
+            onToggle={() => onToggleFacet(facet.id)}
+          />
+        ))}
+      </PillGroup>
+    ),
+  ].filter(Boolean)
+
+  if (groups.length === 0) return null
+
+  return <div className="mt-2 flex flex-wrap items-center gap-1.5">{groups}</div>
+}
+
+interface PillGroupProps {
+  children: React.ReactNode
+}
+
+// Pills that belong together; a divider sets each group after the first apart.
+function PillGroup({ children }: PillGroupProps) {
   return (
-    <>
-      {structure?.properties.map((def) => renderProperty(def))}
-      {facets.map((facet) => (
-        <FacetSection key={facet.id} entity={entity} facet={facet} renderProperty={renderProperty} />
-      ))}
-    </>
+    <span className="contents [&+&]:before:mx-1.5 [&+&]:before:h-4 [&+&]:before:w-px [&+&]:before:bg-muted-foreground/40 [&+&]:before:content-['']">
+      {children}
+    </span>
   )
 }
 
-interface FacetSectionProps {
+interface FacetPillProps {
   entity: Entity
   facet: FacetDef
-  renderProperty: (def: PropertyDef, facet: FacetDef) => React.ReactNode
+  open: boolean
+  onToggle: () => void
 }
 
-function FacetSection({ entity, facet, renderProperty }: FacetSectionProps) {
-  const detachFacet = useDetachFacet()
+// A facet's name and the values it has set ("ToDo · High · Due Fri 6 Nov"); it opens
+// and closes the facet's band.
+function FacetPill({ entity, facet, open, onToggle }: FacetPillProps) {
+  const { icon: Icon, color } = facetPresentation(facet.id)
+
+  // Set values only: a select left on its default and an empty field are skipped.
+  const summary = facet.properties.flatMap((def) => {
+    const value = propertyValueOf(entity, def.id)
+    switch (value?.case) {
+      case 'select':
+        return value.value === def.defaultOption ? [] : [optionLabel(def, value.value)]
+      case 'date':
+        return [`${def.label || 'Date'} ${formatShortDate(value.value)}`]
+      case 'text':
+        return value.value ? [value.value] : []
+      case 'number':
+        return [String(value.value)]
+      default:
+        return []
+    }
+  })
 
   return (
-    <section className="border-t border-border py-3">
-      <div className="flex items-center justify-between px-12 py-1">
-        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{facet.name}</h2>
-        <Button variant="ghost" size="sm" onClick={() => void detachFacet(entity.id, facet.id)}>
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className={cn(PILL_CLASS, open && 'bg-accent text-accent-foreground ring-1 ring-border')}
+    >
+      <Icon weight="duotone" style={{ color }} aria-hidden />
+      {facet.name}
+      {summary.map((part) => (
+        <span key={part} className="font-medium">
+          <span className="text-muted-foreground">·</span> {part}
+        </span>
+      ))}
+      <CaretDownIcon className={cn('size-3! text-muted-foreground transition-transform', open && 'rotate-180')} />
+    </button>
+  )
+}
+
+interface FacetBandProps {
+  entity: Entity
+  facet: FacetDef
+}
+
+// An open facet's fields, in a band the full width of the page under the header; the
+// editor's top border closes it.
+function FacetBand({ entity, facet }: FacetBandProps) {
+  const renderProperty = usePropertyRenderer(entity)
+  const detachFacet = useDetachFacet()
+  const { icon: Icon, color } = facetPresentation(facet.id)
+
+  return (
+    <section aria-label={facet.name} className="border-t border-border bg-muted/60 px-16 pt-2.5 pb-3.5">
+      <div className="flex h-7 items-center gap-2 text-xs font-bold tracking-wider uppercase" style={{ color }}>
+        <Icon weight="duotone" className="size-4" aria-hidden />
+        {facet.name}
+        <Button
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-7 font-medium tracking-normal text-muted-foreground normal-case"
+          onClick={() => void detachFacet(entity.id, facet.id)}
+          aria-label={`Remove ${facet.name}`}
+        >
           Remove
         </Button>
       </div>
-      {facet.properties.map((def) => renderProperty(def, facet))}
+      <div className="mt-1 flex flex-wrap gap-x-10 gap-y-2">
+        {facet.properties.map((def) => (
+          <div key={def.id} className="flex min-w-36 flex-col items-start gap-1">
+            <span className="text-xs text-muted-foreground">{def.label || def.id}</span>
+            {renderProperty(def, facet)}
+          </div>
+        ))}
+      </div>
     </section>
+  )
+}
+
+interface EntityBodyProps {
+  entity: Entity
+}
+
+// The structure's rich-text properties, below the header.
+function EntityBody({ entity }: EntityBodyProps) {
+  const structure = useStructure(entity.structureType)
+  const richText = structure?.properties.filter((def) => def.kind === PropertyKind.RICHTEXT) ?? []
+
+  return (
+    <>
+      {richText.map((def) => (
+        <EntityRichTextField key={def.id} entityId={entity.id} propertyId={def.id} />
+      ))}
+    </>
   )
 }

@@ -1,9 +1,10 @@
+import { Link } from '@tanstack/react-router'
 import { PlusIcon, XIcon } from '@phosphor-icons/react'
 import type { EntityRef } from 'calcifer/v1/entities_pb'
-import { Badge } from '~/components/ui/badge'
-import { Button } from '~/components/ui/button'
 import { EntityPicker } from '~/components/entity/EntityPicker'
+import { PILL_CLASS, PILL_CLEAR_CLASS, PILL_EMPTY_CLASS } from '~/components/entity/property-pill'
 import { useEntitiesByIds, type RelationTarget } from '~/model/store'
+import { structurePresentation, useStructure } from '~/model/structures'
 
 export interface EntityRelationsFieldProps {
   // The entity being edited, left out of the picker's candidates.
@@ -16,6 +17,7 @@ export interface EntityRelationsFieldProps {
   onRemove: (targetId: string) => void
 }
 
+// One pill per target, tinted by its structure, then a "+ Tag" pill to add one.
 export function EntityRelationsField({
   selfId,
   label,
@@ -25,37 +27,42 @@ export function EntityRelationsField({
   onRemove,
 }: EntityRelationsFieldProps) {
   const entities = useEntitiesByIds(refs.map((ref) => ref.id))
+  const target = useStructure(targetStructure)
 
   const resolvedRefs = refs
     .map((ref, i) => ({ ref, entity: entities[i] }))
     .filter((r): r is { ref: EntityRef; entity: NonNullable<typeof r.entity> } => r.entity !== undefined)
 
   const excludeIds = [selfId, ...refs.map((r) => r.id)]
+  const addLabel = target?.name ?? label
 
   return (
-    <div className="flex items-start gap-3 px-12 py-3">
-      <span className="w-24 shrink-0 pt-1 text-sm text-muted-foreground">{label}</span>
-      <div className="flex flex-1 flex-wrap items-center gap-1.5">
-        {resolvedRefs.map(({ ref, entity }) => (
-          <Badge key={ref.id} variant="secondary" className="gap-1">
-            {entity.name}
+    <>
+      {resolvedRefs.map(({ ref, entity }) => {
+        const { icon: Icon, color } = structurePresentation(entity.structureType)
+        return (
+          <span key={ref.id} className={PILL_CLASS} style={{ color }}>
+            <Link to="/e/$id" params={{ id: entity.id }} className="inline-flex items-center gap-1 hover:underline">
+              <Icon weight="duotone" aria-hidden />
+              {entity.name}
+            </Link>
             <button
               type="button"
               onClick={() => onRemove(ref.id)}
               aria-label={`Remove ${entity.name}`}
-              className="rounded-full hover:text-destructive"
+              className={PILL_CLEAR_CLASS}
             >
-              <XIcon className="size-3" />
+              <XIcon />
             </button>
-          </Badge>
-        ))}
-        <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onAdd}>
-          <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-xs font-normal text-muted-foreground">
-            <PlusIcon className="size-3" />
-            Add
-          </Button>
-        </EntityPicker>
-      </div>
-    </div>
+          </span>
+        )
+      })}
+      <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onAdd}>
+        <button type="button" className={PILL_EMPTY_CLASS} aria-label={`Add to ${label.toLowerCase()}`}>
+          <PlusIcon />
+          {addLabel}
+        </button>
+      </EntityPicker>
+    </>
   )
 }

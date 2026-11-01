@@ -32,6 +32,12 @@ export function formatLongDate(iso: string): string {
   return format(dateFromIso(iso), 'MMMM d, yyyy')
 }
 
+// "Fri 6 Nov" this year, "6 Nov 2027" otherwise.
+export function formatShortDate(iso: string): string {
+  const date = dateFromIso(iso)
+  return format(date, date.getFullYear() === new Date().getFullYear() ? 'EEE d MMM' : 'd MMM yyyy')
+}
+
 export function formatWeekday(iso: string): string {
   return format(dateFromIso(iso), 'EEEE')
 }

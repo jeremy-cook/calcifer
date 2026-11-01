@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Input } from '~/components/ui/input'
+import { PILL_CLASS } from '~/components/entity/property-pill'
 
 export interface EntityTextFieldProps {
   label: string
@@ -9,7 +9,7 @@ export interface EntityTextFieldProps {
   type?: 'text' | 'number'
 }
 
-// An inline input that writes once on blur or Enter, not per keystroke; Escape
+// A pill with an inline input that writes once on blur or Enter, not per keystroke; Escape
 // reverts the draft. While focused the draft is the source of truth; outside of focus a
 // changed `value` (another client, the MCP agent, a rejected write) is adopted
 // during render.
@@ -38,9 +38,9 @@ export function EntityTextField({ label, value, onCommit, type = 'text' }: Entit
   }
 
   return (
-    <div className="flex items-center gap-3 px-12 py-3">
-      <span className="w-24 shrink-0 text-sm text-muted-foreground">{label}</span>
-      <Input
+    <label className={PILL_CLASS}>
+      <span className="font-medium text-muted-foreground">{label}</span>
+      <input
         type={type}
         value={draft}
         placeholder="Empty"
@@ -48,9 +48,9 @@ export function EntityTextField({ label, value, onCommit, type = 'text' }: Entit
         onBlur={handleBlur}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="h-8 max-w-sm border-0 bg-transparent px-2 shadow-none focus-visible:ring-0 dark:bg-transparent"
+        className="field-sizing-content min-w-12 bg-transparent outline-none placeholder:text-muted-foreground"
         aria-label={label}
       />
-    </div>
+    </label>
   )
 }

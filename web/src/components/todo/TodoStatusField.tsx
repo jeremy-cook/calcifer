@@ -1,4 +1,5 @@
 import { Checkbox } from '~/components/ui/checkbox'
+import { PILL_CLASS } from '~/components/entity/property-pill'
 import { todoFields, useSetTodoStatus } from '~/model/todos'
 import type { Entity } from 'calcifer/v1/entities_pb'
 
@@ -15,12 +16,9 @@ export function TodoStatusField({ entity }: TodoStatusFieldProps) {
   }
 
   return (
-    <label className="flex items-center gap-3 px-12 py-3">
-      <span className="w-24 text-sm text-muted-foreground">Status</span>
-      <span className="flex items-center gap-2">
-        <Checkbox checked={status === 'done'} onCheckedChange={handleCheckedChange} />
-        <span className="text-sm">Done</span>
-      </span>
+    <label className={PILL_CLASS}>
+      <Checkbox checked={status === 'done'} onCheckedChange={handleCheckedChange} aria-label="Done" />
+      {status === 'done' ? 'Done' : 'Open'}
     </label>
   )
 }

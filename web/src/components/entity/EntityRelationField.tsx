@@ -1,7 +1,7 @@
-import { XIcon } from '@phosphor-icons/react'
+import { PlusIcon, XIcon } from '@phosphor-icons/react'
 import type { EntityRef } from 'calcifer/v1/entities_pb'
-import { Button } from '~/components/ui/button'
 import { EntityPicker } from '~/components/entity/EntityPicker'
+import { PILL_CLASS, PILL_CLEAR_CLASS, PILL_EMPTY_CLASS } from '~/components/entity/property-pill'
 import { useEntity, type RelationTarget } from '~/model/store'
 
 export interface EntityRelationFieldProps {
@@ -14,31 +14,38 @@ export interface EntityRelationFieldProps {
   onChange: (target: RelationTarget | null) => void
 }
 
-// A single-target relation: the target's name opens the picker to replace it.
+// A single-target relation: the target's pill opens the picker to replace it.
 export function EntityRelationField({ selfId, label, targetStructure, target, onChange }: EntityRelationFieldProps) {
   // A target with no entity (deleted) shows as unset.
   const { entity: targetEntity } = useEntity(target?.id ?? '')
   const excludeIds = target ? [selfId, target.id] : [selfId]
 
-  return (
-    <div className="flex items-center gap-3 px-12 py-3">
-      <span className="w-24 shrink-0 text-sm text-muted-foreground">{label}</span>
+  if (!targetEntity) {
+    return (
       <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onChange}>
-        <Button variant="ghost" size="sm" className="h-8 px-2 font-normal">
-          {targetEntity ? targetEntity.name : <span className="text-muted-foreground">Set {label.toLowerCase()}</span>}
-        </Button>
+        <button type="button" className={PILL_EMPTY_CLASS}>
+          <PlusIcon />
+          {label}
+        </button>
       </EntityPicker>
-      {target && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-6"
-          onClick={() => onChange(null)}
-          aria-label={`Clear ${label.toLowerCase()}`}
-        >
-          <XIcon className="size-3.5 text-muted-foreground" />
-        </Button>
-      )}
-    </div>
+    )
+  }
+
+  return (
+    <span className={PILL_CLASS}>
+      <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onChange}>
+        <button type="button" aria-label={`${label}: ${targetEntity.name}`}>
+          <span className="font-medium text-muted-foreground">{label}</span> {targetEntity.name}
+        </button>
+      </EntityPicker>
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        aria-label={`Clear ${label.toLowerCase()}`}
+        className={PILL_CLEAR_CLASS}
+      >
+        <XIcon />
+      </button>
+    </span>
   )
 }
