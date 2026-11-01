@@ -45,7 +45,7 @@ function renderColorPickerItem(item: InsertItem) {
     <label
       key={item.key}
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2.5 rounded px-2.5 py-1.5 text-sm hover:bg-accent',
+        'flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] px-2.5 py-1.5 text-sm hover:bg-primary/15',
         item.disabled && 'pointer-events-none opacity-40',
       )}
     >
@@ -75,7 +75,7 @@ function renderButtonItem(item: InsertItem) {
       key={item.key}
       disabled={item.disabled}
       className={cn(
-        'flex w-full cursor-pointer items-center gap-2.5 rounded px-2.5 py-1.5 text-left text-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40',
+        'flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] px-2.5 py-1.5 text-left text-sm hover:bg-primary/15 disabled:pointer-events-none disabled:opacity-40',
         item.active && 'bg-muted',
       )}
       onClick={item.onClick}
@@ -113,7 +113,7 @@ function InsertMenu({ editor, sections, close, setView }: InsertMenuProps) {
       {menuItems.map(({ icon: Icon, label }) => (
         <button
           key={label}
-          className="flex w-full cursor-pointer items-center gap-2.5 rounded px-2.5 py-1.5 text-left text-sm hover:bg-accent"
+          className="flex w-full cursor-pointer items-center gap-2.5 rounded-[9px] px-2.5 py-1.5 text-left text-sm hover:bg-primary/15"
           onClick={() => {
             if (label === 'Details') {
               insertDetails(editor)

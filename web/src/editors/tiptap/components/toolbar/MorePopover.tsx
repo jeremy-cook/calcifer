@@ -36,7 +36,7 @@ export function MorePopover({ editor, alignment, isSubscript, isSuperscript, dis
   ] as const
 
   const ROW_CLASS =
-    'flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-left text-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0'
+    'flex w-full items-center gap-2.5 rounded-[9px] px-2.5 py-1.5 text-left text-sm hover:bg-primary/15 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4 [&_svg]:shrink-0'
 
   return (
     <Popover>

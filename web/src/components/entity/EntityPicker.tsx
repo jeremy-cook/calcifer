@@ -53,14 +53,14 @@ export function EntityPicker({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align="start" className="w-64 p-0">
+      <PopoverContent align="start" className="w-64 p-1.5">
         <Command shouldFilter={false} className="flex flex-col">
           <Command.Input
             autoFocus
             value={query}
             onValueChange={setQuery}
             placeholder="Search…"
-            className="border-b border-border bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground"
+            className="mb-1 rounded-[9px] bg-background px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground"
           />
           <EntityPickerList
             structures={structures}
@@ -97,10 +97,10 @@ function EntityPickerList({ structures, createStructure, excludeIds, query, onPi
   const canCreate = hasUniqueNames(createStructure) && query.trim().length > 0
 
   const itemClassName =
-    'flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-accent data-[selected=true]:text-accent-foreground'
+    'flex cursor-default items-center gap-2 rounded-[9px] px-2 py-1.5 text-sm outline-none data-[selected=true]:bg-primary/15 data-[selected=true]:text-accent-foreground'
 
   return (
-    <Command.List className="max-h-56 overflow-y-auto p-1">
+    <Command.List className="max-h-56 overflow-y-auto">
       {candidates
         .filter((e) => e.name.toLowerCase().includes(query.trim().toLowerCase()))
         .map((e) => (

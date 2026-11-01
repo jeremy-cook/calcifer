@@ -162,6 +162,17 @@
       'WONK' 0;
   }
 
+  /* Menus, pop-overs and dialogs share one soft surface: round, faintly warm,
+     lifted by a ring and a deep shadow. Rows highlight in a light ember wash,
+     like the editor toolbar's active buttons. */
+  .menu-surface {
+    background-color: color-mix(in srgb, var(--popover) 94%, var(--primary));
+    border-radius: 14px;
+    box-shadow:
+      0 0 0 1px var(--border),
+      0 18px 40px rgb(0 0 0 / 0.45);
+  }
+
   .hearth-stripe {
     background: linear-gradient(
       var(--stripe-1) 0 25%,
