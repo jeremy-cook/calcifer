@@ -7,6 +7,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '~/components/ui/dropdown-menu'
+import { cn } from '~/lib/utils'
 import { useCreateEntity } from '~/model/store'
 import { facetPresentation, structurePresentation, useStructures } from '~/model/structures'
 import { TODO_FACET } from '~/model/todos'
@@ -19,7 +20,11 @@ const classnamesDropdownMenuTrigger = [
   '[&_svg]:size-[18px] [&_svg]:shrink-0',
 ].join(' ')
 
-export function NewButton() {
+export interface NewButtonProps {
+  rail: boolean
+}
+
+export function NewButton({ rail }: NewButtonProps) {
   const navigate = useNavigate()
   const createEntity = useCreateEntity()
   const creatable = useStructures().filter((s) => s.creatable)
@@ -33,9 +38,12 @@ export function NewButton() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className={classnamesDropdownMenuTrigger}>
+      <DropdownMenuTrigger
+        title={rail ? 'New' : undefined}
+        className={cn(classnamesDropdownMenuTrigger, rail && 'justify-center px-0 py-2')}
+      >
         <PlusIcon weight="bold" />
-        New
+        <span className={cn(rail && 'sr-only')}>New</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent side="right" align="start" sideOffset={8}>
         <DropdownMenuGroup>

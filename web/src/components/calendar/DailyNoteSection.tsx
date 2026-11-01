@@ -50,7 +50,7 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
 
   return (
     <section className="flex flex-col border-t border-border">
-      <header className="flex h-12 items-center justify-between px-16 pt-2">
+      <header className="flex h-12 items-center justify-between px-7 @3xl:px-16 pt-2">
         <h2 className="flex items-center gap-2 text-xs font-bold tracking-wider uppercase" style={{ color }}>
           <DailyNoteIcon weight="duotone" className="size-4" aria-hidden />
           Daily note

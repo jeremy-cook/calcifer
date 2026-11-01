@@ -90,18 +90,18 @@ function EntityLoading() {
 
   return (
     <div className="flex flex-col">
-      <header className="flex flex-col gap-3 px-16 pt-8 pb-5">
+      <header className="flex flex-col gap-3 px-7 @3xl:px-16 pt-8 pb-5">
         <div className="loading-bar h-3 w-40" />
         <div className="loading-bar h-8 w-80" />
       </header>
-      <LoadingText className="px-16 py-10" />
+      <LoadingText className="px-7 @3xl:px-16 py-10" />
     </div>
   )
 }
 
 function EntityNotFound() {
   return (
-    <div className="px-16 py-10">
+    <div className="px-7 @3xl:px-16 py-10">
       <EmptyState
         icon={FileDashedIcon}
         color="var(--muted-foreground)"
@@ -139,7 +139,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
 
   return (
     <div>
-      <header className="flex flex-col gap-1.5 px-16 pt-7 pb-5">
+      <header className="flex flex-col gap-1.5 px-7 @3xl:px-16 pt-7 pb-5">
         <EntityByline entity={entity} onFacetAttached={setOpenFacetId} />
         {renderTitle()}
         <EntityPills entity={entity} openFacetId={openFacet?.id ?? null} onToggleFacet={toggleFacet} />
@@ -171,8 +171,8 @@ function EntityByline({ entity, onFacetAttached }: EntityBylineProps) {
   return (
     <div className="flex h-7 items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
       <Icon weight="duotone" className="size-4.5 shrink-0" style={{ color }} aria-hidden />
-      {structure?.name ?? entity.structureType}
-      <span className="font-medium tracking-normal normal-case">· {details.join(' · ')}</span>
+      <span className="shrink-0">{structure?.name ?? entity.structureType}</span>
+      <span className="min-w-0 truncate font-medium tracking-normal normal-case">· {details.join(' · ')}</span>
       <EntityMenu entity={entity} onFacetAttached={onFacetAttached} />
     </div>
   )
@@ -538,7 +538,7 @@ function FacetBand({ entity, facet }: FacetBandProps) {
   const { icon: Icon, color } = facetPresentation(facet.id)
 
   return (
-    <section aria-label={facet.name} className="border-t border-border bg-muted/60 px-16 pt-2.5 pb-3.5">
+    <section aria-label={facet.name} className="border-t border-border bg-muted/60 px-7 @3xl:px-16 pt-2.5 pb-3.5">
       <div className="flex h-7 items-center gap-2 text-xs font-bold tracking-wider uppercase" style={{ color }}>
         <Icon weight="duotone" className="size-4" aria-hidden />
         {facet.name}
@@ -576,7 +576,7 @@ function EntityBody({ entity }: EntityBodyProps) {
 
   if (richText.length === 0) {
     return (
-      <div className="px-16 pb-10">
+      <div className="px-7 @3xl:px-16 pb-10">
         <ReferencesList entity={entity} />
       </div>
     )
@@ -587,7 +587,7 @@ function EntityBody({ entity }: EntityBodyProps) {
       {richText.map((def) => (
         <EntityRichTextField key={def.id} entityId={entity.id} propertyId={def.id} />
       ))}
-      <div className="border-t border-border px-16 py-6">
+      <div className="border-t border-border px-7 @3xl:px-16 py-6">
         <RelationshipsPanel entity={entity} />
       </div>
     </>

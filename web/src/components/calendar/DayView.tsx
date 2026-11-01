@@ -22,12 +22,12 @@ export function DayView({ iso, controls }: DayViewProps) {
 
   return (
     <div className="flex min-h-0 flex-col overflow-y-auto">
-      <div className="flex items-end gap-4 px-16 pt-7 pb-5">
+      <div className="flex items-end gap-4 px-7 @3xl:px-16 pt-7 pb-5">
         <DayHeading iso={iso} />
         <div className="ml-auto">{controls}</div>
       </div>
       <DailyNoteSection iso={iso} />
-      <div className="grid grid-cols-3 gap-8 border-t border-border px-16 py-5">
+      <div className="grid grid-cols-1 gap-6 border-t border-border px-7 @3xl:px-16 py-5 @3xl:grid-cols-3 @3xl:gap-8">
         <CalendarItemsSection title="Due" icon={todo.icon} color={todo.color} items={due} />
         <CalendarItemsSection title="Mentioned" icon={CalendarCheckIcon} color="var(--chart-1)" items={references} />
         <CalendarItemsSection title="Created this day" icon={SparkleIcon} color="var(--chart-2)" items={created} />

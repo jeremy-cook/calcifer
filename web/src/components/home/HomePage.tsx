@@ -16,14 +16,16 @@ import { facetPresentation, structurePresentation } from '~/model/structures'
 import { TODO_FACET } from '~/model/todos'
 
 // Today's daily note, ready to write in, with ToDos due this week and recently edited
-// notes beside it.
+// notes beside it. Without room for the side column, its lists sit between the note's
+// heading and its text: TodayNote's root steps aside (`contents`) so its parts can be
+// ordered around them.
 export function HomePage() {
   const todo = facetPresentation(TODO_FACET)
 
   return (
-    <div className="grid h-full grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid min-h-full grid-cols-1 grid-rows-[auto_auto_1fr] @4xl:h-full @4xl:grid-cols-[minmax(0,1fr)_340px] @4xl:grid-rows-1">
       <TodayNote />
-      <aside className="flex flex-col gap-6 overflow-y-auto border-l border-border bg-card/60 px-5 py-7">
+      <aside className="order-2 grid grid-cols-1 gap-6 px-7 pb-6 @xl:grid-cols-2 @4xl:flex @4xl:flex-col @4xl:overflow-y-auto @4xl:border-l @4xl:border-border @4xl:bg-card/60 @4xl:px-5 @4xl:py-7">
         <SideSection icon={todo.icon} color={todo.color} title="ToDos" link={{ to: '/v/todos', label: 'All ToDos' }}>
           <HomeTodos />
         </SideSection>
@@ -57,8 +59,8 @@ function TodayNote() {
   ].filter((detail) => detail !== null)
 
   return (
-    <div className="flex min-h-0 flex-col">
-      <header className="flex flex-col gap-1.5 px-16 pt-7 pb-5">
+    <div className="contents @4xl:flex @4xl:min-h-0 @4xl:flex-col">
+      <header className="order-1 flex flex-col gap-1.5 px-7 pt-7 pb-5 @3xl:px-16">
         <div className="flex h-7 items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
           <DailyNoteIcon weight="duotone" className="size-4.5 shrink-0" style={{ color }} aria-hidden />
           Daily note
@@ -76,8 +78,8 @@ function TodayNote() {
         </div>
         <h1 className="font-heading text-4xl leading-tight font-semibold text-heading">{formatDayTitle(today)}</h1>
       </header>
-      <div className="min-h-0 flex-1">
-        {!ready && <LoadingText className="border-t border-border px-16 py-10" />}
+      <div className="order-3 min-h-0 flex-1">
+        {!ready && <LoadingText className="border-t border-border px-7 @3xl:px-16 py-10" />}
         {contentRef && (
           <EntityRichTextField
             key={contentRef.entityId}

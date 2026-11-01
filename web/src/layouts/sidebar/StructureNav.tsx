@@ -1,8 +1,13 @@
 import { Link } from '@tanstack/react-router'
+import { cn } from '~/lib/utils'
 import { facetPresentation, structurePresentation, useFacets, useStructures } from '~/model/structures'
-import { NAV_ROW_ACTIVE_CLASS, NAV_ROW_CLASS } from './nav-row'
+import { NAV_ROW_ACTIVE_CLASS, NAV_ROW_CLASS, NAV_ROW_RAIL_CLASS } from './nav-row'
 
-export function StructureNav() {
+export interface StructureNavProps {
+  rail: boolean
+}
+
+export function StructureNav({ rail }: StructureNavProps) {
   const structures = useStructures()
   // Facets with a list page, after the structures.
   const facetPages = useFacets().flatMap((f) => {
@@ -19,7 +24,8 @@ export function StructureNav() {
             key={s.type}
             to="/s/$structureType"
             params={{ structureType: s.type }}
-            className={NAV_ROW_CLASS}
+            title={rail ? s.plural : undefined}
+            className={cn(NAV_ROW_CLASS, rail && NAV_ROW_RAIL_CLASS)}
             activeProps={{ className: NAV_ROW_ACTIVE_CLASS }}
           >
             <IconComponent weight="duotone" style={{ color }} />
@@ -28,7 +34,13 @@ export function StructureNav() {
         )
       })}
       {facetPages.map(({ id, icon: IconComponent, color, navLabel, route }) => (
-        <Link key={id} to={route} className={NAV_ROW_CLASS} activeProps={{ className: NAV_ROW_ACTIVE_CLASS }}>
+        <Link
+          key={id}
+          to={route}
+          title={rail ? navLabel : undefined}
+          className={cn(NAV_ROW_CLASS, rail && NAV_ROW_RAIL_CLASS)}
+          activeProps={{ className: NAV_ROW_ACTIVE_CLASS }}
+        >
           <IconComponent weight="duotone" style={{ color }} />
           <span className="truncate">{navLabel}</span>
         </Link>

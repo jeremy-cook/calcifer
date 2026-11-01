@@ -25,7 +25,8 @@ function arePropsEqual(prev: TodoRowProps, next: TodoRowProps) {
   )
 }
 
-// Fixed columns, so tags, priority and due date line up down the page.
+// Fixed columns, so tags, priority and due date line up down the page. Narrow, the tags
+// go and priority is its bars alone, so the name keeps its room.
 export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowProps) {
   const setTodoStatus = useSetTodoStatus()
   const priorityDef = propertyDef(useFacet(TODO_FACET), TODO_PRIORITY)
@@ -42,14 +43,19 @@ export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowPro
     priority === 'none' ? (
       <span className="text-muted-foreground/60">—</span>
     ) : (
-      <span className={cn('flex items-center gap-1.5', done ? 'text-muted-foreground' : PRIORITY_CLASSES[priority])}>
+      <span
+        className={cn('flex items-center gap-1.5', done ? 'text-muted-foreground' : PRIORITY_CLASSES[priority])}
+        title={optionLabel(priorityDef, priority)}
+      >
         {PriorityIcon && <PriorityIcon weight="fill" className="size-3.5 shrink-0" aria-hidden />}
-        <span className="text-xs text-secondary-foreground">{optionLabel(priorityDef, priority)}</span>
+        <span className="hidden text-xs text-secondary-foreground @3xl:inline">
+          {optionLabel(priorityDef, priority)}
+        </span>
       </span>
     )
 
   return (
-    <li className="grid h-[30px] grid-cols-[1rem_minmax(0,1fr)_minmax(0,13rem)_5.5rem_4.5rem] items-center gap-3 rounded-[5px] px-2.5 text-sm even:bg-card hover:bg-accent">
+    <li className="grid h-[30px] grid-cols-[1rem_minmax(0,1fr)_1rem_4.5rem] items-center gap-3 rounded-[5px] px-2.5 text-sm even:bg-card hover:bg-accent @3xl:grid-cols-[1rem_minmax(0,1fr)_minmax(0,13rem)_5.5rem_4.5rem]">
       <Checkbox checked={done} onCheckedChange={handleCheckedChange} aria-label={`Mark "${entity.name}" done`} />
       <Link
         to="/e/$id"
@@ -58,7 +64,7 @@ export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowPro
       >
         {entity.name}
       </Link>
-      <span className="flex gap-2 overflow-hidden text-xs font-semibold whitespace-nowrap text-chart-2">
+      <span className="hidden gap-2 overflow-hidden text-xs font-semibold whitespace-nowrap text-chart-2 @3xl:flex">
         {tags.map((tag) => (
           <Link key={tag.id} to="/e/$id" params={{ id: tag.id }} className="hover:underline">
             <span className="opacity-60">#</span>

@@ -436,7 +436,7 @@ export function Toolbar({ editor, size: sizeProp }: ToolbarProps) {
   return (
     <div
       ref={containerRef}
-      className="flex shrink-0 items-center gap-0.5 overflow-hidden border-b border-border px-14 py-1"
+      className="flex shrink-0 items-center gap-0.5 overflow-hidden border-b border-border px-5 @3xl:px-14 py-1"
     >
       {/* Block type — always visible */}
       <Select value={blockType} onValueChange={(v) => setBlockType(editor, v)}>

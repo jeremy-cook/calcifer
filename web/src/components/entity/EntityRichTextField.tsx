@@ -37,7 +37,7 @@ export function EntityRichTextField({
   if (!data) {
     return (
       <div className={cn('flex h-full w-full flex-col border border-border', className)}>
-        <LoadingText className="px-16 py-10" />
+        <LoadingText className="px-7 @3xl:px-16 py-10" />
       </div>
     )
   }

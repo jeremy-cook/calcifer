@@ -25,7 +25,7 @@ interface WeekViewProps {
 }
 
 // Monday to Sunday of `iso`'s week: each day's note, the ToDos due and the notes that
-// mention it.
+// mention it. Seven columns need about 900px; with less, the days stack as one list.
 export function WeekView({ iso, controls, onOpenDay }: WeekViewProps) {
   const start = weekStartIso(iso)
   const days = Array.from({ length: 7 }, (_, i) => shiftIso(start, i))
@@ -37,7 +37,7 @@ export function WeekView({ iso, controls, onOpenDay }: WeekViewProps) {
         <span className="text-sm text-muted-foreground">Week {weekNumber(start)}</span>
         <div className="ml-auto">{controls}</div>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-7 overflow-y-auto">
+      <div className="grid min-h-0 flex-1 grid-cols-1 overflow-y-auto @4xl:grid-cols-7">
         {days.map((day) => (
           <WeekDay key={day} iso={day} onOpenDay={onOpenDay} />
         ))}
@@ -70,7 +70,7 @@ function WeekDay({ iso, onOpenDay }: WeekDayProps) {
     <button
       type="button"
       onClick={handleNewNote}
-      className="flex items-center gap-1.5 rounded-md border border-dashed border-border px-2 py-1 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+      className="flex items-center gap-1.5 self-start rounded-md border border-dashed border-border px-2 py-1 text-left text-xs @4xl:self-stretch text-muted-foreground hover:bg-accent hover:text-foreground"
     >
       <PlusIcon className="size-3.5" />
       Daily note
@@ -80,14 +80,14 @@ function WeekDay({ iso, onOpenDay }: WeekDayProps) {
   return (
     <div
       className={cn(
-        'flex min-w-0 flex-col gap-2 border-r border-border p-2.5 last:border-r-0',
+        'flex min-w-0 flex-col gap-2 border-b border-border px-7 py-3 @4xl:border-r @4xl:border-b-0 @4xl:p-2.5 @4xl:last:border-r-0',
         isToday && 'bg-primary/5',
       )}
     >
       <button
         type="button"
         onClick={() => onOpenDay(iso)}
-        className="flex items-center gap-2 border-b border-border px-1 pb-2 text-left"
+        className="flex items-center gap-2 px-1 text-left @4xl:justify-between @4xl:border-b @4xl:border-border @4xl:pb-2"
         aria-label={`Open ${formatWeekday(iso)}`}
       >
         <span
@@ -97,7 +97,7 @@ function WeekDay({ iso, onOpenDay }: WeekDayProps) {
         </span>
         <span
           className={cn(
-            'ml-auto flex size-9 items-center justify-center rounded-full font-heading text-xl font-semibold text-secondary-foreground',
+            'flex size-9 items-center justify-center rounded-full font-heading text-xl font-semibold text-secondary-foreground',
             isToday && 'bg-primary text-primary-foreground',
           )}
         >
