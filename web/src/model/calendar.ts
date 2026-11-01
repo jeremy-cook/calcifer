@@ -1,3 +1,4 @@
+import { isoFromDate, timestampMsOrZero } from '~/model/dates'
 import { dailyNoteDate, useAllEntities, type Entity } from '~/model/store'
 import { todoDue } from '~/model/todos'
 
@@ -5,7 +6,7 @@ import { todoDue } from '~/model/todos'
 // (dailyNoteDate, todoDue, referencedDates); this module is the single place
 // that maps them into calendar terms. Rendering decisions stay in components/calendar.
 
-export type CalendarItemKind = 'dailyNote' | 'due' | 'reference'
+export type CalendarItemKind = 'dailyNote' | 'due' | 'reference' | 'created'
 
 export interface CalendarItem {
   iso: string
@@ -24,6 +25,9 @@ function calendarItemsOf(entity: Entity): CalendarItem[] {
   const due = todoDue(entity)
   if (due) items.push({ iso: due, kind: 'due', entity })
   for (const iso of entity.referencedDates) items.push({ iso, kind: 'reference', entity })
+  // The local day it was made on. A daily note's own making isn't news on its day.
+  const createdMs = timestampMsOrZero(entity.createdAt)
+  if (!noteDate && createdMs > 0) items.push({ iso: isoFromDate(new Date(createdMs)), kind: 'created', entity })
   return items
 }
 

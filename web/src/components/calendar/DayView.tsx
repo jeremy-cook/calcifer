@@ -1,44 +1,37 @@
-import { CalendarCheckIcon } from '@phosphor-icons/react'
+import { CalendarCheckIcon, SparkleIcon } from '@phosphor-icons/react'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
 import { facetPresentation } from '~/model/structures'
 import { TODO_FACET } from '~/model/todos'
 import { DayHeading } from './DayHeading'
 import { DailyNoteSection } from './DailyNoteSection'
 import { CalendarItemsSection } from './CalendarItemsSection'
-import { CreatedAt } from './CreatedAt'
 
 interface DayViewProps {
   iso: string
+  // The view switch and day stepping, set beside the heading.
+  controls: React.ReactNode
 }
 
-export function DayView({ iso }: DayViewProps) {
+export function DayView({ iso, controls }: DayViewProps) {
   const index = useCalendarIndex()
+  const todo = facetPresentation(TODO_FACET)
   const due = itemsOn(index, iso, 'due')
   // Daily notes have their own section above, so they're left out of references.
-  const todo = facetPresentation(TODO_FACET)
   const references = itemsOn(index, iso, 'reference').filter((item) => item.entity.structureType !== 'DailyNote')
+  const created = itemsOn(index, iso, 'created')
 
   return (
-    <div className="flex flex-col gap-6 overflow-y-auto px-12 py-8">
-      <DayHeading iso={iso} />
-      <Divider />
+    <div className="flex min-h-0 flex-col overflow-y-auto">
+      <div className="flex items-end gap-4 px-16 pt-7 pb-5">
+        <DayHeading iso={iso} />
+        <div className="ml-auto">{controls}</div>
+      </div>
       <DailyNoteSection iso={iso} />
-      <Divider />
-      <CalendarItemsSection title="Due" icon={todo.icon} color={todo.color} emptyText="No ToDos due." items={due} />
-      <Divider />
-      <CalendarItemsSection
-        title="Date references"
-        icon={CalendarCheckIcon}
-        color="var(--chart-1)"
-        emptyText="No date references."
-        items={references}
-      />
-      <Divider />
-      <CreatedAt />
+      <div className="grid grid-cols-3 gap-8 border-t border-border px-16 py-5">
+        <CalendarItemsSection title="Due" icon={todo.icon} color={todo.color} items={due} />
+        <CalendarItemsSection title="Mentioned" icon={CalendarCheckIcon} color="var(--chart-1)" items={references} />
+        <CalendarItemsSection title="Created this day" icon={SparkleIcon} color="var(--chart-2)" items={created} />
+      </div>
     </div>
   )
-}
-
-function Divider() {
-  return <hr className="border-border" />
 }

@@ -28,7 +28,27 @@ export interface RichTextState {
 
 interface RichTextDocNode {
   type?: string
+  text?: string
   content?: RichTextDocNode[]
+}
+
+// A doc's text with its blocks run together, for a preview. Mentions and other
+// atoms without text are left out.
+export function richTextPlainText(doc: string | undefined): string {
+  if (!doc) return ''
+  let parsed: RichTextDocNode
+  try {
+    parsed = JSON.parse(doc) as RichTextDocNode
+  } catch {
+    return ''
+  }
+  const blocks: string[] = []
+  const walk = (node: RichTextDocNode): string => node.text ?? (node.content ?? []).map(walk).join('')
+  for (const block of parsed.content ?? []) {
+    const text = walk(block).trim()
+    if (text) blocks.push(text)
+  }
+  return blocks.join(' ')
 }
 
 export function isRichTextEmpty(doc: string | undefined): boolean {

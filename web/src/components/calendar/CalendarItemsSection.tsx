@@ -6,34 +6,21 @@ interface CalendarItemsSectionProps {
   title: string
   icon: Icon
   color: string
-  emptyText: string
   items: readonly CalendarItem[]
 }
 
-export function CalendarItemsSection({
-  title,
-  icon: IconComponent,
-  color,
-  emptyText,
-  items,
-}: CalendarItemsSectionProps) {
+// A day's list under a small heading with its count; an empty one says so on that line.
+export function CalendarItemsSection({ title, icon: IconComponent, color, items }: CalendarItemsSectionProps) {
   return (
-    <section className="flex flex-col gap-3">
-      <h2 className="flex items-center gap-2 text-sm font-bold">
-        <IconComponent weight="duotone" className="size-[18px]" style={{ color }} />
+    <section className="flex min-w-0 flex-col gap-1">
+      <h2 className="flex h-6 items-center gap-2 text-xs font-bold tracking-wider text-muted-foreground uppercase">
+        <IconComponent weight="duotone" className="size-4" style={{ color }} aria-hidden />
         {title}
+        <span className="font-medium tracking-normal normal-case">· {items.length === 0 ? 'none' : items.length}</span>
       </h2>
-      {items.length === 0 ? <EmptyState text={emptyText} /> : <List items={items} />}
+      {items.length > 0 && <List items={items} />}
     </section>
   )
-}
-
-interface EmptyStateProps {
-  text: string
-}
-
-function EmptyState({ text }: EmptyStateProps) {
-  return <p className="text-sm text-muted-foreground">{text}</p>
 }
 
 interface ListProps {
@@ -42,7 +29,7 @@ interface ListProps {
 
 function List({ items }: ListProps) {
   return (
-    <ul className="flex flex-col gap-0.5">
+    <ul className="flex flex-col">
       {items.map((item) => (
         <CalendarItemRow key={`${item.kind}:${item.entity.id}`} item={item} />
       ))}

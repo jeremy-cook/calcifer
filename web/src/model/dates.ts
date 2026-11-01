@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { format, getISOWeek, parse } from 'date-fns'
+import { format, getISOWeek, parse, startOfWeek } from 'date-fns'
 import { timestampMs, type Timestamp } from '@bufbuild/protobuf/wkt'
 
 // A proto Timestamp in epoch milliseconds; an unset one reads as 0 (the epoch).
@@ -41,6 +41,19 @@ export function formatShortDate(iso: string): string {
 // "Sunday 1 November": a day as a page title.
 export function formatDayTitle(iso: string): string {
   return format(dateFromIso(iso), 'EEEE d MMMM')
+}
+
+// The Monday that starts `iso`'s week.
+export function weekStartIso(iso: string): string {
+  return isoFromDate(startOfWeek(dateFromIso(iso), { weekStartsOn: 1 }))
+}
+
+// "26 Oct – 1 Nov" for the week starting `startIso`; the year shows when it isn't this one.
+export function formatWeekRange(startIso: string): string {
+  const start = dateFromIso(startIso)
+  const end = dateFromIso(shiftIso(startIso, 6))
+  const pattern = end.getFullYear() === new Date().getFullYear() ? 'd MMM' : 'd MMM yyyy'
+  return `${format(start, 'd MMM')} – ${format(end, pattern)}`
 }
 
 export function formatWeekday(iso: string): string {

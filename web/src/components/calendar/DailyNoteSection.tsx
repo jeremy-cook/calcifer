@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowsOutSimpleIcon, TrashIcon } from '@phosphor-icons/react'
+import { ArrowUpRightIcon, TrashIcon } from '@phosphor-icons/react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,10 +49,10 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
   }
 
   return (
-    <section className="flex flex-col gap-3">
-      <header className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-sm font-bold">
-          <DailyNoteIcon weight="duotone" className="size-[18px]" style={{ color }} />
+    <section className="flex flex-col border-t border-border">
+      <header className="flex h-12 items-center justify-between px-16 pt-2">
+        <h2 className="flex items-center gap-2 text-xs font-bold tracking-wider uppercase" style={{ color }}>
+          <DailyNoteIcon weight="duotone" className="size-4" aria-hidden />
           Daily note
         </h2>
         {renderActions()}
@@ -91,6 +91,7 @@ function DailyNoteBody({ dailyNote, autoFocus }: DailyNoteBodyProps) {
       propertyId={contentRef.propertyId}
       autoFocus={autoFocus}
       hideToolbar={true}
+      className="border-0 [&_.tiptap]:pt-2"
     />
   )
 }
@@ -116,9 +117,10 @@ function DailyNoteActions({ dailyNote }: DailyNoteActionsProps) {
         type="button"
         aria-label="Open daily note"
         onClick={handleExpand}
-        className="rounded p-1 hover:bg-muted hover:text-foreground"
+        className="flex items-center gap-1 rounded px-1.5 py-1 text-sm hover:bg-muted hover:text-foreground"
       >
-        <ArrowsOutSimpleIcon className="size-4" />
+        Open
+        <ArrowUpRightIcon className="size-3.5" />
       </button>
       <AlertDialog>
         <AlertDialogTrigger asChild>
