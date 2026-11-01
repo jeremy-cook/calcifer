@@ -23,7 +23,7 @@ export function TodoList({ entities }: TodoListProps) {
       .filter((e): e is Entity => e !== undefined)
 
   return (
-    <ul className="flex flex-col gap-0.5">
+    <ul className="flex flex-col">
       {entities.map((entity) => (
         <TodoRow key={entity.id} entity={entity} today={today} tags={resolveTags(entity)} />
       ))}

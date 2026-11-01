@@ -18,14 +18,13 @@ export function CalendarToolbar({ iso, onChangeIso }: CalendarToolbarProps) {
   return (
     <div className="flex items-center gap-2 border-b border-border px-6 py-3">
       <div className="flex flex-1 justify-center">
-        <ToggleGroup type="single" value="day">
+        <ToggleGroup type="single" variant="segmented" spacing={0.5} value="day">
           {viewModes.map((m) => (
             <ToggleGroupItem
               key={m.value}
               value={m.value}
               disabled={m.value !== 'day'}
               title={m.value !== 'day' ? 'Coming soon' : undefined}
-              className="px-4"
             >
               {m.label}
             </ToggleGroupItem>

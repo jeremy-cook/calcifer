@@ -18,6 +18,7 @@ import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { deleteEntity, useReplicaReady, useResolveDailyNote, type Entity } from '~/model/store'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
 import { dailyNoteContentRef, useDailyNotePrune } from '~/model/daily-notes'
+import { structurePresentation } from '~/model/structures'
 
 interface DailyNoteSectionProps {
   iso: string
@@ -37,6 +38,8 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
 
   useDailyNotePrune(iso)
 
+  const { icon: DailyNoteIcon, color } = structurePresentation('DailyNote')
+
   // Before the first snapshot there's no telling whether the day has a note, so
   // offer nothing rather than flash "New".
   const renderActions = () => {
@@ -48,7 +51,10 @@ export function DailyNoteSection({ iso }: DailyNoteSectionProps) {
   return (
     <section className="flex flex-col gap-3">
       <header className="flex items-center justify-between">
-        <h2 className="text-base font-semibold">Daily note</h2>
+        <h2 className="flex items-center gap-2 text-sm font-bold">
+          <DailyNoteIcon weight="duotone" className="size-[18px]" style={{ color }} />
+          Daily note
+        </h2>
         {renderActions()}
       </header>
       {dailyNote && <DailyNoteBody dailyNote={dailyNote} autoFocus={autoFocusKey === iso} />}
@@ -63,7 +69,7 @@ interface EmptyStateProps {
 function EmptyState({ onClick }: EmptyStateProps) {
   return (
     <div>
-      <Button variant={'ghost'} onClick={onClick}>
+      <Button variant="outline" size="sm" onClick={onClick}>
         <PlusIcon />
         New
       </Button>

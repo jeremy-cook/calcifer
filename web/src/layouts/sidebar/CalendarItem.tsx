@@ -1,13 +1,11 @@
 import { CalendarBlankIcon } from '@phosphor-icons/react'
 import { Link } from '@tanstack/react-router'
-
-const ROW_CLASS =
-  'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-foreground hover:bg-muted [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground'
+import { NAV_ROW_ACTIVE_CLASS, NAV_ROW_CLASS } from './nav-row'
 
 export function CalendarItem() {
   return (
-    <Link to="/calendar" activeProps={{ className: 'bg-muted font-medium' }} className={ROW_CLASS}>
-      <CalendarBlankIcon />
+    <Link to="/calendar" activeProps={{ className: NAV_ROW_ACTIVE_CLASS }} className={NAV_ROW_CLASS}>
+      <CalendarBlankIcon weight="duotone" className="text-sidebar-foreground" />
       <span>Calendar</span>
     </Link>
   )

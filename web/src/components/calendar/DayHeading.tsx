@@ -7,11 +7,9 @@ interface DayHeadingProps {
 export function DayHeading({ iso }: DayHeadingProps) {
   return (
     <div className="flex flex-col gap-1">
-      <p className="text-sm font-medium text-chart-1">{formatWeekday(iso)}</p>
-      <div className="flex items-baseline gap-3">
-        <h1 className="text-4xl font-bold tracking-tight">{formatLongDate(iso)}</h1>
-        <span className="text-sm text text-chart-1">Week {weekNumber(iso)}</span>
-      </div>
+      <p className="text-xs font-bold tracking-widest text-primary uppercase">{formatWeekday(iso)}</p>
+      <h1 className="font-heading text-4xl font-semibold tracking-tight text-heading">{formatLongDate(iso)}</h1>
+      <span className="text-xs font-semibold text-muted-foreground">Week {weekNumber(iso)}</span>
     </div>
   )
 }

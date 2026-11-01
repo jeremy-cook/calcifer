@@ -161,7 +161,7 @@ export function TiptapEditor({
     ],
     editorProps: {
       attributes: {
-        class: 'outline-none min-h-full px-16 py-10 text-base leading-normal',
+        class: 'outline-none min-h-full px-16 py-10 text-lg leading-relaxed',
       },
     },
   })

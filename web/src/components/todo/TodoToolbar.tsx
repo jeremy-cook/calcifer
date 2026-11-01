@@ -33,7 +33,8 @@ export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
     <div className="flex flex-wrap items-center gap-2">
       <ToggleGroup
         type="single"
-        variant="outline"
+        variant="segmented"
+        spacing={0.5}
         value={filter.status}
         onValueChange={(v) => {
           // Radix emits '' when the pressed item is clicked again — ignore so the filter can't be cleared.
@@ -41,7 +42,7 @@ export function TodoToolbar({ filter, sort, onChange }: TodoToolbarProps) {
         }}
       >
         {statusFilterOptions.map((item) => (
-          <ToggleGroupItem key={item.key} value={item.key} className="px-3">
+          <ToggleGroupItem key={item.key} value={item.key}>
             {item.label}
           </ToggleGroupItem>
         ))}

@@ -1,7 +1,8 @@
-import { createFileRoute, Link } from '@tanstack/react-router'
-import { formatDistanceToNow } from 'date-fns'
-import { entityUpdatedAtDate, listByStructure, useAllEntities } from '~/model/store'
-import { useStructure } from '~/model/structures'
+import { createFileRoute } from '@tanstack/react-router'
+import { AlphabeticalIndex } from '~/components/structure-list/AlphabeticalIndex'
+import { EntityRows } from '~/components/structure-list/EntityRows'
+import { listByStructure, useAllEntities } from '~/model/store'
+import { structurePresentation, useStructure } from '~/model/structures'
 
 export const Route = createFileRoute('/s/$structureType')({
   component: function StructureListRoute() {
@@ -22,28 +23,16 @@ export const Route = createFileRoute('/s/$structureType')({
 
     const renderEmpty = () => <p className="text-sm text-muted-foreground">No {structure.plural} yet.</p>
 
-    const renderList = () => (
-      <ul className="flex flex-col gap-1">
-        {items.map((entity) => (
-          <li key={entity.id}>
-            <Link
-              to="/e/$id"
-              params={{ id: entity.id }}
-              className="flex items-center justify-between gap-4 rounded-md px-3 py-2 hover:bg-muted"
-            >
-              <span className="truncate">{entity.name}</span>
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}
-              </span>
-            </Link>
-          </li>
-        ))}
-      </ul>
-    )
+    const renderList = () =>
+      structurePresentation(structureType).listLayout === 'alphabetical' ? (
+        <AlphabeticalIndex entities={items} />
+      ) : (
+        <EntityRows entities={items} />
+      )
 
     return (
-      <div className="flex flex-col gap-6 px-16 py-10">
-        <h1 className="text-2xl font-semibold">{structure.plural}</h1>
+      <div className="flex flex-col gap-4 px-16 py-10">
+        <h1 className="font-heading text-3xl font-semibold text-heading">{structure.plural}</h1>
         {items.length === 0 ? renderEmpty() : renderList()}
       </div>
     )

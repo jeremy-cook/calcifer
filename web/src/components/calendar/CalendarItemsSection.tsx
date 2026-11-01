@@ -1,16 +1,28 @@
+import type { Icon } from '@phosphor-icons/react'
 import type { CalendarItem } from '~/model/calendar'
 import { CalendarItemRow } from './CalendarItemRow'
 
 interface CalendarItemsSectionProps {
   title: string
+  icon: Icon
+  color: string
   emptyText: string
   items: readonly CalendarItem[]
 }
 
-export function CalendarItemsSection({ title, emptyText, items }: CalendarItemsSectionProps) {
+export function CalendarItemsSection({
+  title,
+  icon: IconComponent,
+  color,
+  emptyText,
+  items,
+}: CalendarItemsSectionProps) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-base font-semibold">{title}</h2>
+      <h2 className="flex items-center gap-2 text-sm font-bold">
+        <IconComponent weight="duotone" className="size-[18px]" style={{ color }} />
+        {title}
+      </h2>
       {items.length === 0 ? <EmptyState text={emptyText} /> : <List items={items} />}
     </section>
   )

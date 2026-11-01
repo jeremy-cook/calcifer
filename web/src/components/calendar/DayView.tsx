@@ -1,4 +1,7 @@
+import { CalendarCheckIcon } from '@phosphor-icons/react'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
+import { facetPresentation } from '~/model/structures'
+import { TODO_FACET } from '~/model/todos'
 import { DayHeading } from './DayHeading'
 import { DailyNoteSection } from './DailyNoteSection'
 import { CalendarItemsSection } from './CalendarItemsSection'
@@ -12,6 +15,7 @@ export function DayView({ iso }: DayViewProps) {
   const index = useCalendarIndex()
   const due = itemsOn(index, iso, 'due')
   // Daily notes have their own section above, so they're left out of references.
+  const todo = facetPresentation(TODO_FACET)
   const references = itemsOn(index, iso, 'reference').filter((item) => item.entity.structureType !== 'DailyNote')
 
   return (
@@ -20,9 +24,15 @@ export function DayView({ iso }: DayViewProps) {
       <Divider />
       <DailyNoteSection iso={iso} />
       <Divider />
-      <CalendarItemsSection title="Due" emptyText="No to-dos due." items={due} />
+      <CalendarItemsSection title="Due" icon={todo.icon} color={todo.color} emptyText="No to-dos due." items={due} />
       <Divider />
-      <CalendarItemsSection title="Date references" emptyText="No date references." items={references} />
+      <CalendarItemsSection
+        title="Date references"
+        icon={CalendarCheckIcon}
+        color="var(--chart-1)"
+        emptyText="No date references."
+        items={references}
+      />
       <Divider />
       <CreatedAt />
     </div>

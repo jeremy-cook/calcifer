@@ -49,6 +49,7 @@ export function TodoQuickAdd() {
         aria-label="Quick add to-do"
         aria-invalid={error !== null}
         aria-describedby={error ? 'todo-quick-add-error' : undefined}
+        className="h-9 rounded-md bg-muted px-3 dark:bg-muted"
       />
       {error && (
         <p id="todo-quick-add-error" className="text-xs text-destructive">

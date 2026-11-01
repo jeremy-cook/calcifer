@@ -55,8 +55,10 @@
 }
 
 .tiptap a {
-  color: var(--primary);
+  color: var(--link);
   text-decoration: underline;
+  text-decoration-color: color-mix(in oklch, var(--link) 60%, transparent);
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
@@ -70,6 +72,14 @@
   color: var(--muted-foreground);
   pointer-events: none;
   height: 0;
+}
+
+.tiptap :is(h1, h2, h3) {
+  font-family: var(--font-heading);
+  font-variation-settings:
+    'SOFT' 60,
+    'WONK' 0;
+  color: var(--heading);
 }
 
 .tiptap h1 {
@@ -154,6 +164,26 @@
   flex-shrink: 0;
 }
 
+/* Round, like the app's other checkboxes. */
+.tiptap ul[data-type='taskList'] input[type='checkbox'] {
+  appearance: none;
+  display: grid;
+  place-content: center;
+  width: 1rem;
+  height: 1rem;
+  margin: 0.15em 0 0;
+  border: 1.5px solid var(--muted-foreground);
+  border-radius: 9999px;
+  cursor: pointer;
+}
+
+.tiptap ul[data-type='taskList'] input[type='checkbox']:checked {
+  border-color: var(--primary);
+  background: var(--primary)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 256 256'%3E%3Cpath d='M40 144l56 56L216 80' fill='none' stroke='%231e1510' stroke-width='28' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 70% no-repeat;
+}
+
 .tiptap ul[data-type='taskList'] li > div {
   flex: 1;
 }
@@ -216,10 +246,10 @@
 .tiptap .mention {
   display: inline-flex;
   align-items: center;
-  border-radius: var(--radius-sm);
-  padding: 0 0.3em;
+  border-radius: 9999px;
+  padding: 0 0.5em;
   font-size: 0.875em;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.6;
   white-space: nowrap;
   cursor: default;

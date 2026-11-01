@@ -96,7 +96,9 @@ function EntityHeader({ entity }: EntityHeaderProps) {
     nameEditable ? (
       <EntityTitleInput key={entity.id} entity={entity} />
     ) : (
-      <h1 className="flex h-10 flex-1 items-center px-3 text-2xl font-semibold">{entity.name}</h1>
+      <h1 className="flex h-12 flex-1 items-center px-3 font-heading text-3xl font-semibold text-heading">
+        {entity.name}
+      </h1>
     )
 
   return (
@@ -193,7 +195,7 @@ function EntityTitleInput({ entity }: EntityTitleInputProps) {
       onFocus={() => setFocused(true)}
       onBlur={handleBlur}
       onChange={(e) => handleChange(e.target.value)}
-      className="h-10 border-0 bg-transparent text-2xl font-semibold shadow-none focus-visible:ring-0"
+      className="h-12 border-0 bg-transparent font-heading text-3xl font-semibold text-heading shadow-none focus-visible:ring-0 md:text-3xl dark:bg-transparent"
       aria-label="Entity title"
     />
   )

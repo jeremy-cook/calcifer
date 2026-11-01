@@ -12,11 +12,11 @@ import { facetPresentation, structurePresentation, useStructures } from '~/model
 import { TODO_FACET } from '~/model/todos'
 
 const classnamesDropdownMenuTrigger = [
-  'flex w-full items-center gap-2',
-  'rounded-md px-2 py-1.5',
-  'text-left text-sm text-foreground',
-  'hover:bg-muted aria-expanded:bg-muted',
-  '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-muted-foreground',
+  'flex w-full items-center',
+  'mb-2 gap-2.5 rounded-md px-2.5 py-1.5',
+  'bg-muted text-left text-sm font-bold text-primary',
+  'hover:bg-sidebar-accent aria-expanded:bg-sidebar-accent',
+  '[&_svg]:size-[18px] [&_svg]:shrink-0',
 ].join(' ')
 
 export function NewButton() {
@@ -24,7 +24,7 @@ export function NewButton() {
   const createEntity = useCreateEntity()
   const creatable = useStructures().filter((s) => s.creatable)
 
-  const TodoIcon = facetPresentation(TODO_FACET).icon
+  const { icon: TodoIcon, color: todoColor } = facetPresentation(TODO_FACET)
 
   const handleCreate = async (structureType: string, facets?: string[]) => {
     const entity = await createEntity(structureType, { facets })
@@ -34,22 +34,22 @@ export function NewButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger className={classnamesDropdownMenuTrigger}>
-        <PlusIcon />
+        <PlusIcon weight="bold" />
         New
       </DropdownMenuTrigger>
       <DropdownMenuContent side="right" align="start" sideOffset={8}>
         <DropdownMenuGroup>
           {creatable.map((s) => {
-            const IconComponent = structurePresentation(s.type).icon
+            const { icon: IconComponent, color } = structurePresentation(s.type)
             return (
               <DropdownMenuItem key={s.type} onSelect={() => void handleCreate(s.type)}>
-                <IconComponent />
+                <IconComponent weight="duotone" style={{ color }} />
                 {s.name}
               </DropdownMenuItem>
             )
           })}
           <DropdownMenuItem onSelect={() => void handleCreate('Note', [TODO_FACET])}>
-            <TodoIcon />
+            <TodoIcon weight="duotone" style={{ color: todoColor }} />
             To-do
           </DropdownMenuItem>
         </DropdownMenuGroup>

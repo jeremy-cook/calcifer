@@ -38,9 +38,9 @@ export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowPro
   }
 
   return (
-    <li className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
+    <li className="flex items-center gap-3 rounded-md border-b border-border px-2.5 py-2 hover:border-transparent hover:bg-muted">
       <Checkbox checked={done} onCheckedChange={handleCheckedChange} aria-label={`Mark "${entity.name}" done`} />
-      <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
+      <Icon weight="duotone" className="size-4 shrink-0" style={{ color }} aria-hidden />
       <Link
         to="/e/$id"
         params={{ id: entity.id }}
@@ -50,14 +50,14 @@ export const TodoRow = memo(function TodoRow({ entity, today, tags }: TodoRowPro
       </Link>
       <PriorityBadge priority={priority} />
       {due && (
-        <span className={cn('shrink-0 text-xs text-muted-foreground', overdue && 'text-destructive')}>
+        <span className={cn('shrink-0 text-xs font-semibold text-muted-foreground', overdue && 'text-destructive')}>
           {formatLongDate(due)}
         </span>
       )}
       {tags.length > 0 && (
         <div className="flex shrink-0 items-center gap-1">
           {tags.map((tag) => (
-            <Badge key={tag.id} variant="outline">
+            <Badge key={tag.id} variant="secondary" className="text-chart-2">
               {tag.name}
             </Badge>
           ))}

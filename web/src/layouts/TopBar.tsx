@@ -7,11 +7,21 @@ export interface TopBarProps {
 
 export function TopBar({ onToggleSidebar }: TopBarProps) {
   return (
-    <header className="flex h-10 items-center gap-2 border-b px-2">
-      <Button variant="ghost" size="icon" onClick={onToggleSidebar} aria-label="Toggle sidebar">
-        <SidebarSimpleIcon />
-      </Button>
-      <div className="text-sm text-muted-foreground">Calcifer</div>
+    <header className="flex flex-col">
+      <div className="flex h-11 items-center gap-2 px-2">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleSidebar}
+          aria-label="Toggle sidebar"
+          className="text-muted-foreground"
+        >
+          <SidebarSimpleIcon />
+        </Button>
+        <div className="hearth-logo size-5 shrink-0" aria-hidden />
+        <div className="font-heading text-base font-bold">Calcifer</div>
+      </div>
+      <div className="hearth-stripe h-[5px]" aria-hidden />
     </header>
   )
 }

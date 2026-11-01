@@ -9,7 +9,7 @@ interface MiniCalendarProps {
 }
 
 const HAS_CONTENT_CLASSES =
-  'after:pointer-events-none after:absolute after:bottom-1 after:left-1/2 after:z-20 after:size-1 after:-translate-x-1/2 after:rounded-full after:bg-foreground after:opacity-60 after:content-[""]'
+  'after:pointer-events-none after:absolute after:bottom-1 after:left-1/2 after:z-20 after:size-1 after:-translate-x-1/2 after:rounded-full after:bg-chart-3 after:content-[""]'
 
 export function MiniCalendar({ iso, onSelect }: MiniCalendarProps) {
   const selected = dateFromIso(iso)
@@ -38,13 +38,13 @@ export function MiniCalendar({ iso, onSelect }: MiniCalendarProps) {
         fixedWeeks
         modifiers={{ hasContent: (date) => index.has(isoFromDate(date)) }}
         modifiersClassNames={{ hasContent: HAS_CONTENT_CLASSES }}
-        className="w-full [--cell-size:--spacing(10)]"
+        className="w-full bg-transparent [--cell-radius:9999px] [--cell-size:--spacing(10)]"
         classNames={{
           dropdowns: 'flex items-center justify-center gap-4 text-sm font-medium',
-          weekday: 'flex-1 rounded-(--cell-radius) text-[0.8rem] font-normal text-chart-1 select-none',
+          weekday: 'flex-1 rounded-(--cell-radius) text-[0.7rem] font-bold text-muted-foreground select-none',
           week: 'mt-1 flex w-full',
           day: 'group/day relative h-full w-full rounded-(--cell-radius) p-0 text-center select-none',
-          day_button: 'aspect-auto h-(--cell-size)',
+          day_button: 'aspect-auto h-(--cell-size) rounded-full!',
         }}
       />
     </div>

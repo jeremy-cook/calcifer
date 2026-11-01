@@ -115,13 +115,15 @@ export function hasUniqueNames(structureType: string): boolean {
 export interface StructurePresentation {
   icon: Icon
   color: string
+  // How the structure's list page lays out its entities; rows when unset.
+  listLayout?: 'alphabetical'
 }
 
 // Keyed by structure type. A type the server adds without an entry here still
 // renders, with the fallback.
 const PRESENTATION: Record<string, StructurePresentation> = {
   Note: { icon: NoteIcon, color: 'var(--chart-1)' },
-  Tag: { icon: HashIcon, color: 'var(--chart-2)' },
+  Tag: { icon: HashIcon, color: 'var(--chart-2)', listLayout: 'alphabetical' },
   DailyNote: { icon: NotebookIcon, color: 'var(--chart-3)' },
 }
 
@@ -133,6 +135,7 @@ export function structurePresentation(structureType: string): StructurePresentat
 
 export interface FacetPresentation {
   icon: Icon
+  color: string
   // Sidebar label for the facet's list page.
   navLabel: string
   // The facet's list page; undefined when it has none.
@@ -142,9 +145,9 @@ export interface FacetPresentation {
 // Keyed by facet id. A facet the server adds without an entry here still
 // renders, with the fallback icon, its plural as the label and no list page.
 const FACET_PRESENTATION: Record<string, FacetPresentation> = {
-  todo: { icon: CheckSquareIcon, navLabel: 'To-dos', route: '/v/todos' },
+  todo: { icon: CheckSquareIcon, color: 'var(--chart-4)', navLabel: 'To-dos', route: '/v/todos' },
 }
 
 export function facetPresentation(id: string): FacetPresentation {
-  return FACET_PRESENTATION[id] ?? { icon: FALLBACK_PRESENTATION.icon, navLabel: getFacet(id)?.plural ?? id }
+  return FACET_PRESENTATION[id] ?? { ...FALLBACK_PRESENTATION, navLabel: getFacet(id)?.plural ?? id }
 }
