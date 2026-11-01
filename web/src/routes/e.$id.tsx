@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createFileRoute, Link, useLocation, useNavigate } from '@tanstack/react-router'
-import { formatDistanceToNow } from 'date-fns'
 import { CaretDownIcon, DotsThreeIcon, FileDashedIcon, TrashIcon } from '@phosphor-icons/react'
 import {
   AlertDialog,
@@ -38,7 +37,7 @@ import { ReferencesList } from '~/components/relationships/ReferencesList'
 import { RelationshipsPanel } from '~/components/relationships/RelationshipsPanel'
 import { cn } from '~/lib/utils'
 import { entityTitle } from '~/model/daily-notes'
-import { formatShortDate, weekNumber } from '~/model/dates'
+import { formatShortDate, formatTimeAgo, weekNumber } from '~/model/dates'
 import { useIncomingReferences } from '~/model/relationships'
 import {
   dailyNoteDate,
@@ -118,6 +117,10 @@ function EntityNotFound() {
   )
 }
 
+// Which facet's band each note had open, so coming back to a note finds it as it was
+// left. Kept for the session only.
+const openBands = new Map<string, string | null>()
+
 interface EntityHeaderProps {
   entity: Entity
 }
@@ -126,10 +129,14 @@ interface EntityHeaderProps {
 // of pills: the structure's own, then one summary pill per attached facet. A facet's
 // pill opens its fields in a band under the header.
 function EntityHeader({ entity }: EntityHeaderProps) {
-  const [openFacetId, setOpenFacetId] = useState<string | null>(null)
+  const [openFacetId, setOpenFacetIdState] = useState<string | null>(() => openBands.get(entity.id) ?? null)
   const openFacet = useFacets().find((f) => f.id === openFacetId && hasFacet(entity, f.id))
 
-  const toggleFacet = (facetId: string) => setOpenFacetId((open) => (open === facetId ? null : facetId))
+  const setOpenFacetId = (facetId: string | null) => {
+    openBands.set(entity.id, facetId)
+    setOpenFacetIdState(facetId)
+  }
+  const toggleFacet = (facetId: string) => setOpenFacetId(openFacetId === facetId ? null : facetId)
 
   const renderTitle = () =>
     isNameEditable(entity.structureType) ? (
@@ -166,7 +173,7 @@ function EntityByline({ entity, onFacetAttached }: EntityBylineProps) {
   const details = [
     dateIso ? `Week ${weekNumber(dateIso)}` : null,
     hasText ? null : `${referenceCount} ${referenceCount === 1 ? 'note' : 'notes'}`,
-    `edited ${formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}`,
+    `edited ${formatTimeAgo(entityUpdatedAtDate(entity))}`,
   ].filter((detail) => detail !== null)
 
   return (
@@ -319,7 +326,8 @@ function EntityTitleInput({ entity }: EntityTitleInputProps) {
 }
 
 // Renders a property's editor as a pill. Facet properties render in the facet's band,
-// under their own label, so a date there leaves its label out of the pill.
+// under their own label, so a date there leaves its label out of the pill and an empty
+// pill there reads "+ Set".
 function usePropertyRenderer(entity: Entity) {
   const { setText, setNumber, setDate, setSelect, setRelation, addRelationTarget, removeRelationTarget } =
     usePropertyWriters()
@@ -338,6 +346,7 @@ function usePropertyRenderer(entity: Entity) {
     if (override) return override()
 
     const value = propertyValueOf(entity, def.id)
+    const emptyLabel = facet ? 'Set' : undefined
 
     switch (def.kind) {
       case PropertyKind.TEXT:
@@ -374,6 +383,7 @@ function usePropertyRenderer(entity: Entity) {
             key={def.id}
             label={def.label || 'Date'}
             showLabel={!facet}
+            emptyLabel={emptyLabel}
             iso={iso}
             onChange={(next) => setDate(entity, def.id, next)}
             onClear={iso ? () => setDate(entity, def.id, null) : undefined}
@@ -389,6 +399,7 @@ function usePropertyRenderer(entity: Entity) {
             label={def.label || def.id}
             value={current}
             options={def.options}
+            emptyLabel={emptyLabel}
             onChange={(next) => setSelect(entity, def.id, next)}
           />
         )
@@ -413,6 +424,7 @@ function usePropertyRenderer(entity: Entity) {
             key={def.id}
             selfId={entity.id}
             label={def.label || def.id}
+            emptyLabel={emptyLabel}
             targetStructure={def.targetStructure}
             target={value?.case === 'relation' ? value.value : undefined}
             onChange={(target) => setRelation(entity, def.id, target)}

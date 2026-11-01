@@ -9,6 +9,7 @@ export interface TodoPriorityFieldProps {
 }
 
 // The priority pill, with a signal-bars icon for its level; high reads in the alert colour.
+// It shows in the ToDo band, under its label, so empty it reads "+ Set".
 export function TodoPriorityField({ entity }: TodoPriorityFieldProps) {
   const { setSelect } = usePropertyWriters()
   const def = propertyDef(useFacet(TODO_FACET), TODO_PRIORITY)
@@ -21,6 +22,7 @@ export function TodoPriorityField({ entity }: TodoPriorityFieldProps) {
       value={priority}
       options={def.options}
       emptyValue={def.defaultOption}
+      emptyLabel="Set"
       icon={PRIORITY_ICONS[priority]}
       optionIcons={PRIORITY_ICONS}
       optionClasses={PRIORITY_CLASSES}

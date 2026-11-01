@@ -1,12 +1,13 @@
 import { useMemo } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import type { MatchRange } from 'calcifer/v1/services_pb'
+import { SearchMode } from 'calcifer/v1/services_pb'
 import { qk, searchClient } from '~/model/api'
 import { timestampMsOrZero } from '~/model/dates'
 import { useAllEntities, type Entity } from '~/model/store'
 
 // The search palette's two sources (ADR 9, 2026-11-01 note): titles come from the
-// replica as you type; note text and meaning come from the server's Search.
+// replica as you type; note text comes from the server's Search.
 
 const TITLE_LIMIT = 5
 const TEXT_LIMIT = 8
@@ -33,19 +34,21 @@ export function useTitleMatches(query: string): Entity[] {
 
 export interface TextHit {
   entity: Entity
-  // Plain text around the best match; empty for a hit found only by meaning.
+  // Plain text around the best match.
   snippet: string
   matches: readonly MatchRange[]
 }
 
-// The server's hybrid search over names and bodies. The caller debounces `query`.
+// The server's word search over names and bodies. Lexical only: vector search returns
+// its nearest notes however unrelated, so its matches read as noise in the palette.
+// The caller debounces `query`.
 // While a new query is in flight the previous hits stay, so the list doesn't flash.
 export function useTextSearch(query: string) {
   const q = query.trim()
   return useQuery({
     queryKey: qk.search(q),
     queryFn: async (): Promise<TextHit[]> => {
-      const { hits } = await searchClient.search({ query: q, limit: TEXT_LIMIT })
+      const { hits } = await searchClient.search({ query: q, limit: TEXT_LIMIT, mode: SearchMode.LEXICAL })
       return hits
         .filter((hit) => hit.entity !== undefined)
         .map((hit) => ({ entity: hit.entity!, snippet: hit.snippet, matches: hit.matches }))

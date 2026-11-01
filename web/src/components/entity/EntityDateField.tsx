@@ -9,6 +9,8 @@ export interface EntityDateFieldProps {
   label: string
   // False: the pill shows the date alone, for a date that names the entity (a daily note's).
   showLabel?: boolean
+  // The empty pill's words, when a label shows above it already (a facet's band): "Set".
+  emptyLabel?: string
   iso?: string
   onChange: (newIso: string) => void
   onClear?: () => void
@@ -21,6 +23,7 @@ export interface EntityDateFieldProps {
 export function EntityDateField({
   label,
   showLabel = true,
+  emptyLabel,
   iso,
   onChange,
   onClear,
@@ -84,9 +87,9 @@ export function EntityDateField({
 
   const renderEmptyTrigger = () => (
     <PopoverTrigger asChild>
-      <button type="button" className={PILL_EMPTY_CLASS}>
+      <button type="button" className={PILL_EMPTY_CLASS} aria-label={`Set ${label.toLowerCase()}`}>
         <PlusIcon />
-        {label}
+        {emptyLabel ?? label}
       </button>
     </PopoverTrigger>
   )

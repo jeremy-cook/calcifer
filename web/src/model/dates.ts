@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { format, getISOWeek, parse, startOfWeek } from 'date-fns'
+import { format, formatDistance, getISOWeek, parse, startOfWeek } from 'date-fns'
 import { timestampMs, type Timestamp } from '@bufbuild/protobuf/wkt'
 
 // A proto Timestamp in epoch milliseconds; an unset one reads as 0 (the epoch).
@@ -26,6 +26,13 @@ export function isoFromDate(d: Date): string {
 
 export function dateFromIso(iso: string): Date {
   return parse(iso, 'yyyy-MM-dd', new Date())
+}
+
+// "24 minutes ago". date-fns' own version subtracts the change in UTC offset between
+// the two times, so across a clock change it says "-36 minutes ago". Measured from the
+// epoch instead, both ends share one offset.
+export function formatTimeAgo(date: Date, now: number = Date.now()): string {
+  return formatDistance(0, Math.max(0, now - date.getTime()), { addSuffix: true })
 }
 
 export function formatLongDate(iso: string): string {

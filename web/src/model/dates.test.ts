@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { timestampFromMs } from '@bufbuild/protobuf/wkt'
-import { compareTimestamps, msUntilEndOfDay, shiftIso } from '~/model/dates'
+import { compareTimestamps, formatTimeAgo, msUntilEndOfDay, shiftIso } from '~/model/dates'
 
 describe('dates', () => {
+  it('says how long ago across a clock change', () => {
+    // 24 minutes either side of US Pacific's fall-back (09:00 UTC); right in any time zone.
+    const edited = new Date(Date.UTC(2026, 10, 1, 8, 50))
+    expect(formatTimeAgo(edited, Date.UTC(2026, 10, 1, 9, 14))).toBe('24 minutes ago')
+  })
+
   it('shifts an ISO date across a month end', () => {
     expect(shiftIso('2026-01-31', 1)).toBe('2026-02-01')
   })

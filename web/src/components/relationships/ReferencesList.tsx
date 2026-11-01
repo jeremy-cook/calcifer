@@ -1,11 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import { formatDistanceToNow } from 'date-fns'
 import { CellSignalHighIcon, LinkSimpleIcon } from '@phosphor-icons/react'
 import { EmptyLine } from '~/components/empty-state/EmptyLine'
 import { LoadingRows } from '~/components/loading/LoadingRows'
 import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
-import { formatShortDate, timestampMsOrZero, useToday } from '~/model/dates'
+import { formatShortDate, formatTimeAgo, timestampMsOrZero, useToday } from '~/model/dates'
 import { useIncomingReferences, type Reference } from '~/model/relationships'
 import { entityUpdatedAtDate, hasFacet, useReplicaReady, type Entity } from '~/model/store'
 import { facetPresentation, getFacet, structurePresentation, useStructures } from '~/model/structures'
@@ -103,7 +102,7 @@ function ReferenceRow({ reference }: ReferenceRowProps) {
       </Link>
       {pill}
       <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-        {formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}
+        {formatTimeAgo(entityUpdatedAtDate(entity))}
       </span>
     </li>
   )

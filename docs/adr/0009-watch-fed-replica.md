@@ -95,7 +95,9 @@ overwriting it.
   The decision is unchanged.
 - **2026-11-01:** The browser now calls `Search`, for the search palette's "In the text"
   results. The replica holds entities but not rich-text bodies, so it can't answer a search
-  over note text, and the server's search also matches by meaning. Title matches still come
+  over note text. The palette asks for word matches only (lexical mode): vector search
+  returns its nearest notes however unrelated, so meaning matches read as noise there;
+  agents keep hybrid search over MCP. Title matches still come
   from the replica. `Search` is a read the browser requests, so it goes through TanStack
   Query like rich-text docs; nothing about the replica changes. Filtered `List` and
   `ListBacklinks` stay agent-only.

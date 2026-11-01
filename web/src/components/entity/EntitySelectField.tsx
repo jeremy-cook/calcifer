@@ -16,6 +16,8 @@ export interface EntitySelectFieldProps {
   value: string
   options: readonly SelectOption[]
   onChange: (value: string) => void
+  // The empty pill's words, when a label shows above it already (a facet's band): "Set".
+  emptyLabel?: string
   // The option that reads as unset (a priority of "None"): the pill shows "+ label".
   emptyValue?: string
   icon?: Icon
@@ -33,6 +35,7 @@ export function EntitySelectField({
   options,
   onChange,
   emptyValue,
+  emptyLabel,
   icon: Icon,
   className,
   optionIcons,
@@ -42,9 +45,9 @@ export function EntitySelectField({
   const empty = value === emptyValue || !current
 
   const renderEmptyTrigger = () => (
-    <button type="button" className={PILL_EMPTY_CLASS}>
+    <button type="button" className={PILL_EMPTY_CLASS} aria-label={`Set ${label.toLowerCase()}`}>
       <PlusIcon />
-      {label}
+      {emptyLabel ?? label}
     </button>
   )
 

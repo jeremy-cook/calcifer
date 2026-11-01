@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Command } from 'cmdk'
-import { formatDistanceToNow } from 'date-fns'
+import { Dialog } from 'radix-ui'
 import { MagnifyingGlassIcon, PlusIcon } from '@phosphor-icons/react'
 import type { MatchRange } from 'calcifer/v1/services_pb'
 import { MIN_TEXT_QUERY, useTextSearch, useTitleMatches, type TextHit } from '~/model/search'
 import { entityUpdatedAtDate, getOrCreateEntityForMention, type Entity } from '~/model/store'
 import { structurePresentation, useStructures } from '~/model/structures'
+import { formatTimeAgo } from '~/model/dates'
 
 const DEBOUNCE_MS = 200
 
 // The top bar's Search button and the ⌘K palette it opens: titles from the replica as
-// you type, then note text and meaning from the server, then "New note".
+// you type, then note text from the server, then "New note".
 export function SearchPalette() {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
@@ -104,6 +105,9 @@ export function SearchPalette() {
         overlayClassName="fixed inset-0 z-50 bg-black/60"
         contentClassName="menu-surface fixed top-[12vh] left-1/2 z-50 w-[620px] max-w-[calc(100vw-2rem)] -translate-x-1/2 overflow-hidden rounded-2xl"
       >
+        {/* For screen readers; the search field says what the dialog is for. */}
+        <Dialog.Title className="sr-only">Search</Dialog.Title>
+        <Dialog.Description className="sr-only">Search note titles and text.</Dialog.Description>
         <div className="flex h-14 items-center gap-3 border-b border-border px-4">
           <MagnifyingGlassIcon className="size-5 shrink-0 text-muted-foreground" />
           <Command.Input
@@ -185,7 +189,7 @@ function TitleRow({ entity, query }: TitleRowProps) {
         <Highlighted text={entity.name} matches={matches} />
       </span>
       <span className="shrink-0 pt-0.5 text-xs text-muted-foreground">
-        {structureName} · {formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}
+        {structureName} · {formatTimeAgo(entityUpdatedAtDate(entity))}
       </span>
     </>
   )
@@ -198,21 +202,16 @@ interface TextRowProps {
 function TextRow({ hit }: TextRowProps) {
   const { icon: Icon, color } = structurePresentation(hit.entity.structureType)
 
-  const renderSnippet = () =>
-    hit.snippet ? (
-      <span className="truncate text-[0.8125rem] text-muted-foreground">
-        <Highlighted text={hit.snippet} matches={hit.matches} />
-      </span>
-    ) : (
-      <span className="text-[0.8125rem] text-muted-foreground italic">Related by meaning</span>
-    )
-
   return (
     <>
       <Icon weight="duotone" className="mt-0.5 size-4 shrink-0" style={{ color }} aria-hidden />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="truncate font-semibold">{hit.entity.name}</span>
-        {renderSnippet()}
+        {hit.snippet && (
+          <span className="truncate text-[0.8125rem] text-muted-foreground">
+            <Highlighted text={hit.snippet} matches={hit.matches} />
+          </span>
+        )}
       </span>
     </>
   )

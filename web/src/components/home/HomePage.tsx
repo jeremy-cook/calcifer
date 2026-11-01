@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from 'react'
 import { Link } from '@tanstack/react-router'
-import { formatDistanceToNow } from 'date-fns'
 import { ArrowUpRightIcon, ClockCounterClockwiseIcon, FeatherIcon, type Icon } from '@phosphor-icons/react'
 import { EmptyLine } from '~/components/empty-state/EmptyLine'
 import { LoadingRows } from '~/components/loading/LoadingRows'
@@ -9,7 +8,7 @@ import { EntityRichTextField } from '~/components/entity/EntityRichTextField'
 import { EntityRows } from '~/components/structure-list/EntityRows'
 import { HomeTodos } from '~/components/home/HomeTodos'
 import { itemsOn, useCalendarIndex } from '~/model/calendar'
-import { formatDayTitle, timestampMsOrZero, useToday, weekNumber } from '~/model/dates'
+import { formatDayTitle, formatTimeAgo, timestampMsOrZero, useToday, weekNumber } from '~/model/dates'
 import { dailyNoteContentRef, useDailyNotePrune } from '~/model/daily-notes'
 import { entityUpdatedAtDate, useAllEntities, useReplicaReady, useResolveDailyNote } from '~/model/store'
 import { facetPresentation, structurePresentation } from '~/model/structures'
@@ -55,7 +54,7 @@ function TodayNote() {
   const contentRef = dailyNote ? dailyNoteContentRef(dailyNote) : undefined
   const details = [
     `Week ${weekNumber(today)}`,
-    dailyNote ? `edited ${formatDistanceToNow(entityUpdatedAtDate(dailyNote), { addSuffix: true })}` : null,
+    dailyNote ? `edited ${formatTimeAgo(entityUpdatedAtDate(dailyNote))}` : null,
   ].filter((detail) => detail !== null)
 
   return (

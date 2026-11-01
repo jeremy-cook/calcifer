@@ -8,6 +8,8 @@ export interface EntityRelationFieldProps {
   // The entity being edited, left out of the picker's candidates.
   selfId: string
   label: string
+  // The empty pill's words, when a label shows above it already (a facet's band): "Set".
+  emptyLabel?: string
   // Empty: any structure.
   targetStructure: string
   target?: EntityRef
@@ -15,7 +17,14 @@ export interface EntityRelationFieldProps {
 }
 
 // A single-target relation: the target's pill opens the picker to replace it.
-export function EntityRelationField({ selfId, label, targetStructure, target, onChange }: EntityRelationFieldProps) {
+export function EntityRelationField({
+  selfId,
+  label,
+  emptyLabel,
+  targetStructure,
+  target,
+  onChange,
+}: EntityRelationFieldProps) {
   // A target with no entity (deleted) shows as unset.
   const { entity: targetEntity } = useEntity(target?.id ?? '')
   const excludeIds = target ? [selfId, target.id] : [selfId]
@@ -23,9 +32,9 @@ export function EntityRelationField({ selfId, label, targetStructure, target, on
   if (!targetEntity) {
     return (
       <EntityPicker targetStructure={targetStructure} excludeIds={excludeIds} onPick={onChange}>
-        <button type="button" className={PILL_EMPTY_CLASS}>
+        <button type="button" className={PILL_EMPTY_CLASS} aria-label={`Set ${label.toLowerCase()}`}>
           <PlusIcon />
-          {label}
+          {emptyLabel ?? label}
         </button>
       </EntityPicker>
     )
