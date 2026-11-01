@@ -93,3 +93,9 @@ overwriting it.
   rather than the TanStack Query cache, which stays for data the browser requests (rich-text
   docs, the structure registry) and for mutations. `model/sync.ts` still applies the stream.
   The decision is unchanged.
+- **2026-11-01:** The browser now calls `Search`, for the search palette's "In the text"
+  results. The replica holds entities but not rich-text bodies, so it can't answer a search
+  over note text, and the server's search also matches by meaning. Title matches still come
+  from the replica. `Search` is a read the browser requests, so it goes through TanStack
+  Query like rich-text docs; nothing about the replica changes. Filtered `List` and
+  `ListBacklinks` stay agent-only.

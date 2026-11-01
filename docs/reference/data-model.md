@@ -498,7 +498,7 @@ message WatchEntitiesResponse {
   uint64 revision = 15;               // monotonic per server process
 }
 
-// One search, for the agent; the frontend doesn't call it. See Retrieval.
+// One search, for the agent and the browser's text search (ADR 9). See Retrieval.
 service SearchService {
   rpc Search(SearchRequest) returns (SearchResponse);
 }

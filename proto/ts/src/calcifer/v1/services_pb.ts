@@ -1281,7 +1281,8 @@ export const RichTextService: GenService<{
  */
 export const SearchService: GenService<{
   /**
-   * For the agent: the frontend doesn't call it (ADR 9).
+   * The agent's search, and the browser's for note text: the browser matches titles
+   * from its replica and asks this for bodies and meaning (ADR 9, 2026-11-01 note).
    *
    * @generated from rpc calcifer.v1.SearchService.Search
    */
