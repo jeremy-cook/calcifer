@@ -10,8 +10,8 @@ kind you're holding tells you how much to trust it and whether you may edit it.
 | [`specs/`](specs/) | How does this built feature work? | Tracks the code. Written when a feature ships. |
 | [`research/`](research/) | How does *someone else's* system work? | **Frozen.** Dated snapshots of external code. |
 
-Plus [`../ROADMAP.md`](../ROADMAP.md) for what isn't built yet,
-[`../ISSUES.md`](../ISSUES.md) for known defects and debt in what is, and
+Plus [`../plans/ROADMAP.md`](../plans/ROADMAP.md) for what isn't built yet,
+[`../plans/ISSUES.md`](../plans/ISSUES.md) for known defects and debt in what is, and
 [`../README.md`](../README.md) for orientation and how to run things.
 
 ## The lifecycle

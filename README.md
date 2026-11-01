@@ -31,7 +31,7 @@ Data model, graph derivation, and the RPC surface:
 [`docs/reference/data-model.md`](docs/reference/data-model.md). The TipTap node types
 the server reads from rich-text documents:
 [`docs/reference/richtext-doc.md`](docs/reference/richtext-doc.md).
-What's being built next: [`ROADMAP.md`](ROADMAP.md).
+What's being built next: [`plans/ROADMAP.md`](plans/ROADMAP.md).
 
 ## Running it
 

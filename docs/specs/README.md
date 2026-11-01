@@ -29,4 +29,4 @@ keep it current.
 - [`../adr/`](../adr/) — *why* a decision was made (immutable)
 - [`../research/`](../research/) — external prior art (frozen, describes other people's code)
 - [`../reference/data-model.md`](../reference/data-model.md) — cross-cutting shapes
-- [`../../ROADMAP.md`](../../ROADMAP.md) — what isn't built yet
+- [`../../plans/ROADMAP.md`](../../plans/ROADMAP.md) — what isn't built yet

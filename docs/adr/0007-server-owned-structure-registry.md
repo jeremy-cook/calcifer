@@ -1,7 +1,7 @@
 # 7. The server owns the structure registry; clients fetch it
 
 - **Status:** Accepted
-- **Date:** 2026-09-24 (resolves [I-10](../../ISSUES.md))
+- **Date:** 2026-09-24 (resolves [I-10](../../plans/ISSUES.md))
 
 ## Context
 
