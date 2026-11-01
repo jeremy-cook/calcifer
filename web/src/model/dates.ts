@@ -44,9 +44,10 @@ export function formatMonth(month: string): string {
   return format(date, date.getFullYear() === new Date().getFullYear() ? 'MMMM' : 'MMMM yyyy')
 }
 
-// "Sunday 1 November": a day as a page title.
+// "Sunday 1 November": a day as a page title; "Friday 15 January 2027" in another year.
 export function formatDayTitle(iso: string): string {
-  return format(dateFromIso(iso), 'EEEE d MMMM')
+  const date = dateFromIso(iso)
+  return format(date, date.getFullYear() === new Date().getFullYear() ? 'EEEE d MMMM' : 'EEEE d MMMM yyyy')
 }
 
 // The Monday that starts `iso`'s week.

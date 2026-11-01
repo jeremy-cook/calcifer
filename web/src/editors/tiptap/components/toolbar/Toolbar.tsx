@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { useEditorState, type Editor } from '@tiptap/react'
 import { Toggle } from '~/components/ui/toggle'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select'
-import { Button } from '~/components/ui/button'
+import { LinkFields } from '../link/LinkFields'
 import { Popover, PopoverAnchor, PopoverContent } from '~/components/ui/popover'
 import {
   TextBIcon,
@@ -16,7 +16,6 @@ import {
   ListNumbersIcon,
   ListChecksIcon,
   LinkIcon,
-  CheckIcon,
 } from '@phosphor-icons/react'
 import { BLOCK_TYPES, type Alignment } from '../formatting-options'
 import { InsertPopover, type InsertSection } from './InsertPopover'
@@ -142,39 +141,16 @@ function LinkPopover({ editor, isLink }: LinkPopoverProps) {
           <LinkIcon />
         </Toggle>
       </PopoverAnchor>
-      <PopoverContent align="start" className="w-auto p-2">
-        <div className="flex flex-col gap-1.5">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleInsert()
-              if (e.key === 'Escape') setOpen(false)
-            }}
-            className="w-64 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
-            placeholder="Text"
-          />
-          <div className="flex items-center gap-1">
-            <input
-              value={url}
-              onChange={(e) => {
-                const val = e.target.value
-                if (label === '' || label === url) setLabel(val)
-                setUrl(val)
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleInsert()
-                if (e.key === 'Escape') setOpen(false)
-              }}
-              className="w-56 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
-              placeholder="https://"
-              autoFocus
-            />
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={handleInsert} aria-label="Apply link">
-              <CheckIcon size={14} />
-            </Button>
-          </div>
-        </div>
+      <PopoverContent align="start" className="w-auto p-3">
+        <LinkFields
+          label={label}
+          url={url}
+          onLabelChange={setLabel}
+          onUrlChange={setUrl}
+          onSave={handleInsert}
+          onEscape={() => setOpen(false)}
+          autoFocus
+        />
       </PopoverContent>
     </Popover>
   )

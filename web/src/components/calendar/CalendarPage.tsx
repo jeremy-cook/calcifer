@@ -36,9 +36,12 @@ export function CalendarPage({ iso, view }: CalendarPageProps) {
   if (view === 'week') return <WeekView iso={iso} controls={controls} onOpenDay={(day) => goTo(day, 'day')} />
 
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1fr)_320px]">
+    // Without room for the month beside the day, the arrows and Today do its job.
+    <div className="grid h-full min-h-0 grid-cols-1 @4xl:grid-cols-[minmax(0,1fr)_320px]">
       <DayView iso={iso} controls={controls} />
-      <MiniCalendar iso={iso} onSelect={goTo} />
+      <div className="hidden min-h-0 @4xl:block">
+        <MiniCalendar iso={iso} onSelect={goTo} />
+      </div>
     </div>
   )
 }

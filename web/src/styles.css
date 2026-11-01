@@ -114,6 +114,10 @@
   html {
     @apply font-sans;
   }
+  /* Selected text in the ember, not the browser's blue. */
+  ::selection {
+    background-color: color-mix(in srgb, var(--primary) 38%, transparent);
+  }
 }
 
 @layer components {

@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { Button } from '~/components/ui/button'
-import { ArrowSquareOutIcon, PencilSimpleIcon, LinkBreakIcon, CheckIcon } from '@phosphor-icons/react'
+import { ArrowSquareOutIcon, PencilSimpleIcon, LinkBreakIcon } from '@phosphor-icons/react'
+import { LinkFields } from './LinkFields'
 
 interface Props {
   linkUrl: string
@@ -33,38 +34,15 @@ export function LinkEditorPopover({
 }: Props) {
   if (isEditing) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <input
-          value={editedLabel}
-          onChange={(e) => onEditedLabelChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') onSave()
-            if (e.key === 'Escape') onEscape()
-          }}
-          className="w-64 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
-          placeholder="Text"
-        />
-        <div className="flex items-center gap-1">
-          <input
-            ref={inputRef}
-            value={editedUrl}
-            onChange={(e) => {
-              const url = e.target.value
-              if (editedLabel === '' || editedLabel === editedUrl) onEditedLabelChange(url)
-              onEditedUrlChange(url)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onSave()
-              if (e.key === 'Escape') onEscape()
-            }}
-            className="w-56 rounded border border-border bg-background px-2 py-0.5 text-xs outline-none focus:border-primary"
-            placeholder="https://"
-          />
-          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onSave} aria-label="Save">
-            <CheckIcon size={14} />
-          </Button>
-        </div>
-      </div>
+      <LinkFields
+        label={editedLabel}
+        url={editedUrl}
+        onLabelChange={onEditedLabelChange}
+        onUrlChange={onEditedUrlChange}
+        onSave={onSave}
+        onEscape={onEscape}
+        urlRef={inputRef}
+      />
     )
   }
 
@@ -74,18 +52,18 @@ export function LinkEditorPopover({
         href={linkUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="max-w-48 truncate text-primary underline text-xs"
+        className="max-w-56 truncate px-1 text-primary underline"
       >
         {linkUrl}
       </a>
-      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onOpen} aria-label="Open link">
-        <ArrowSquareOutIcon size={14} />
+      <Button variant="ghost" size="icon-sm" onClick={onOpen} aria-label="Open link">
+        <ArrowSquareOutIcon />
       </Button>
-      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onEdit} aria-label="Edit link">
-        <PencilSimpleIcon size={14} />
+      <Button variant="ghost" size="icon-sm" onClick={onEdit} aria-label="Edit link">
+        <PencilSimpleIcon />
       </Button>
-      <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={onRemove} aria-label="Remove link">
-        <LinkBreakIcon size={14} />
+      <Button variant="ghost" size="icon-sm" onClick={onRemove} aria-label="Remove link">
+        <LinkBreakIcon />
       </Button>
     </>
   )

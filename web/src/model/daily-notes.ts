@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { RichTextRef } from 'calcifer/v1/entities_pb'
 import { isAlreadyExists } from '~/model/api'
+import { formatDayTitle } from '~/model/dates'
 import { richTextRef } from '~/model/richtext'
 import {
   dailyNoteByDate,
@@ -18,6 +19,13 @@ import { richTextPropertyIds } from '~/model/structures'
 export function dailyNoteContentRef(entity: Entity): RichTextRef | undefined {
   const [propertyId] = richTextPropertyIds(entity.structureType)
   return propertyId ? richTextRef(entity.id, propertyId) : undefined
+}
+
+// What to call an entity on screen. A daily note's stored name is the server's long
+// date ("November 1, 2026"); it shows as its day, the way Home and the calendar do.
+export function entityTitle(entity: Entity): string {
+  const iso = dailyNoteDate(entity)
+  return iso ? formatDayTitle(iso) : entity.name
 }
 
 // Pending prunes by day, scheduled when a view of the day goes away.

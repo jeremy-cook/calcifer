@@ -21,6 +21,9 @@ export interface EntitySelectFieldProps {
   icon?: Icon
   // Extra classes for the pill, e.g. a colour for the current value.
   className?: string
+  // An icon and colour per option key, shown in the menu (priority's signal bars).
+  optionIcons?: Record<string, Icon>
+  optionClasses?: Record<string, string>
 }
 
 // A pill showing the current option; it opens a menu of the others.
@@ -32,6 +35,8 @@ export function EntitySelectField({
   emptyValue,
   icon: Icon,
   className,
+  optionIcons,
+  optionClasses,
 }: EntitySelectFieldProps) {
   const current = options.find((option) => option.key === value)
   const empty = value === emptyValue || !current
@@ -55,11 +60,15 @@ export function EntitySelectField({
       <DropdownMenuTrigger asChild>{empty ? renderEmptyTrigger() : renderSetTrigger()}</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
         <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
-          {options.map((option) => (
-            <DropdownMenuRadioItem key={option.key} value={option.key}>
-              {option.label}
-            </DropdownMenuRadioItem>
-          ))}
+          {options.map((option) => {
+            const OptionIcon = optionIcons?.[option.key]
+            return (
+              <DropdownMenuRadioItem key={option.key} value={option.key}>
+                {OptionIcon && <OptionIcon weight="fill" className={optionClasses?.[option.key]} aria-hidden />}
+                {option.label}
+              </DropdownMenuRadioItem>
+            )
+          })}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>

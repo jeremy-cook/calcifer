@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import { formatDistanceToNow } from 'date-fns'
+import { entityTitle } from '~/model/daily-notes'
 import { entityUpdatedAtDate, type Entity } from '~/model/store'
 import { structurePresentation } from '~/model/structures'
 
@@ -21,7 +22,7 @@ export function EntityRows({ entities }: EntityRowsProps) {
               className="flex h-[30px] items-center gap-2.5 rounded-[5px] px-2.5 text-sm hover:bg-accent"
             >
               <Icon weight="duotone" className="size-4 shrink-0" style={{ color }} aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{entity.name}</span>
+              <span className="min-w-0 flex-1 truncate">{entityTitle(entity)}</span>
               <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
                 {formatDistanceToNow(entityUpdatedAtDate(entity), { addSuffix: true })}
               </span>

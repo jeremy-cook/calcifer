@@ -2,7 +2,7 @@ import { EntitySelectField } from '~/components/entity/EntitySelectField'
 import { usePropertyWriters, type Entity } from '~/model/store'
 import { propertyDef, useFacet } from '~/model/structures'
 import { TODO_FACET, TODO_PRIORITY, todoFields } from '~/model/todos'
-import { PRIORITY_ICONS } from './priority'
+import { PRIORITY_CLASSES, PRIORITY_ICONS } from './priority'
 
 export interface TodoPriorityFieldProps {
   entity: Entity
@@ -22,6 +22,8 @@ export function TodoPriorityField({ entity }: TodoPriorityFieldProps) {
       options={def.options}
       emptyValue={def.defaultOption}
       icon={PRIORITY_ICONS[priority]}
+      optionIcons={PRIORITY_ICONS}
+      optionClasses={PRIORITY_CLASSES}
       className={priority === 'high' ? 'text-destructive' : undefined}
       onChange={(next) => setSelect(entity, TODO_PRIORITY, next)}
     />

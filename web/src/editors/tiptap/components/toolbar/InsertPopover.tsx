@@ -1,11 +1,11 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { type Editor } from '@tiptap/react'
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover'
 import { Button } from '~/components/ui/button'
 import { PlusIcon, TableIcon, ImageIcon, CaretRightIcon, CheckIcon } from '@phosphor-icons/react'
-import { readFileAsDataURL } from '~/lib/tiptap-extension-resize-image'
 import { cn } from '~/lib/utils'
 import { insertDetails } from '../insert-details'
+import { ImageForm } from '../image/ImageForm'
 
 type View = 'menu' | 'table' | 'image'
 
@@ -153,7 +153,7 @@ function TablePicker({ editor, close }: TablePickerProps) {
           return (
             <div
               key={i}
-              className={`h-5 w-5 cursor-pointer rounded-sm border ${isActive ? 'border-primary bg-primary/20' : 'border-border bg-muted/30'}`}
+              className={`h-5 w-5 cursor-pointer rounded-sm border ${isActive ? 'border-primary bg-primary/20' : 'border-muted-foreground/30 bg-muted'}`}
               onMouseEnter={() => setHovered({ rows: row, cols: col })}
               onMouseLeave={() => setHovered({ rows: 0, cols: 0 })}
               onClick={() => {
@@ -164,83 +164,6 @@ function TablePicker({ editor, close }: TablePickerProps) {
           )
         })}
       </div>
-    </div>
-  )
-}
-
-interface ImageFormProps {
-  onInsert: (src: string, alt: string) => void
-}
-
-function ImageForm({ onInsert }: ImageFormProps) {
-  const [url, setUrl] = useState('')
-  const [file, setFile] = useState<{ src: string; name: string } | null>(null)
-  const [altText, setAltText] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
-
-  const imageSrc = file?.src ?? url.trim()
-
-  const handleInsert = () => {
-    if (!imageSrc) return
-    onInsert(imageSrc, altText.trim())
-  }
-
-  const renderFilePreview = () => (
-    <div className="flex items-center gap-2 rounded border border-border bg-muted px-2 py-1.5">
-      <span className="flex-1 truncate text-xs">{file!.name}</span>
-      <button
-        onClick={() => setFile(null)}
-        className="leading-none text-muted-foreground hover:text-foreground"
-        aria-label="Remove file"
-      >
-        ×
-      </button>
-    </div>
-  )
-
-  const renderUrlInput = () => (
-    <input
-      type="url"
-      placeholder="https://..."
-      value={url}
-      onChange={(e) => setUrl(e.target.value)}
-      onKeyDown={(e) => e.key === 'Enter' && handleInsert()}
-      className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
-    />
-  )
-
-  return (
-    <div className="w-64 space-y-2 p-1.5">
-      <p className="text-xs font-medium">Insert image</p>
-      {file ? renderFilePreview() : renderUrlInput()}
-      <Button variant="outline" size="sm" className="h-7 w-full text-xs" onClick={() => fileRef.current?.click()}>
-        Upload file
-      </Button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={async (e) => {
-          const f = e.target.files?.[0]
-          if (!f) return
-          setFile({ src: await readFileAsDataURL(f), name: f.name })
-          setUrl('')
-          e.target.value = ''
-        }}
-      />
-      <input
-        type="text"
-        placeholder="Describe the image…"
-        value={altText}
-        onChange={(e) => setAltText(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && handleInsert()}
-        className="w-full rounded border border-border bg-background px-2 py-1 text-xs outline-none focus:border-primary"
-        aria-label="Alt text"
-      />
-      <Button size="sm" className="h-7 w-full text-xs" onClick={handleInsert} disabled={!imageSrc}>
-        Insert
-      </Button>
     </div>
   )
 }

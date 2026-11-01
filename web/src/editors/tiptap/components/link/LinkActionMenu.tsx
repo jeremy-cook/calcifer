@@ -68,7 +68,7 @@ export function LinkActionMenu({ editor }: LinkActionMenuProps) {
       editor={editor}
       shouldShow={({ editor: e }) => e.isActive('link')}
       options={{ placement: 'bottom', onHide: () => setIsEditing(false) }}
-      className="flex items-center gap-1 rounded-md border border-border bg-popover px-2 py-1.5 shadow-md text-sm"
+      className="menu-surface flex items-center gap-1 px-2.5 py-2 text-sm"
     >
       <LinkEditorPopover
         linkUrl={linkUrl ?? ''}

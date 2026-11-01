@@ -21,8 +21,9 @@ export function DayView({ iso, controls }: DayViewProps) {
   const created = itemsOn(index, iso, 'created')
 
   return (
-    <div className="flex min-h-0 flex-col overflow-y-auto">
-      <div className="flex items-end gap-4 px-7 @3xl:px-16 pt-7 pb-5">
+    // Its own container: the month beside it takes part of the page's width.
+    <div className="@container flex min-h-0 flex-col overflow-y-auto">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3 px-7 pt-7 pb-5 @3xl:px-16">
         <DayHeading iso={iso} />
         <div className="ml-auto">{controls}</div>
       </div>

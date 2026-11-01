@@ -37,6 +37,7 @@ import { DailyNoteDateField } from '~/components/calendar/DailyNoteDateField'
 import { ReferencesList } from '~/components/relationships/ReferencesList'
 import { RelationshipsPanel } from '~/components/relationships/RelationshipsPanel'
 import { cn } from '~/lib/utils'
+import { entityTitle } from '~/model/daily-notes'
 import { formatShortDate, weekNumber } from '~/model/dates'
 import { useIncomingReferences } from '~/model/relationships'
 import {
@@ -134,7 +135,7 @@ function EntityHeader({ entity }: EntityHeaderProps) {
     isNameEditable(entity.structureType) ? (
       <EntityTitleInput key={entity.id} entity={entity} />
     ) : (
-      <h1 className="font-heading text-4xl leading-tight font-semibold text-heading">{entity.name}</h1>
+      <h1 className="font-heading text-4xl leading-tight font-semibold text-heading">{entityTitle(entity)}</h1>
     )
 
   return (
