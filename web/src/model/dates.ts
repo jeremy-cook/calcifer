@@ -38,6 +38,12 @@ export function formatShortDate(iso: string): string {
   return format(date, date.getFullYear() === new Date().getFullYear() ? 'EEE d MMM' : 'd MMM yyyy')
 }
 
+// "November" for a "2026-11" month this year, "January 2027" otherwise.
+export function formatMonth(month: string): string {
+  const date = parse(month, 'yyyy-MM', new Date())
+  return format(date, date.getFullYear() === new Date().getFullYear() ? 'MMMM' : 'MMMM yyyy')
+}
+
 // "Sunday 1 November": a day as a page title.
 export function formatDayTitle(iso: string): string {
   return format(dateFromIso(iso), 'EEEE d MMMM')

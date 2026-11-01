@@ -9,7 +9,7 @@ import {
   useEntitiesWithFacet,
   usePropertyWriters,
 } from '~/model/store'
-import { shiftIso, timestampMsOrZero, useToday } from '~/model/dates'
+import { shiftIso, useToday } from '~/model/dates'
 import { getFacet, propertyDef, type FacetDef } from '~/model/structures'
 
 // A to-do is any entity with the `todo` facet; its values live under the facet's
@@ -76,108 +76,161 @@ export function todoFields(entity: Entity): TodoFields {
 }
 
 // Filter/sort choices, defined once: route search validation, the toolbar and
-// the TodoFilter/TodoSort types all derive from these.
+// the TodoFilter/TodoOrder types all derive from these.
 export function todoStatusFilterOptions(todo: FacetDef | undefined): readonly OptionItem[] {
   return [...todoStatusOptions(todo), { key: 'all', label: 'All' }]
 }
 
-// An unset due filter means "any due date".
-export const TODO_DUE_FILTER_OPTIONS = [
+// The groups the ToDo page lists under, in page order. Done ToDos all go under Done,
+// whatever their date; "This week" is tomorrow through six days out.
+export const TODO_GROUPS = [
   { key: 'overdue', label: 'Overdue' },
   { key: 'today', label: 'Today' },
   { key: 'week', label: 'This week' },
-  { key: 'none', label: 'No due date' },
+  { key: 'later', label: 'Later' },
+  { key: 'none', label: 'No date' },
+  { key: 'done', label: 'Done' },
 ] as const
 
-export const TODO_SORT_OPTIONS = [
-  { key: 'due', label: 'Due date' },
+export type TodoGroupKey = (typeof TODO_GROUPS)[number]['key']
+
+export function todoGroup({ status, due }: TodoFields, todayIsoValue: string): TodoGroupKey {
+  if (status === 'done') return 'done'
+  if (due === undefined) return 'none'
+  if (due < todayIsoValue) return 'overdue'
+  if (due === todayIsoValue) return 'today'
+  if (due <= shiftIso(todayIsoValue, 6)) return 'week'
+  return 'later'
+}
+
+// A "2026-12" month: the due filter can tick a month of Later on its own.
+export type TodoMonthKey = `${number}-${number}`
+export type TodoDueKey = TodoGroupKey | TodoMonthKey
+
+const MONTH_KEY = /^\d{4}-\d{2}$/
+
+export function isTodoDueKey(v: unknown): v is TodoDueKey {
+  return TODO_GROUPS.some((g) => g.key === v) || (typeof v === 'string' && MONTH_KEY.test(v))
+}
+
+// The month a ToDo in Later falls in; undefined in every other group.
+export function todoMonth(fields: TodoFields, todayIsoValue: string): TodoMonthKey | undefined {
+  if (todoGroup(fields, todayIsoValue) !== 'later') return undefined
+  return fields.due?.slice(0, 7) as TodoMonthKey
+}
+
+// The order within a group: each key breaks the ties of the one before it.
+export const TODO_ORDER_OPTIONS = [
   { key: 'priority', label: 'Priority' },
-  { key: 'created', label: 'Created' },
-  { key: 'updated', label: 'Updated' },
+  { key: 'due', label: 'Due' },
   { key: 'name', label: 'Name' },
 ] as const
 
-export const TODO_SORT_DIR_OPTIONS = [
-  { key: 'asc', label: 'Ascending' },
-  { key: 'desc', label: 'Descending' },
-] as const
+export type TodoOrderKey = (typeof TODO_ORDER_OPTIONS)[number]['key']
 
 export interface TodoFilter {
   // A status option key, or 'all'.
   status: string
   priority?: TodoPriority
   tag?: string
-  due?: (typeof TODO_DUE_FILTER_OPTIONS)[number]['key']
+  // Due groups and Later's months to keep; unset or empty is any due date.
+  due?: TodoDueKey[]
 }
 
-export interface TodoSort {
-  by: (typeof TODO_SORT_OPTIONS)[number]['key']
-  dir: (typeof TODO_SORT_DIR_OPTIONS)[number]['key']
+export interface TodoOrder {
+  // Every order key, once each, most significant first.
+  keys: TodoOrderKey[]
+  // Flips the first key: low priority first, latest first, Z–A.
+  reversed: boolean
 }
 
 export const DEFAULT_TODO_FILTER: TodoFilter = { status: 'open' }
-export const DEFAULT_TODO_SORT: TodoSort = { by: 'due', dir: 'asc' }
+export const DEFAULT_TODO_ORDER: TodoOrder = { keys: ['priority', 'due', 'name'], reversed: false }
 
 // Route-search shape shared by /v/todos' validateSearch and TodoToolbar's onChange.
 export interface TodoSearch {
   status?: TodoFilter['status']
   priority?: TodoPriority
   tag?: string
-  due?: TodoFilter['due']
-  sort?: TodoSort['by']
-  dir?: TodoSort['dir']
+  due?: TodoDueKey[]
+  order?: TodoOrderKey[]
+  reversed?: boolean
 }
 
-function matchesDue(due: string | undefined, filter: NonNullable<TodoFilter['due']>, todayIsoValue: string): boolean {
-  if (filter === 'none') return due === undefined
-  if (due === undefined) return false
-  if (filter === 'overdue') return due < todayIsoValue
-  if (filter === 'today') return due === todayIsoValue
-  // week: today through 6 days out, inclusive.
-  return due >= todayIsoValue && due <= shiftIso(todayIsoValue, 6)
+// A list of order keys that names each key exactly once.
+export function isTodoOrder(v: unknown): v is TodoOrderKey[] {
+  return (
+    Array.isArray(v) && v.length === TODO_ORDER_OPTIONS.length && TODO_ORDER_OPTIONS.every((o) => v.includes(o.key))
+  )
 }
 
-// `priorityOrder` is the priority option keys in registry order, which is rank order.
-function compareTodos(a: Entity, b: Entity, sort: TodoSort, priorityOrder: readonly string[]): number {
+function matchesDue(fields: TodoFields, filter: TodoFilter, todayIsoValue: string): boolean {
+  const ticked = filter.due ?? []
+  if (ticked.length === 0 || ticked.includes(todoGroup(fields, todayIsoValue))) return true
+  const month = todoMonth(fields, todayIsoValue)
+  return month !== undefined && ticked.includes(month)
+}
+
+// Each key in its natural direction: high priority first, soonest first (no date
+// last), A–Z. `priorityOrder` is the priority option keys in registry order, low -> high.
+function compareBy(key: TodoOrderKey, a: Entity, b: Entity, priorityOrder: readonly string[]): number {
   const af = todoFields(a)
   const bf = todoFields(b)
-  let cmp = 0
-  switch (sort.by) {
-    case 'due': {
-      if (af.due === undefined && bf.due === undefined) cmp = 0
-      else if (af.due === undefined) cmp = 1
-      else if (bf.due === undefined) cmp = -1
-      else cmp = af.due.localeCompare(bf.due)
-      break
-    }
+  switch (key) {
     case 'priority':
-      cmp = priorityOrder.indexOf(af.priority) - priorityOrder.indexOf(bf.priority)
-      break
-    case 'created':
-      cmp = timestampMsOrZero(a.createdAt) - timestampMsOrZero(b.createdAt)
-      break
-    case 'updated':
-      cmp = timestampMsOrZero(a.updatedAt) - timestampMsOrZero(b.updatedAt)
-      break
+      return priorityOrder.indexOf(bf.priority) - priorityOrder.indexOf(af.priority)
+    case 'due':
+      if (af.due === bf.due) return 0
+      if (af.due === undefined) return 1
+      if (bf.due === undefined) return -1
+      return af.due.localeCompare(bf.due)
     case 'name':
-      cmp = a.name.localeCompare(b.name)
-      break
+      return a.name.localeCompare(b.name)
   }
-  return sort.dir === 'desc' ? -cmp : cmp
 }
 
-export function selectTodos(entities: Entity[], filter: TodoFilter, sort: TodoSort, todayIsoValue: string): Entity[] {
+// ToDos matching the filter, in group order (Later by month), then the given order
+// within each group or month.
+export function selectTodos(entities: Entity[], filter: TodoFilter, order: TodoOrder, todayIsoValue: string): Entity[] {
   const matches = entities.filter((e) => {
     if (!hasFacet(e, TODO_FACET)) return false
     const fields = todoFields(e)
     if (filter.status !== 'all' && fields.status !== filter.status) return false
     if (filter.priority !== undefined && fields.priority !== filter.priority) return false
     if (filter.tag !== undefined && !fields.tagIds.includes(filter.tag)) return false
-    if (filter.due !== undefined && !matchesDue(fields.due, filter.due, todayIsoValue)) return false
+    if (!matchesDue(fields, filter, todayIsoValue)) return false
     return true
   })
   const priorityOrder = todoPriorityOptions(getFacet(TODO_FACET)).map((o) => o.key)
-  return matches.sort((a, b) => compareTodos(a, b, sort, priorityOrder))
+  const groupRank = (e: Entity) => TODO_GROUPS.findIndex((g) => g.key === todoGroup(todoFields(e), todayIsoValue))
+  const monthOf = (e: Entity) => todoMonth(todoFields(e), todayIsoValue)
+  return matches.sort((a, b) => {
+    const group = groupRank(a) - groupRank(b)
+    if (group !== 0) return group
+    const months = (monthOf(a) ?? '').localeCompare(monthOf(b) ?? '')
+    if (months !== 0) return months
+    for (const [i, key] of order.keys.entries()) {
+      const cmp = compareBy(key, a, b, priorityOrder)
+      if (cmp !== 0) return i === 0 && order.reversed ? -cmp : cmp
+    }
+    return 0
+  })
+}
+
+export interface TodoGroup {
+  key: TodoGroupKey
+  label: string
+  todos: Entity[]
+}
+
+// Splits ToDos into their groups, in page order, keeping their order within each;
+// groups with none are left out.
+export function groupTodos(todos: Entity[], todayIsoValue: string): TodoGroup[] {
+  return TODO_GROUPS.map(({ key, label }) => ({
+    key,
+    label,
+    todos: todos.filter((e) => todoGroup(todoFields(e), todayIsoValue) === key),
+  })).filter((g) => g.todos.length > 0)
 }
 
 export function todoDue(entity: Entity): string | undefined {
@@ -190,10 +243,10 @@ export function useSetTodoStatus() {
   return useCallback((entity: Entity, status: TodoStatus) => setSelect(entity, TODO_STATUS, status), [setSelect])
 }
 
-export function useTodos(filter: TodoFilter, sort: TodoSort): Entity[] {
+export function useTodos(filter: TodoFilter, order: TodoOrder): Entity[] {
   const entities = useEntitiesWithFacet(TODO_FACET)
   const today = useToday()
-  return useMemo(() => selectTodos(entities, filter, sort, today), [entities, filter, sort, today])
+  return useMemo(() => selectTodos(entities, filter, order, today), [entities, filter, order, today])
 }
 
 export interface ParsedTodoInput {

@@ -12,7 +12,14 @@ import { PropertyKind } from 'calcifer/v1/structures_pb'
 import { queryClient } from '~/model/api'
 import { structuresQuery } from '~/model/structures'
 import { entity } from '~/model/testing'
-import { DEFAULT_TODO_SORT, parseTodoInput, selectTodos, todoFields, type TodoFilter } from '~/model/todos'
+import {
+  DEFAULT_TODO_ORDER,
+  parseTodoInput,
+  selectTodos,
+  todoFields,
+  type TodoFilter,
+  type TodoOrder,
+} from '~/model/todos'
 
 vi.mock('~/model/api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('~/model/api')>()),
@@ -92,49 +99,96 @@ describe('selectTodos', () => {
       ...entity('plain'),
       properties: { 'todo.status': create(PropertyValueSchema, { value: { case: 'select', value: 'open' } }) },
     })
-    expect(ids(selectTodos([todo('a'), plain, todo('b')], ALL, DEFAULT_TODO_SORT, TODAY))).toEqual(['a', 'b'])
+    expect(ids(selectTodos([todo('a'), plain, todo('b')], ALL, DEFAULT_TODO_ORDER, TODAY))).toEqual(['a', 'b'])
   })
 
   it('filters on todo.status', () => {
     const entities = [todo('open', { status: 'open' }), todo('done', { status: 'done' }), todo('unset')]
-    expect(ids(selectTodos(entities, { status: 'done' }, DEFAULT_TODO_SORT, TODAY))).toEqual(['done'])
-    expect(ids(selectTodos(entities, { status: 'open' }, DEFAULT_TODO_SORT, TODAY))).toEqual(['open', 'unset'])
+    expect(ids(selectTodos(entities, { status: 'done' }, DEFAULT_TODO_ORDER, TODAY))).toEqual(['done'])
+    expect(ids(selectTodos(entities, { status: 'open' }, DEFAULT_TODO_ORDER, TODAY))).toEqual(['open', 'unset'])
   })
 
   it('filters on todo.priority', () => {
     const entities = [todo('high', { priority: 'high' }), todo('low', { priority: 'low' })]
-    expect(ids(selectTodos(entities, { ...ALL, priority: 'high' }, DEFAULT_TODO_SORT, TODAY))).toEqual(['high'])
+    expect(ids(selectTodos(entities, { ...ALL, priority: 'high' }, DEFAULT_TODO_ORDER, TODAY))).toEqual(['high'])
   })
 
-  it('filters on todo.due', () => {
+  it('filters on due groups', () => {
     const entities = [
       todo('past', { due: '2026-10-01' }),
       todo('today', { due: TODAY }),
       todo('soon', { due: '2026-10-27' }),
       todo('later', { due: '2026-12-01' }),
       todo('none'),
+      todo('done', { status: 'done', due: TODAY }),
     ]
-    const by = (due: TodoFilter['due']) => ids(selectTodos(entities, { ...ALL, due }, DEFAULT_TODO_SORT, TODAY))
-    expect(by('overdue')).toEqual(['past'])
-    expect(by('today')).toEqual(['today'])
-    expect(by('week')).toEqual(['today', 'soon'])
-    expect(by('none')).toEqual(['none'])
+    const by = (due: TodoFilter['due']) => ids(selectTodos(entities, { ...ALL, due }, DEFAULT_TODO_ORDER, TODAY))
+    expect(by(['overdue'])).toEqual(['past'])
+    expect(by(['today'])).toEqual(['today'])
+    expect(by(['week'])).toEqual(['soon'])
+    expect(by(['later', 'none'])).toEqual(['later', 'none'])
+    expect(by(['done'])).toEqual(['done'])
+    expect(by([])).toHaveLength(entities.length)
+  })
+
+  it('filters on a month of Later', () => {
+    const entities = [
+      todo('soon', { due: '2026-10-27' }),
+      todo('nov', { due: '2026-11-03' }),
+      todo('dec', { due: '2026-12-01' }),
+      todo('dec-done', { status: 'done', due: '2026-12-02' }),
+    ]
+    const by = (due: TodoFilter['due']) => ids(selectTodos(entities, { ...ALL, due }, DEFAULT_TODO_ORDER, TODAY))
+    expect(by(['2026-12'])).toEqual(['dec'])
+    expect(by(['week', '2026-11'])).toEqual(['soon', 'nov'])
+    // A month only picks from Later: this week's dates in it aren't Later.
+    expect(by(['2026-10'])).toEqual([])
+  })
+
+  it('sorts Later by month before the order within it', () => {
+    const entities = [
+      todo('dec-high', { priority: 'high', due: '2026-12-20' }),
+      todo('nov-low', { priority: 'low', due: '2026-11-29' }),
+      todo('nov-high', { priority: 'high', due: '2026-11-30' }),
+    ]
+    expect(ids(selectTodos(entities, ALL, DEFAULT_TODO_ORDER, TODAY))).toEqual(['nov-high', 'nov-low', 'dec-high'])
   })
 
   it('filters on the tags property', () => {
     const entities = [todo('a', { tags: ['t1', 't2'] }), todo('b', { tags: ['t2'] }), todo('c')]
-    expect(ids(selectTodos(entities, { ...ALL, tag: 't1' }, DEFAULT_TODO_SORT, TODAY))).toEqual(['a'])
+    expect(ids(selectTodos(entities, { ...ALL, tag: 't1' }, DEFAULT_TODO_ORDER, TODAY))).toEqual(['a'])
   })
 
-  it('sorts by priority in registry option order', () => {
+  it('lists groups in page order, whatever the order within them', () => {
+    const entities = [
+      todo('none', { priority: 'high' }),
+      todo('done', { status: 'done' }),
+      todo('soon', { due: '2026-10-27' }),
+      todo('past', { due: '2026-10-01' }),
+    ]
+    expect(ids(selectTodos(entities, ALL, DEFAULT_TODO_ORDER, TODAY))).toEqual(['past', 'soon', 'none', 'done'])
+  })
+
+  it('orders by priority high first, in registry option order', () => {
     const entities = [
       todo('medium', { priority: 'medium' }),
       todo('high', { priority: 'high' }),
       todo('none'),
       todo('low', { priority: 'low' }),
     ]
-    const sorted = selectTodos(entities, ALL, { by: 'priority', dir: 'asc' }, TODAY)
-    expect(ids(sorted)).toEqual(['none', 'low', 'medium', 'high'])
+    expect(ids(selectTodos(entities, ALL, DEFAULT_TODO_ORDER, TODAY))).toEqual(['high', 'medium', 'low', 'none'])
+    const reversed = { ...DEFAULT_TODO_ORDER, reversed: true }
+    expect(ids(selectTodos(entities, ALL, reversed, TODAY))).toEqual(['none', 'low', 'medium', 'high'])
+  })
+
+  it('breaks ties with the next key, in its own direction', () => {
+    const entities = [
+      todo('b-late', { priority: 'high', due: '2026-12-09' }),
+      todo('a-early', { priority: 'high', due: '2026-12-02' }),
+      todo('c-low', { priority: 'low', due: '2026-12-01' }),
+    ]
+    const order: TodoOrder = { keys: ['priority', 'due', 'name'], reversed: true }
+    expect(ids(selectTodos(entities, ALL, order, TODAY))).toEqual(['c-low', 'a-early', 'b-late'])
   })
 })
 

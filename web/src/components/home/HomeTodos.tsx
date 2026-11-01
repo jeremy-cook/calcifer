@@ -5,23 +5,26 @@ import { Checkbox } from '~/components/ui/checkbox'
 import { cn } from '~/lib/utils'
 import { formatShortDate, useToday } from '~/model/dates'
 import type { Entity } from '~/model/store'
-import { todoFields, useSetTodoStatus, useTodos, type TodoFilter, type TodoSort } from '~/model/todos'
+import {
+  groupTodos,
+  todoFields,
+  useSetTodoStatus,
+  useTodos,
+  type TodoFilter,
+  type TodoGroup,
+  type TodoOrder,
+} from '~/model/todos'
 
 // Module-level so useTodos gets the same objects every render and keeps its memo.
-const OVERDUE: TodoFilter = { status: 'open', due: 'overdue' }
-const TODAY: TodoFilter = { status: 'open', due: 'today' }
-const WEEK: TodoFilter = { status: 'open', due: 'week' }
-const BY_DUE: TodoSort = { by: 'due', dir: 'asc' }
+const DUE_THIS_WEEK: TodoFilter = { status: 'open', due: ['overdue', 'today', 'week'] }
+const BY_DUE: TodoOrder = { keys: ['due', 'priority', 'name'], reversed: false }
 
 // Open ToDos due by the end of the week, overdue first.
 export function HomeTodos() {
   const today = useToday()
-  const overdue = useTodos(OVERDUE, BY_DUE)
-  const dueToday = useTodos(TODAY, BY_DUE)
-  // "This week" counts today in; today's have their own group.
-  const week = useTodos(WEEK, BY_DUE).filter((e) => todoFields(e).due !== today)
+  const todos = useTodos(DUE_THIS_WEEK, BY_DUE)
 
-  if (overdue.length + dueToday.length + week.length === 0) {
+  if (todos.length === 0) {
     return (
       <EmptyLine icon={SunHorizonIcon} color="var(--chart-4)">
         Nothing due this week.
@@ -31,30 +34,31 @@ export function HomeTodos() {
 
   return (
     <div className="flex flex-col gap-2">
-      <TodoGroup label="Overdue" todos={overdue} today={today} late />
-      <TodoGroup label="Today" todos={dueToday} today={today} />
-      <TodoGroup label="This week" todos={week} today={today} />
+      {groupTodos(todos, today).map((group) => (
+        <HomeTodoGroup key={group.key} group={group} today={today} />
+      ))}
     </div>
   )
 }
 
-interface TodoGroupProps {
-  label: string
-  todos: Entity[]
+interface HomeTodoGroupProps {
+  group: TodoGroup
   today: string
-  late?: boolean
 }
 
-function TodoGroup({ label, todos, today, late }: TodoGroupProps) {
-  if (todos.length === 0) return null
-
+function HomeTodoGroup({ group, today }: HomeTodoGroupProps) {
   return (
     <div>
-      <h3 className={cn('px-2.5 pb-0.5 text-xs font-semibold text-muted-foreground', late && 'text-destructive')}>
-        {label}
+      <h3
+        className={cn(
+          'px-2.5 pb-0.5 text-xs font-semibold text-muted-foreground',
+          group.key === 'overdue' && 'text-destructive',
+        )}
+      >
+        {group.label}
       </h3>
       <ul className="flex flex-col">
-        {todos.map((todo) => (
+        {group.todos.map((todo) => (
           <HomeTodoRow key={todo.id} entity={todo} today={today} />
         ))}
       </ul>
