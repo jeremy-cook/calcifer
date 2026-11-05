@@ -7,6 +7,7 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_links;
+use crate::structures::fold_name;
 use calcifer::v1::Entity;
 
 impl EntityService {
@@ -19,13 +20,15 @@ impl EntityService {
     /// `entity_facets` row per attached facet.
     pub(super) async fn persist_new_entity(&self, entity: &Entity) -> Result<Entity, Status> {
         let now = chrono::Utc::now().timestamp_millis();
+        let name_key = fold_name(&entity.name);
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
         sqlx::query!(
-            "INSERT INTO entities (id, structure_type, name, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO entities (id, structure_type, name, name_key, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?)",
             entity.id,
             entity.structure_type,
             entity.name,
+            name_key,
             now,
             now,
         )

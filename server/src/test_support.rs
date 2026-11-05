@@ -16,6 +16,13 @@ use calcifer::v1::CreateEntityRequest;
 /// connection is its own database, so the pool is pinned to exactly one
 /// connection that never expires. Foreign keys are on, as in production.
 pub(crate) async fn memory_pool() -> SqlitePool {
+    let pool = unmigrated_memory_pool().await;
+    crate::db::migrate(&pool).await.expect("run migrations");
+    pool
+}
+
+/// `memory_pool` before any migration, for a test that runs them itself.
+pub(crate) async fn unmigrated_memory_pool() -> SqlitePool {
     // The migration creates a vec0 table, so sqlite-vec must be registered
     // before the connection opens (same as `db::connect`).
     crate::db::register_sqlite_vec();
@@ -23,16 +30,14 @@ pub(crate) async fn memory_pool() -> SqlitePool {
     let options = SqliteConnectOptions::from_str("sqlite::memory:")
         .expect("valid in-memory url")
         .foreign_keys(true);
-    let pool = SqlitePoolOptions::new()
+    SqlitePoolOptions::new()
         .max_connections(1)
         .min_connections(1)
         .idle_timeout(None)
         .max_lifetime(None)
         .connect_with(options)
         .await
-        .expect("open in-memory pool");
-    sqlx::migrate!().run(&pool).await.expect("run migrations");
-    pool
+        .expect("open in-memory pool")
 }
 
 /// A fresh file-backed database opened by `db::connect`, as `main.rs` opens it

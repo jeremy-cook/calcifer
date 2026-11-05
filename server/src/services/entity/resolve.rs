@@ -15,12 +15,11 @@ use calcifer::v1::{watch_entities_response, Entity, ResolveEntityResponse};
 const FREE_NAME_ATTEMPTS: usize = 5;
 
 impl EntityService {
-    /// Case-insensitive lookup of an entity id by (structure_type, name). A
-    /// structure with a name key (Tag) is looked up in `entity_keys`, folded as
-    /// the write path folds it, so the lookup and the uniqueness rule agree.
-    /// Other names aren't unique, so several entities can match: the oldest
-    /// `created_at` wins and `id` breaks ties, so a lookup always returns the
-    /// same one.
+    /// Lookup of an entity id by (structure_type, name), names compared by
+    /// `fold_name`. A structure with a name key (Tag) is looked up in
+    /// `entity_keys`, so the lookup and the uniqueness rule agree. Other names
+    /// aren't unique, so several entities can match: the oldest wins (see
+    /// `ids_named`), so a lookup always returns the same one.
     pub(super) async fn find_by_name(
         &self,
         structure_type: &str,
@@ -31,21 +30,37 @@ impl EntityService {
                 .find_by_key(structure_type, def.key, &fold_name(name))
                 .await;
         }
-        let row = sqlx::query_scalar!(
-            r#"SELECT id AS "id!" FROM entities
-               WHERE structure_type = ? AND name = ? COLLATE NOCASE
-               ORDER BY created_at, id
-               LIMIT 1"#,
-            structure_type,
-            name
-        )
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(row)
+        Ok(self
+            .ids_named(structure_type, name)
+            .await?
+            .into_iter()
+            .next())
     }
 
-    /// `base`, or if a `structure_type` entity already has that name
-    /// (case-insensitively), the first free `"<base> N"` from N = 2. For the
+    /// The ids of every `structure_type` entity whose name folds as `name` does
+    /// (`fold_name`), oldest `created_at` first and `id` breaking ties. More than
+    /// one only for a structure without a name key: the MCP tools refuse such a
+    /// name rather than pick one (I-82).
+    pub async fn ids_named(
+        &self,
+        structure_type: &str,
+        name: &str,
+    ) -> Result<Vec<String>, AppError> {
+        let key = fold_name(name);
+        let ids = sqlx::query_scalar!(
+            r#"SELECT id AS "id!" FROM entities
+               WHERE structure_type = ? AND name_key = ?
+               ORDER BY created_at, id"#,
+            structure_type,
+            key
+        )
+        .fetch_all(&self.pool)
+        .await?;
+        Ok(ids)
+    }
+
+    /// `base`, or if a `structure_type` entity already has that name (folded),
+    /// the first free `"<base> N"` from N = 2. For the
     /// default name of a `unique_names` structure, so a second "+ New Tag"
     /// doesn't clash with the first.
     pub(super) async fn free_name(
@@ -140,7 +155,7 @@ impl EntityService {
             return Err(Status::invalid_argument("name is required"));
         }
 
-        // Get: a case-insensitive name match is the canonical entity.
+        // Get: a folded name match is the canonical entity.
         if let Some(id) = self
             .find_by_name(structure_type, name)
             .await

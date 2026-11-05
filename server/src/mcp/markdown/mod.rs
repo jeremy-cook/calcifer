@@ -42,7 +42,7 @@ use std::collections::HashMap;
 
 use serde_json::{json, Value};
 
-use crate::structures::STRUCTURES;
+use crate::structures::{fold_name, STRUCTURES};
 
 pub use doc::chip_ids;
 pub use expressible::inexpressible;
@@ -71,14 +71,14 @@ pub struct Reference {
 }
 
 impl Reference {
-    /// Names match case-insensitively, as the server's ResolveEntity does.
+    /// Names are grouped by `fold_name`, the rule the server compares them by.
     pub fn key(&self) -> String {
         ref_key(&self.structure_type, &self.name)
     }
 }
 
 fn ref_key(structure_type: &str, name: &str) -> String {
-    format!("{structure_type}\0{}", name.trim().to_lowercase())
+    format!("{structure_type}\0{}", fold_name(name))
 }
 
 /// Splits "Structure/Name" when Structure is exactly a registry structure type

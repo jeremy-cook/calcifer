@@ -17,7 +17,7 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_property};
-use crate::structures::{self, FacetDef, KeySource};
+use crate::structures::{self, fold_name, FacetDef, KeySource};
 use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, AddRelationTargetRequest,
@@ -136,9 +136,11 @@ impl EntityServiceTrait for EntityService {
                 "a {structure_type}'s name isn't editable"
             )));
         }
+        let name_key = fold_name(name);
         sqlx::query!(
-            "UPDATE entities SET name = ?, updated_at = ? WHERE id = ?",
+            "UPDATE entities SET name = ?, name_key = ?, updated_at = ? WHERE id = ?",
             name,
+            name_key,
             now,
             id,
         )
@@ -284,9 +286,12 @@ impl EntityServiceTrait for EntityService {
         // be. Clearing the date keeps the name it had.
         if structure_type == "DailyNote" && property_id == "date" {
             let name = daily_note_name(property_key_value(value).as_deref());
+            let name_key = name.as_deref().map(fold_name);
             sqlx::query!(
-                "UPDATE entities SET name = COALESCE(?, name), updated_at = ? WHERE id = ?",
+                "UPDATE entities SET name = COALESCE(?, name), name_key = COALESCE(?, name_key),
+                 updated_at = ? WHERE id = ?",
                 name,
+                name_key,
                 now,
                 entity_id,
             )

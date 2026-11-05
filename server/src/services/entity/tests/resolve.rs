@@ -168,6 +168,52 @@ async fn resolve_tag_by_name_ignores_case() {
     }
 }
 
+// I-83: a Note's name folds as a Tag's does, not by NOCASE, which folds only
+// ASCII; renaming refolds it.
+#[tokio::test]
+async fn resolve_note_by_name_folds_unicode_case() {
+    let svc = entity_service(memory_pool().await);
+    let korolev = create(&svc, note("Сергей Королёв")).await;
+    let found = resolve(&svc, "Note", by_name(" сергей КОРОЛЁВ "), false)
+        .await
+        .expect("resolve");
+    assert_eq!(found.entity.expect("entity").id, korolev.id);
+
+    rename(&svc, &korolev.id, "Σεργκέι").await.expect("rename");
+    let found = resolve(&svc, "Note", by_name("σεργκέι"), false)
+        .await
+        .expect("resolve the new name");
+    assert_eq!(found.entity.expect("entity").id, korolev.id);
+    let old = resolve(&svc, "Note", by_name("сергей королёв"), false).await;
+    assert_eq!(old.expect_err("renamed").code(), tonic::Code::NotFound);
+}
+
+// I-82: every Note a folded name matches, oldest first.
+#[tokio::test]
+async fn ids_named_lists_every_match_oldest_first() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let first = create(&svc, note("Mercury")).await;
+    let second = create(&svc, note("MERCURY")).await;
+    create(&svc, tag("Mercury")).await;
+    for (id, at) in [(&first.id, 2_000), (&second.id, 1_000)] {
+        sqlx::query("UPDATE entities SET created_at = ? WHERE id = ?")
+            .bind(at)
+            .bind(id)
+            .execute(&pool)
+            .await
+            .expect("set created_at");
+    }
+
+    let ids = svc.ids_named("Note", " mercury").await.expect("ids_named");
+    assert_eq!(ids, [second.id, first.id]);
+    assert!(svc
+        .ids_named("Note", "Venus")
+        .await
+        .expect("ids_named")
+        .is_empty());
+}
+
 #[tokio::test]
 async fn resolve_by_name_without_create_is_not_found() {
     let pool = memory_pool().await;

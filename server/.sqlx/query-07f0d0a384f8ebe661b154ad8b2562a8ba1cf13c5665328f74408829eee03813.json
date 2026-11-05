@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE entities SET name = COALESCE(?, name), name_key = COALESCE(?, name_key),\n                 updated_at = ? WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "07f0d0a384f8ebe661b154ad8b2562a8ba1cf13c5665328f74408829eee03813"
+}

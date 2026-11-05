@@ -100,6 +100,10 @@ async fn set_property_date_renames_daily_note() {
         stored_date_key(&pool, &note.id).await.as_deref(),
         Some("2026-06-15")
     );
+    assert_eq!(
+        svc.ids_named("DailyNote", "june 15, 2026").await.unwrap(),
+        std::slice::from_ref(&note.id)
+    );
 
     // Clearing the date keeps the name it had.
     let cleared = set_property(&svc, &note.id, "date", None)
@@ -107,6 +111,10 @@ async fn set_property_date_renames_daily_note() {
         .expect("clear date");
     assert_eq!(cleared.name, "June 15, 2026");
     assert_eq!(stored_date_key(&pool, &note.id).await, None);
+    assert_eq!(
+        svc.ids_named("DailyNote", "june 15, 2026").await.unwrap(),
+        std::slice::from_ref(&note.id)
+    );
 }
 
 #[tokio::test]

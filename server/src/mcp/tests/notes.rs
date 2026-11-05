@@ -216,6 +216,30 @@ async fn create_note_refuses_an_existing_note() {
     );
 }
 
+// I-83: names fold one way, so a lowercase non-ASCII spelling is the same name,
+// and a doc naming both spellings links the one note.
+#[tokio::test]
+async fn non_ascii_names_fold_one_way() {
+    let f = fixture().await;
+    f.k.create_note("Сергей Королёв", "Chief designer.", None)
+        .await
+        .unwrap();
+    let refused = err(f.k.create_note("сергей королёв", "Again.", None).await);
+    assert!(refused.contains("already exists"), "{refused}");
+    assert_eq!(f.notes_named("сергей королёв").await.len(), 0);
+
+    f.k.create_note(
+        "Mission index",
+        "[[сергей королёв]] led it; [[Сергей Королёв]] signed.",
+        None,
+    )
+    .await
+    .unwrap();
+    let korolev = f.note_id("Сергей Королёв").await;
+    let index = f.note_id("Mission index").await;
+    assert_eq!(f.link_targets(&index).await, [format!("Note:{korolev}")]);
+}
+
 // I-61: `[[Name|Alias]]` and `]]` can't be told from a name containing them.
 #[tokio::test]
 async fn create_note_refuses_a_pipe_in_the_name() {

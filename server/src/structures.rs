@@ -38,7 +38,7 @@ pub struct PropertyDef {
 /// Where a natural key's value comes from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeySource {
-    /// The entity's name, trimmed and lowercased (see `fold_name`).
+    /// The entity's name, folded by `fold_name`.
     Name,
     /// A property's value, already canonical (a date is an ISO day).
     Property(&'static str),
@@ -98,10 +98,16 @@ impl StructureDef {
     }
 }
 
-/// The canonical form of a name used as a key: trimmed and lowercased, with
-/// Unicode case folding (unlike SQLite's `NOCASE`, which only folds ASCII).
+/// The one rule for comparing names (I-83): trimmed, and lowercased a character
+/// at a time, with Unicode case folding (unlike SQLite's `NOCASE`, which only
+/// folds ASCII). Every name comparison goes through it: the stored key
+/// (`entities.name_key`, a name key's `entity_keys` value), the resolver, the
+/// MCP tools and the markdown converter's reference grouping. Character by
+/// character, so no character folds by context (`str::to_lowercase` writes a
+/// word-final `Σ` as `ς`): the fold of a prefix is a prefix of the fold, and a
+/// prefix match on the key finds what the folded query starts.
 pub fn fold_name(name: &str) -> String {
-    name.trim().to_lowercase()
+    name.trim().chars().flat_map(char::to_lowercase).collect()
 }
 
 const fn prop(id: &'static str, kind: PropertyKind, label: &'static str) -> PropertyDef {
@@ -388,6 +394,14 @@ mod tests {
     fn fold_name_trims_and_folds_unicode_case() {
         assert_eq!(fold_name("  Reading "), "reading");
         assert_eq!(fold_name("CAFÉ"), fold_name("Café"));
+        assert_eq!(fold_name("Сергей Королёв"), fold_name("сергей королёв"));
+    }
+
+    #[test]
+    fn fold_name_keeps_prefixes() {
+        let name = "ΟΔΟΣ ΑΘΗΝΑΣ";
+        assert!(fold_name(name).starts_with(&fold_name("ΟΔΟΣ")));
+        assert_eq!(fold_name("ΟΔΟΣ"), fold_name("οδοσ"));
     }
 
     #[test]
