@@ -10,6 +10,7 @@ import {
   usePropertyWriters,
 } from '~/model/store'
 import { shiftIso, useToday } from '~/model/dates'
+import { isDottedName } from '~/model/names'
 import { getFacet, propertyDef, type FacetDef } from '~/model/structures'
 
 // A to-do is any entity with the `todo` facet; its values live under the facet's
@@ -257,9 +258,6 @@ export interface ParsedTodoInput {
 
 export type TodoInputResult = ({ ok: true } & ParsedTodoInput) | { ok: false; error: string }
 
-// A tag is letters and digits, with single dots between them (`v1.2`).
-const TAG = /^#([\p{L}\p{N}]+(?:\.[\p{L}\p{N}]+)*)$/u
-
 // Quick-add text is `<name> #tag #tag…`: the name runs up to the first word
 // starting with '#', and every word from there on must be a valid tag. Anything
 // else refuses the whole line, so nothing is created from text it misread.
@@ -275,8 +273,9 @@ export function parseTodoInput(text: string): TodoInputResult {
   const tags: string[] = []
   for (const word of tagWords) {
     if (!word.startsWith('#')) return { ok: false, error: `Tags go last: "${word}" comes after a tag.` }
-    const tag = TAG.exec(word)?.[1]
-    if (!tag) return { ok: false, error: `"${word}" isn't a valid tag: use letters, digits and dots.` }
+    // A Tag name is letters and digits, with single dots between them (`v1.2`).
+    const tag = word.slice(1)
+    if (!isDottedName(tag)) return { ok: false, error: `"${word}" isn't a valid tag: use letters, digits and dots.` }
     if (!tags.includes(tag)) tags.push(tag)
   }
 

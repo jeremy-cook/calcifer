@@ -15,7 +15,9 @@ function itemKey(item: EntitySuggestionItem, index: number): string {
   return item.isCreate ? `__create__:${index}` : item.id
 }
 
-export const MentionMenu = forwardRef<SuggestionMenuHandle, MentionMenuProps>(({ items, command }, ref) => {
+export const MentionMenu = forwardRef<SuggestionMenuHandle, MentionMenuProps>(({ items: all, command }, ref) => {
+  const items = useMemo(() => all.filter((item) => !item.isHint), [all])
+  const hint = all.find((item) => item.isHint)
   const keys = useMemo(() => items.map(itemKey), [items])
   const [value, setValue] = useState<string>(keys[0] ?? '')
   const activeValue = keys.includes(value) ? value : (keys[0] ?? '')
@@ -62,8 +64,9 @@ export const MentionMenu = forwardRef<SuggestionMenuHandle, MentionMenuProps>(({
       onKeyDown={(e) => e.stopPropagation()}
     >
       <Command.List>
-        <Command.Empty className="slash-menu-empty">No results</Command.Empty>
+        {!hint && <Command.Empty className="slash-menu-empty">No results</Command.Empty>}
         {items.map(renderItem)}
+        {hint && <p className="slash-menu-empty">{hint.label}</p>}
       </Command.List>
     </Command>
   )

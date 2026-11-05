@@ -1,6 +1,7 @@
 import type { SuggestionOptions } from '@tiptap/suggestion'
 import { findMentionTargets } from '~/model/mentions'
 import { getOrCreateEntityForMention } from '~/model/store'
+import { followsNameRule, nameFromQuery, nameRuleHint } from '~/model/names'
 import { getStructure, structurePresentation } from '~/model/structures'
 import { createSuggestionPopup } from '~/editors/tiptap/components/suggestion-popup'
 import { MentionMenu } from './MentionMenu'
@@ -26,8 +27,11 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
         : parseQuery(query)
       // Bare `@` (no narrowing, no explicit filter): only Structures with mentionable !== false.
       const filterByMentionable = config.char === '@' && !config.structureFilter && structureType === null
+      // `#naming.` asks for the Tag `naming`, then a full stop (I-91).
+      const name = structureType ? nameFromQuery(structureType, term) : term
+      const suffix = term.startsWith(name) ? term.slice(name.length) : ''
       const { entities, exactMatch } = findMentionTargets({
-        term,
+        term: name,
         structureType,
         mentionableOnly: filterByMentionable,
         limit: MAX_RESULTS,
@@ -37,20 +41,32 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
         label: entity.name,
         structureType: entity.structureType,
         color: structurePresentation(entity.structureType).color,
+        suffix,
       }))
 
       const createStructureType = resolveCreateStructureType(structureType)
-      if (createStructureType && term.length > 0 && !exactMatch) {
-        const createName = getStructure(createStructureType)?.name ?? createStructureType
+      if (!createStructureType || name.length === 0 || exactMatch) return results
+      const color = structurePresentation(createStructureType).color
+      if (!followsNameRule(createStructureType, name)) {
         results.push({
           id: CREATE_ITEM_ID,
-          label: term,
+          label: nameRuleHint(createStructureType),
           structureType: createStructureType,
-          color: structurePresentation(createStructureType).color,
-          isCreate: true,
-          createLabel: `Create new ${createName}: ${term}`,
+          color,
+          isHint: true,
         })
+        return results
       }
+      const createName = getStructure(createStructureType)?.name ?? createStructureType
+      results.push({
+        id: CREATE_ITEM_ID,
+        label: name,
+        structureType: createStructureType,
+        color,
+        isCreate: true,
+        createLabel: `Create new ${createName}: ${name}`,
+        suffix,
+      })
       return results
     },
 
@@ -60,7 +76,7 @@ export function makeSuggestion(config: SuggestionConfig): Omit<SuggestionOptions
       if (createInFlight) return
       createInFlight = props.isCreate === true
       void resolveMentionItem(props)
-        .then((item) => insertMention(editor, range, config.char, item))
+        .then((item) => insertMention(editor, range, config.char, item, props.suffix ?? ''))
         .finally(() => {
           if (props.isCreate) createInFlight = false
         })
@@ -90,6 +106,7 @@ function insertMention(
   range: Parameters<NonNullable<SuggestionOptions<EntitySuggestionItem>['command']>>[0]['range'],
   char: '@' | '#',
   item: MentionItem,
+  suffix: string,
 ) {
   editor
     .chain()
@@ -105,7 +122,7 @@ function insertMention(
           char,
         },
       },
-      { type: 'text', text: ' ' },
+      { type: 'text', text: `${suffix} ` },
     ])
     .run()
 }
