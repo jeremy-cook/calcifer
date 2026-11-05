@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 /// Wherever a tool takes a note's name, it takes the note's id too.
 pub(super) const NOTE_NAME: &str = "A note is given by its name or its id (search_notes and get_note show ids); a name several notes share fails the call, listing their ids to call again with, and changes nothing.";
 
-pub(super) const LINK_SYNTAX: &str = "[[Name]] links an existing note, and [[<id>]] links one by its id; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); it doesn't tag the note. Pass `tags` to create_note, or use tag_entity, to tag it. To relate two notes without writing a link into either, use link_notes. A link to anything that doesn't exist fails the call and writes nothing, so create the target first; so does a [[Name]] that several notes share, which must be linked by id, and get_note writes such a link as [[<id>]]. These become real graph links automatically.";
+pub(super) const LINK_SYNTAX: &str = "[[Name]] links an existing note, and [[<id>]] links one by its id; [[Structure/Name]] links an existing entity of another structure from list_structures, e.g. [[DailyNote/June 13, 2026]]; #tag references a tag (created if missing); a tag name is letters and digits with single dots between them (#v1.2, #program.apollo), and one that isn't, like #apollo-11, fails the call and writes nothing. A #tag doesn't tag the note. Pass `tags` to create_note, or use tag_entity, to tag it. To relate two notes without writing a link into either, use link_notes. A link to anything that doesn't exist fails the call and writes nothing, so create the target first; so does a [[Name]] that several notes share, which must be linked by id, and get_note writes such a link as [[<id>]]. These become real graph links automatically.";
 
 #[allow(
     clippy::needless_pass_by_value,
@@ -58,7 +58,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "create_note",
-            format!("Create a new note. Fails if a note with that name already exists, listing its id; change an existing note with edit_note or append_to_note. In the markdown body, {LINK_SYNTAX} `tags` lists tag names (or Tag ids) to tag the note with; each Tag is created if missing. Without a `tags` argument, a `tags:` line in leading frontmatter (as get_note writes it) is used. Search first to avoid duplicates. Copying get_note output into a new note drops its <!-- calcifer:<type> --> placeholder blocks and any formatting markdown can't express."),
+            format!("Create a new note. Fails if a note with that name already exists, listing its id; change an existing note with edit_note or append_to_note. In the markdown body, {LINK_SYNTAX} `tags` lists tag names (or Tag ids) to tag the note with, each following the #tag name rule; each Tag is created if missing. Without a `tags` argument, a `tags:` line in leading frontmatter (as get_note writes it) is used. Search first to avoid duplicates. Copying get_note output into a new note drops its <!-- calcifer:<type> --> placeholder blocks and any formatting markdown can't express."),
             json!({ "name": string, "markdown": string, "tags": { "type": "array", "items": string } }),
             &["name", "markdown"],
         ),
@@ -70,7 +70,7 @@ pub(super) fn tool_definitions() -> Vec<Value> {
         ),
         tool(
             "tag_entity",
-            format!("Add or remove tags on an existing note (only notes have tags). {NOTE_NAME} `add` lists tag names (or Tag ids) to tag it with, each Tag created if missing; `remove` lists tag names or ids to untag, and a tag the note doesn't have is ignored. Give at least one. Returns the note's tags afterwards. A #tag in a note's body only references the Tag; this is how a note is tagged."),
+            format!("Add or remove tags on an existing note (only notes have tags). {NOTE_NAME} `add` lists tag names (letters and digits with single dots between them, like v1.2) or Tag ids to tag it with, each Tag created if missing; `remove` lists tag names or ids to untag, and a tag the note doesn't have is ignored. Give at least one. Returns the note's tags afterwards. A #tag in a note's body only references the Tag; this is how a note is tagged."),
             json!({
                 "name": string,
                 "add": { "type": "array", "items": string },

@@ -168,11 +168,18 @@ writes nothing, so an agent never invents a note (or links a typo) without being
 A `#tag` only references its Tag; it doesn't set the note's `tags` property, which
 `create_note` takes as a separate argument.
 
+A Tag name follows Tag's name rule (see `name_rule` in [`data-model.md`](data-model.md)):
+letters and digits with single dots between them. A `#` word with `_`, `-` or a doubled
+dot (`#apollo-11`, `#apollo_11`, `#a..b`), a `[[Tag/…]]` link, a `tags` argument or a
+frontmatter `tags:` name that breaks it fails the tool call, naming the tag and the name
+that would follow the rule (`apollo.11`), and writes nothing. It never becomes a chip of
+part of the word or plain text.
+
 | Markdown | Node |
 |---|---|
 | `[[Name]]`, `[[Name\|label]]` | `mention` of a Note, `char: "@"` |
 | `[[Structure/Name]]`, `[[Structure/Name\|label]]` | `mention` of that structure, when `Structure` is exactly a registry structure type (e.g. `[[Tag/ship]]`); otherwise the whole text is a Note name |
-| `#name` after whitespace or at the start of a line (letters, digits, `_`, `-`) | `hashtag`, `structureType: "Tag"`, `char: "#"` |
+| `#name` after whitespace or at the start of a line, where `name` is letters and digits with single dots between them (`#v1.2`, `#program.apollo`; a closing period stays text) | `hashtag`, `structureType: "Tag"`, `char: "#"` |
 | `yyyy-MM-dd` after whitespace or at the start of a line, with no digit after it, naming a real day | `dateChip` |
 | headings, `-`/`*` and `1.` lists, `>` quotes, fenced code | `heading` (`level`), `bulletList`/`orderedList`/`listItem`, `blockquote`, `codeBlock` (`language`) |
 | `**…**`, `*…*`, `~~…~~`, `` `…` `` | `bold`, `italic`, `strike`, `code` marks (`code` alone: the editor's code mark excludes every other) |

@@ -181,6 +181,7 @@ impl Knowledge {
         if add.is_empty() && remove.is_empty() {
             return fail("Give at least one tag name in add or remove; nothing was written.");
         }
+        check_tag_names(add)?;
         let removed: Vec<String> = remove.iter().map(|t| structures::fold_name(t)).collect();
         if let Some(both) = add
             .iter()
@@ -346,12 +347,25 @@ pub(super) fn mark_matches(snippet: &str, matches: &[MatchRange]) -> String {
 }
 
 /// A blank tag name is a mistake in the `tags` argument, caught before the
-/// entity service rejects it as "name is required".
+/// entity service rejects it as "name is required". So is a name that breaks
+/// Tag's name rule (I-90), caught before any Tag is created; an id isn't a name.
 fn check_tag_names(tags: &[String]) -> Result<(), ToolError> {
     if tags.iter().any(|t| t.trim().is_empty()) {
         return fail(
             "`tags` has an empty tag name; give each tag a name or leave it out; nothing was written.",
         );
+    }
+    let tag = structures::structure("Tag").expect("Tag is in the registry");
+    let broken: Vec<String> = tags
+        .iter()
+        .filter(|t| !is_id(t))
+        .filter_map(|t| tag.name_rule_violation(t.trim()))
+        .collect();
+    if !broken.is_empty() {
+        return fail(format!(
+            "Nothing was written: in `tags`, {}.",
+            broken.join("; ")
+        ));
     }
     Ok(())
 }

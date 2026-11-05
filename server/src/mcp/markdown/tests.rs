@@ -290,7 +290,10 @@ fn a_tag_may_hold_dots_but_not_end_in_one() {
     assert_eq!(labels("See #program.apollo now"), [json!("program.apollo")]);
     assert_eq!(labels("Ship #v1.2."), [json!("v1.2")]);
     assert_eq!(labels("Ends #biology."), [json!("biology")]);
-    assert_eq!(labels("Two #a..b"), [json!("a")]);
+    // Read whole, for the caller to refuse (I-90).
+    assert_eq!(labels("Two #a..b"), [json!("a..b")]);
+    assert_eq!(labels("See #apollo-11."), [json!("apollo-11")]);
+    assert_eq!(labels("See #apollo_11 now"), [json!("apollo_11")]);
 }
 
 #[test]

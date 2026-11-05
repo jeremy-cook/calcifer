@@ -111,7 +111,9 @@ impl Knowledge {
     }
 
     /// [[wikilinks]] / #tags resolve to canonical entities, keyed by
-    /// `Reference::key`, plus the references that name nothing. Only a #tag is
+    /// `Reference::key`, plus the references that name nothing. A name that
+    /// breaks its structure's name rule (`#apollo-11`) is an error before
+    /// anything is resolved, so no Tag is created for a refused call. Only a #tag is
     /// created when missing: it has no body to write and no tool creates one,
     /// while a [[wikilink]] to a missing target is a mistake to report, not a
     /// note to invent. A name several entities share is an error that lists
@@ -120,6 +122,16 @@ impl Knowledge {
         &self,
         references: &'a [Reference],
     ) -> Result<(HashMap<String, String>, Vec<&'a Reference>), ToolError> {
+        let broken: Vec<String> = references
+            .iter()
+            .filter(|r| !is_id(&r.name))
+            .filter_map(|r| {
+                structures::structure(&r.structure_type)?.name_rule_violation(r.name.trim())
+            })
+            .collect();
+        if !broken.is_empty() {
+            return fail(format!("Nothing was written: {}.", broken.join("; ")));
+        }
         let found = try_join_all(
             references
                 .iter()

@@ -237,3 +237,66 @@ async fn a_body_hashtag_references_the_tag_without_tagging_the_note() {
         .collect();
     assert_eq!(links, [("content", x.as_str())]);
 }
+
+// I-90: a tag that breaks Tag's name rule fails the call, naming it, and
+// nothing is written: no note, no Tag, not even the call's valid tags.
+#[tokio::test]
+async fn a_tag_that_breaks_the_name_rule_writes_nothing() {
+    let f = fixture().await;
+    f.k.create_note("Kept", "Body.", None).await.unwrap();
+    let before = f.entity_count().await;
+
+    let refused = [
+        err(f
+            .k
+            .create_note("A", "Flew #fresh and #apollo-11.", None)
+            .await),
+        err(f
+            .k
+            .create_note("B", "Body.", Some(&tag_args(&["fresh", "Apollo 11"])))
+            .await),
+        err(f
+            .k
+            .create_note(
+                "C",
+                "---\ntags: [\"fresh\",\"apollo_11\"]\n---\nBody.",
+                None,
+            )
+            .await),
+        err(f.k.append_to_note("Kept", "More #fresh #apollo_11").await),
+        err(f
+            .k
+            .tag_entity("Kept", &tag_args(&["fresh", "v1..2"]), &[])
+            .await),
+    ];
+    for (message, bad) in
+        refused
+            .iter()
+            .zip(["apollo-11", "Apollo 11", "apollo_11", "apollo_11", "v1..2"])
+    {
+        assert!(
+            message.starts_with("Nothing was written")
+                && message.contains(&format!("{bad:?} isn't a valid Tag name"))
+                && message.contains("letters and digits with single dots"),
+            "{message}"
+        );
+    }
+    assert!(refused[0].contains(r#"try "apollo.11""#), "{}", refused[0]);
+    assert_eq!(f.entity_count().await, before, "no note and no Tag");
+    assert!(f.notes_named("A").await.is_empty());
+
+    let saved =
+        f.k.create_note(
+            "D",
+            "Ship #v1.2 for #program.apollo.",
+            Some(&tag_args(&["v1.2"])),
+        )
+        .await
+        .unwrap();
+    assert!(saved.contains("tags: 1."), "{saved}");
+    assert_eq!(
+        f.entity_count().await,
+        before + 3,
+        "D, v1.2 and program.apollo"
+    );
+}

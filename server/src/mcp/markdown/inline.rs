@@ -5,10 +5,13 @@ use serde_json::{json, Value};
 
 // ---------------------------------------------------------------- markdown -> doc
 
-// Dots only between characters (`#program.apollo`), so a sentence's closing
-// period stays text: `#biology.` is the tag `biology`.
+// What reads as a #tag: a Tag name is letters and digits with single dots
+// between them (`#program.apollo`), but `_`, `-` and doubled dots are read too,
+// so `#apollo-11` is one tag whose name the caller refuses (`NameRule`) rather
+// than the tag `apollo` and the text `-11`. Dots only between characters, so a
+// sentence's closing period stays text: `#biology.` is the tag `biology`.
 pub(super) static TAG: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^#([\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*)").unwrap());
+    LazyLock::new(|| Regex::new(r"^#([\p{L}\p{N}_-]+(?:\.+[\p{L}\p{N}_-]+)*)").unwrap());
 
 pub(super) static ISO_DATE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})").unwrap());
