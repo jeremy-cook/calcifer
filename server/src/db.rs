@@ -395,7 +395,7 @@ mod tests {
         assert_eq!(fts, "apollo.11.2");
     }
 
-    // ADR 15's MatchNames matches a prefix of the folded key: a range on the
+    // ADR 9's MatchNames matches a prefix of the folded key: a range on the
     // index, not a scan.
     #[tokio::test]
     async fn a_name_key_prefix_match_uses_the_index() {

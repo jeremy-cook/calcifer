@@ -1,8 +1,10 @@
 # Architecture Decision Records
 
 One file per decision: the context that forced it, what was decided, and what it costs
-us. ADRs are immutable once accepted — if a decision changes, add a new record that
-supersedes the old one rather than editing history. The one exception is a path: when a file an ADR names moves, the path is corrected in place.
+us. When a decision changes, its record is rewritten in place: the new decision keeps the
+number, and its date line says what it replaced and which commit has the old text. (Earlier
+records that superseded or amended one another, such as 4 and 10, stay as they are.) When a
+file an ADR names moves, its path is corrected in place.
 
 | # | Decision | Status |
 |---|---|---|
@@ -14,7 +16,7 @@ supersedes the old one rather than editing history. The one exception is a path:
 | [6](0006-drop-the-lexical-comparison.md) | Drop the TipTap-vs-Lexical comparison; standardise on TipTap | Accepted (supersedes the editor comparison plan) |
 | [7](0007-server-owned-structure-registry.md) | The server owns the structure registry; clients fetch it | Accepted |
 | [8](0008-server-builds-entities.md) | Clients send intent; the server builds entities | Accepted |
-| [9](0009-watch-fed-replica.md) | The frontend is a full replica fed by Watch | Accepted |
+| [9](0009-views-query-the-server.md) | Views query the server; Watch is a change feed | Accepted (rewritten 2026-11-07; was the full replica) |
 | [10](0010-natural-keys-declared-by-the-registry.md) | Natural keys are declared by the registry and stored in `entity_keys` | Accepted (replaces ADR 4's `date_key` uniqueness) |
 | [11](0011-facets.md) | To-dos are a facet that Notes attach, not a structure | Accepted (removes the `Todo` structure) |
 | [12](0012-direct-relationships.md) | Direct relationships are rows that links are derived from, beside content links | Accepted (amends ADR 3) |

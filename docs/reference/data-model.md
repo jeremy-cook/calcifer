@@ -685,7 +685,7 @@ listener serves native gRPC over HTTP/2 at each service's own path
 (`/calcifer.v1.EntityService/…`), with server reflection, for `grpcurl` and other gRPC tools.
 
 **Watch contract.** `WatchEntities` is a one-way replication stream of the whole entity set
-([ADR 9](../adr/0009-watch-fed-replica.md)); the frontend's replica comes only from it,
+([ADR 9](../adr/0009-views-query-the-server.md)); the frontend's replica comes only from it,
 and the filtered `ListEntities`, `ListBacklinks` and `Search` are there for the agent.
 
 - The first message on every stream is a `snapshot` of every entity, sent at once
