@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::str::FromStr;
 use std::sync::Once;
 use std::time::Duration;
@@ -71,10 +72,12 @@ pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {
 }
 
 /// Run the migrations, then bring every folded name up to `fold_name` (see
-/// `refold_names`).
+/// `refold_names`) and every name under its structure's name rule (see
+/// `fit_names`).
 pub(crate) async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     sqlx::migrate!().run(pool).await?;
-    refold_names(pool).await
+    refold_names(pool).await?;
+    fit_names(pool).await
 }
 
 /// Set each entity's `name_key`, and its name key's `entity_keys` value if its
@@ -126,6 +129,109 @@ async fn refold_names(pool: &SqlitePool) -> sqlx::Result<()> {
     }
     tx.commit().await?;
     tracing::info!(count = stale.len(), "refolded names");
+    Ok(())
+}
+
+/// Rename each entity whose name breaks its structure's name rule (I-90) to the
+/// name the rule fits it to (`NameRule::fit`: `apollo-11` becomes `apollo.11`),
+/// or to its structure's default name when nothing of it is left. Where the
+/// structure's names are unique and that name is taken, by an entity that
+/// already follows the rule or one renamed before it (oldest first), it's
+/// numbered (`apollo.11.2`): nothing is merged. A name key another entity
+/// holds anyway (see `refold_names`) leaves that entity as it was, with a
+/// warning. Chips in rich text keep the label they were written with, as after
+/// any rename. Once every name follows its rule it only reads.
+async fn fit_names(pool: &SqlitePool) -> sqlx::Result<()> {
+    let rows = sqlx::query!(
+        r#"SELECT id AS "id!", structure_type, name, name_key FROM entities
+           ORDER BY created_at, id"#
+    )
+    .fetch_all(pool)
+    .await?;
+    let breaks = |structure_type: &str, name: &str| {
+        structures::structure(structure_type).is_some_and(|s| !s.name_rule.allows(name.trim()))
+    };
+    let stale: Vec<_> = rows
+        .iter()
+        .filter(|r| breaks(&r.structure_type, &r.name))
+        .collect();
+    if stale.is_empty() {
+        return Ok(());
+    }
+    let mut taken: HashSet<(&str, String)> = rows
+        .iter()
+        .filter(|r| !breaks(&r.structure_type, &r.name))
+        .map(|r| (r.structure_type.as_str(), r.name_key.clone()))
+        .collect();
+    let now = chrono::Utc::now().timestamp_millis();
+    let mut tx = begin_write(pool).await?;
+    for row in stale {
+        let Some(def) = structures::structure(&row.structure_type) else {
+            continue;
+        };
+        let mut base = def.name_rule.fit(&row.name);
+        if base.is_empty() {
+            base = def.default_name();
+        }
+        let mut name = base.clone();
+        let mut n = 1;
+        while def.unique_names() && taken.contains(&(def.type_, fold_name(&name))) {
+            n += 1;
+            name = def.name_rule.numbered(&base, n);
+        }
+        let key = fold_name(&name);
+        if let Some(name_key) = def.name_key() {
+            let rekeyed = sqlx::query!(
+                "UPDATE entity_keys SET value = ? WHERE entity_id = ? AND key = ?",
+                key,
+                row.id,
+                name_key.key
+            )
+            .execute(&mut *tx)
+            .await;
+            match rekeyed {
+                Err(sqlx::Error::Database(e)) if e.is_unique_violation() => {
+                    tracing::warn!(
+                        entity_id = row.id,
+                        name = row.name,
+                        "another {} has the name {name:?}; this one keeps its name",
+                        row.structure_type
+                    );
+                    continue;
+                }
+                rekeyed => {
+                    rekeyed?;
+                }
+            }
+        }
+        sqlx::query!(
+            "UPDATE entities SET name = ?, name_key = ?, updated_at = ? WHERE id = ?",
+            name,
+            key,
+            now,
+            row.id
+        )
+        .execute(&mut *tx)
+        .await?;
+        // Runtime query: sqlx can't introspect the FTS5 table (see `fts_set`).
+        sqlx::query(
+            "UPDATE entity_fts SET name = ?
+             WHERE rowid = (SELECT fts_rowid FROM entity_fts_rowids WHERE entity_id = ?)",
+        )
+        .bind(&name)
+        .bind(&row.id)
+        .execute(&mut *tx)
+        .await?;
+        tracing::info!(
+            entity_id = row.id,
+            from = row.name,
+            to = name,
+            "renamed to follow the {} name rule",
+            row.structure_type
+        );
+        taken.insert((def.type_, key));
+    }
+    tx.commit().await?;
     Ok(())
 }
 
@@ -221,6 +327,75 @@ mod tests {
         assert_eq!(tag_key(&pool, "upper").await, "οδος");
         assert_eq!(tag_key(&pool, "lower").await, "οδοσ");
         assert_eq!(name_key(&pool, "upper").await, "οδοσ");
+    }
+
+    async fn name(pool: &SqlitePool, id: &str) -> String {
+        sqlx::query_scalar("SELECT name FROM entities WHERE id = ?")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .expect("name")
+    }
+
+    // I-90: Tags that break the name rule are renamed to follow it at boot,
+    // numbered where the name is taken; nothing else is touched.
+    #[tokio::test]
+    async fn names_that_break_their_rule_are_fitted_to_it() {
+        let pool = unmigrated_memory_pool().await;
+        sqlx::migrate!().run(&pool).await.expect("migrations");
+        for (id, structure_type, name) in [
+            ("a", "Tag", "apollo-11"),
+            ("b", "Tag", "apollo_11"),
+            ("c", "Tag", "Apollo 11"),
+            ("d", "Tag", "---"),
+            ("e", "Tag", "reading-list"),
+            ("kept", "Tag", "apollo.11"),
+            ("note", "Note", "Apollo 11"),
+        ] {
+            insert(&pool, id, structure_type, name).await;
+            if structure_type == "Tag" {
+                insert_name_key(&pool, id, &super::fold_name(name)).await;
+            }
+        }
+        sqlx::query(
+            "INSERT INTO entity_fts_rowids (entity_id) VALUES ('a');
+             INSERT INTO entity_fts (rowid, entity_id, name, body)
+             SELECT fts_rowid, 'a', 'apollo-11', '' FROM entity_fts_rowids WHERE entity_id = 'a'",
+        )
+        .execute(&pool)
+        .await
+        .expect("fts row");
+
+        super::migrate(&pool).await.expect("migrate");
+
+        let names = [
+            name(&pool, "a").await,
+            name(&pool, "b").await,
+            name(&pool, "c").await,
+            name(&pool, "d").await,
+            name(&pool, "e").await,
+            name(&pool, "kept").await,
+            name(&pool, "note").await,
+        ];
+        assert_eq!(
+            names,
+            [
+                "apollo.11.2",
+                "apollo.11.3",
+                "Apollo.11.4",
+                "Untitled.Tag",
+                "reading.list",
+                "apollo.11",
+                "Apollo 11"
+            ]
+        );
+        assert_eq!(name_key(&pool, "c").await, "apollo.11.4");
+        assert_eq!(tag_key(&pool, "c").await, "apollo.11.4");
+        let fts: String = sqlx::query_scalar("SELECT name FROM entity_fts WHERE entity_id = 'a'")
+            .fetch_one(&pool)
+            .await
+            .expect("fts name");
+        assert_eq!(fts, "apollo.11.2");
     }
 
     // ADR 15's MatchNames matches a prefix of the folded key: a range on the

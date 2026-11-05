@@ -16,6 +16,13 @@ enum PropertyKind {
   PROPERTY_KIND_RELATIONS = 7;
 }
 
+// What a structure's names may be. CreateEntity, RenameEntity and a creating
+// ResolveEntity refuse a name that breaks it.
+enum NameRule {
+  NAME_RULE_UNSPECIFIED = 0;  // any name
+  NAME_RULE_DOTTED = 1;       // letters and digits with single dots between them: v1.2, program.apollo
+}
+
 message SelectOption {
   string key = 1;    // stored in PropertyValue.select
   string label = 2;  // display text
@@ -42,6 +49,7 @@ message StructureDef {
   bool name_editable = 9;
   repeated string facets = 10;           // facet ids this structure accepts, e.g. 'todo'
   repeated string relates_to = 11;       // structure types its entities may hold relationships to (ADR 12); empty = none
+  NameRule name_rule = 12;
 }
 
 // A facet: a fixed group of properties that can be attached to and detached

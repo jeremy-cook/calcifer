@@ -4,11 +4,11 @@ use tonic::{Code, Status};
 
 use super::construct::{date_properties, new_entity};
 use super::lookup::known_structure;
-use super::validate::check_name_chars;
+use super::validate::check_name;
 use super::EntityService;
 use crate::dates::is_iso_day;
 use crate::error::AppError;
-use crate::structures::{self, fold_name, StructureDef};
+use crate::structures::{self, fold_name, NameRule, StructureDef};
 use calcifer::v1::{watch_entities_response, Entity, ResolveEntityResponse};
 
 /// How many free names `persist_with_free_name` tries before it gives up.
@@ -60,7 +60,8 @@ impl EntityService {
     }
 
     /// `base`, or if a `structure_type` entity already has that name (folded),
-    /// the first free `"<base> N"` from N = 2. For the
+    /// the first free `"<base> N"` from N = 2 (`"<base>.N"` under the dotted
+    /// name rule, see `NameRule::numbered`). For the
     /// default name of a `unique_names` structure, so a second "+ New Tag"
     /// doesn't clash with the first.
     pub(super) async fn free_name(
@@ -68,6 +69,7 @@ impl EntityService {
         structure_type: &str,
         base: &str,
     ) -> Result<String, AppError> {
+        let rule = structures::structure(structure_type).map_or(NameRule::Any, |s| s.name_rule);
         let mut candidate = base.to_string();
         let mut n = 1;
         while self
@@ -76,7 +78,7 @@ impl EntityService {
             .is_some()
         {
             n += 1;
-            candidate = format!("{base} {n}");
+            candidate = rule.numbered(base, n);
         }
         Ok(candidate)
     }
@@ -180,7 +182,7 @@ impl EntityService {
             )));
         }
 
-        check_name_chars(name)?;
+        check_name(def, name)?;
         let entity = new_entity(structure_type, Some(name), HashMap::new(), &[]);
         match self.persist_new_entity(&entity).await {
             Ok(saved) => Ok(self.created(saved)),

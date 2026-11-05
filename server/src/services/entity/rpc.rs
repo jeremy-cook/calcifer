@@ -11,7 +11,9 @@ use super::keys::{
 use super::load::{load_entities, load_entities_by_id, ts_from_millis};
 use super::lookup::{accepted_facet, known_facet, known_structure, structure_and_facets};
 use super::relations::{strip_relation_refs, RelationTargetOp, RelationshipOp};
-use super::validate::{check_name_chars, reject_reserved_property_id, validate_property};
+use super::validate::{
+    check_name, check_name_chars, reject_reserved_property_id, validate_property,
+};
 use super::watch::watch_stream;
 use super::EntityService;
 use crate::db::begin_write;
@@ -93,7 +95,7 @@ impl EntityServiceTrait for EntityService {
         }
         let name = name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
         if let Some(name) = &name {
-            check_name_chars(name)?;
+            check_name(def, name)?;
         }
         let entity = new_entity(&structure_type, name.as_deref(), properties, &facet_defs);
         let saved = if name.is_none() && def.unique_names() {
@@ -111,7 +113,8 @@ impl EntityServiceTrait for EntityService {
     // The name (and its FTS row) and updated_at only: properties are untouched,
     // so a rename doesn't undo a concurrent SetProperty (I-15). A structure with
     // `name_editable = false` (a DailyNote, named for its date) can't be renamed.
-    // The name is trimmed, as Create trims it, and can't be blank or contain `|` or `]]`.
+    // The name is trimmed, as Create trims it, and can't be blank, contain `|` or
+    // `]]`, or break its structure's name rule.
     async fn rename_entity(
         &self,
         req: Request<RenameEntityRequest>,
@@ -131,10 +134,13 @@ impl EntityServiceTrait for EntityService {
                 .await
                 .map_err(AppError::from)?
                 .ok_or_else(|| Status::not_found(format!("entity {id}")))?;
-        if structures::structure(&structure_type).is_some_and(|s| !s.name_editable) {
-            return Err(Status::failed_precondition(format!(
-                "a {structure_type}'s name isn't editable"
-            )));
+        if let Some(def) = structures::structure(&structure_type) {
+            if !def.name_editable {
+                return Err(Status::failed_precondition(format!(
+                    "a {structure_type}'s name isn't editable"
+                )));
+            }
+            check_name(def, name)?;
         }
         let name_key = fold_name(name);
         sqlx::query!(

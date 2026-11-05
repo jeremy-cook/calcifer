@@ -130,6 +130,11 @@ enum PropertyKind {
   PROPERTY_KIND_RELATIONS = 7;
 }
 
+enum NameRule {
+  NAME_RULE_UNSPECIFIED = 0;  // any name
+  NAME_RULE_DOTTED = 1;       // letters and digits with single dots between them
+}
+
 message SelectOption { string key = 1; string label = 2; }
 
 message PropertyDef {
@@ -148,6 +153,7 @@ message StructureDef {
   bool creatable = 6;  bool mentionable = 7;  bool unique_names = 8;  bool name_editable = 9;
   repeated string facets = 10;         // facet ids this structure accepts, e.g. 'todo'
   repeated string relates_to = 11;     // structure types its entities may hold relationships to (ADR 12); empty = none
+  NameRule name_rule = 12;
 }
 
 message FacetDef {
@@ -164,6 +170,7 @@ message FacetDef {
 | `mentionable` | Whether bare `@` autocomplete includes this Structure. `false` where the Structure has dedicated UI — `#` for Tags, the calendar for DailyNote. |
 | `creatable` | Whether the sidebar "+ New" menu (and create-on-miss in `@Structure/` mentions) offers it. Enforced: `CreateEntity`, and `ResolveEntity` by name with `create_if_missing`, of a non-creatable structure is `FAILED_PRECONDITION`; a DailyNote is made by `ResolveEntity` with a date. |
 | `unique_names` | Whether the case-insensitive name *is* the identity. `true` for `Tag`. Not authored: derived from the structure declaring a `name` key (see Natural keys below), and enforced by `entity_keys` (`ALREADY_EXISTS`). Other names can repeat; see `ResolveEntity` for which one a name lookup returns. |
+| `name_rule` | What a name may be. `NAME_RULE_DOTTED` for `Tag`: letters and digits with single dots between them (`v1.2`, `program.apollo`), so `#name` reads as one word in the agent's markdown and the editor alike; any name for the others. Enforced on every path that names an entity (see the name rule under `CreateEntity`); the editor's `#` menu, relation picker and quick-add offer to create only names that follow it. |
 | `name_editable` | Renders the entity title as an input vs a read-only heading. `false` for `DailyNote`. Enforced: `RenameEntity` of a structure with `name_editable: false` is `FAILED_PRECONDITION`. |
 | `facets` | The facets an entity of this structure can have attached. `["todo"]` for `Note`, empty for the others. Enforced: attaching any other facet is `FAILED_PRECONDITION`. |
 | `relates_to` | The structures an entity of this one may hold direct relationships to ([ADR 12](../adr/0012-direct-relationships.md)). `["Note"]` for `Note`, empty for the others. Enforced by `AddRelationship` only: an empty list is `FAILED_PRECONDITION`, a target of a structure not in the list is `INVALID_ARGUMENT`. It never limits content: a document can mention anything, and every mention is still a link. |
@@ -543,9 +550,10 @@ The `structure_type` must be in the registry (`INVALID_ARGUMENT`) and `creatable
 (`FAILED_PRECONDITION`, pointing at `ResolveEntity`). The server builds the entity with `new_entity` (minted id and timestamps, select
 defaults, then the request's properties laid over them; a request value for a
 rich-text property is `INVALID_ARGUMENT`), saves it, publishes `upserted` and returns it. With no name (or a
-blank one) the name is `Untitled <StructureDef.name>`, e.g. "Untitled Note"; for a
-`unique_names` structure (Tag) the server takes the first free one of `Untitled Tag`,
-`Untitled Tag 2`, `Untitled Tag 3`, … (checked against its folded `name` key), and looks
+blank one) the name is `Untitled <StructureDef.name>` fitted to the name rule, e.g.
+"Untitled Note", "Untitled.Tag"; for a
+`unique_names` structure (Tag) the server takes the first free one of `Untitled.Tag`,
+`Untitled.Tag.2`, `Untitled.Tag.3`, … (checked against its folded `name` key), and looks
 again if a concurrent Create takes it first. A given name is trimmed.
 A new entity
 has no `referenced_dates`, and its only links are those from relation properties in
@@ -561,7 +569,16 @@ structure doesn't accept). Each one's select defaults are laid under the request
 with `names can't contain "|" or "]]"`. The agent's link syntax (`[[Name|label]]`, closed by
 `]]`) can't express such a name, so a note with one couldn't be linked or round-tripped
 through the MCP tools (I-61). A lone `[` or `]` is fine, since only `]]` closes a link.
-Existing entities keep any name they already have, and a lookup with `create_if_missing`
+The same paths refuse a name that breaks its structure's `name_rule` (I-90): a Tag named
+`apollo-11`, `apollo_11`, `Apollo 11`, `.v1`, `v1.` or `v1..2` is `INVALID_ARGUMENT` with
+`"apollo-11" isn't a valid Tag name: a Tag name is letters and digits with single dots
+between them, like v1.2; try "apollo.11"`. The suggestion is `NameRule::fit`: each run of
+other characters becomes one dot, none at either end. The boot renames each existing
+entity whose name breaks its rule to that fitted name (`db::fit_names`; its structure's
+default name if nothing is left), numbered like a default name when another entity of a
+unique-names structure has it (`apollo.11.2`): Tags are never merged. Chips keep the
+label they were written with, as after any rename. Existing entities keep any name with
+`|` or `]]` they already have, and a lookup with `create_if_missing`
 unset is an ordinary lookup: it finds whatever has the name, else `NOT_FOUND`.
 
 **Facets.** `AttachFacet` and `DetachFacet` return `NOT_FOUND` for an unknown

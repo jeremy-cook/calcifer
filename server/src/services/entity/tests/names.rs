@@ -4,7 +4,7 @@ use super::*;
 async fn create_second_untitled_tag_gets_a_free_name() {
     let svc = entity_service(memory_pool().await);
     // Taken case-insensitively, so this one is skipped too.
-    create(&svc, tag("UNTITLED TAG 3")).await;
+    create(&svc, tag("UNTITLED.TAG.3")).await;
 
     let names = [
         create(&svc, untitled("Tag")).await.name,
@@ -12,7 +12,7 @@ async fn create_second_untitled_tag_gets_a_free_name() {
         create(&svc, untitled("Tag")).await.name,
     ];
 
-    assert_eq!(names, ["Untitled Tag", "Untitled Tag 2", "Untitled Tag 4"]);
+    assert_eq!(names, ["Untitled.Tag", "Untitled.Tag.2", "Untitled.Tag.4"]);
 }
 
 #[tokio::test]
@@ -128,6 +128,57 @@ async fn names_with_a_pipe_or_double_bracket_are_invalid() {
         .await
         .expect("resolve");
     assert!(resolved.created);
+}
+
+// I-90: a Tag name is letters and digits with single dots between them, on
+// every path that names one.
+#[tokio::test]
+async fn tag_names_that_break_the_rule_are_invalid() {
+    let pool = memory_pool().await;
+    let svc = entity_service(pool.clone());
+    let kept = create(&svc, tag("kept")).await;
+    let before = entity_count(&pool).await;
+
+    for name in ["apollo-11", "apollo_11", "Apollo 11", ".v1", "v1.", "v1..2"] {
+        let err = try_create(&svc, tag(name))
+            .await
+            .expect_err("create refuses it");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument, "{name:?}");
+        assert!(
+            err.message()
+                .contains("letters and digits with single dots"),
+            "{name:?}: {}",
+            err.message()
+        );
+
+        let err = rename(&svc, &kept.id, name)
+            .await
+            .expect_err("rename refuses it");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument, "{name:?}");
+
+        let err = resolve(&svc, "Tag", by_name(name), true)
+            .await
+            .expect_err("a creating resolve refuses it");
+        assert_eq!(err.code(), tonic::Code::InvalidArgument, "{name:?}");
+    }
+    let err = try_create(&svc, tag("Apollo 11"))
+        .await
+        .expect_err("refused");
+    assert_eq!(
+        err.message(),
+        r#""Apollo 11" isn't a valid Tag name: a Tag name is letters and digits with single dots between them, like v1.2; try "Apollo.11""#
+    );
+    assert_eq!(entity_count(&pool).await, before, "nothing was created");
+    let stored = svc.load_entity(&kept.id).await.expect("load");
+    assert_eq!(stored, kept, "the renames wrote nothing");
+
+    for name in ["v1.2", "program.apollo", "Королёв"] {
+        assert_eq!(create(&svc, tag(name)).await.name, name);
+    }
+    let renamed = rename(&svc, &kept.id, "kept.2").await.expect("rename");
+    assert_eq!(renamed.name, "kept.2");
+    // Other structures take any name.
+    assert_eq!(create(&svc, note("Apollo 11")).await.name, "Apollo 11");
 }
 
 #[tokio::test]

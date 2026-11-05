@@ -97,7 +97,7 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
     f.k.create_note("RT Note", "", None).await.unwrap();
     f.k.create_note("RT Alias", "", None).await.unwrap();
     let md = "Uses [[RT Note]] and [[RT Alias]]. #rt\n\n- do [[Tag/ship]] on [[DailyNote/June 13, 2026]]";
-    let tags = ["rt-a".to_string(), "rt-b".to_string()];
+    let tags = ["rt.a".to_string(), "rt.b".to_string()];
     f.k.create_note("Round Trip", md, Some(&tags))
         .await
         .unwrap();
@@ -135,7 +135,7 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
             && lines[0].starts_with("name: ")
             && lines[1].starts_with("id: ")
             && lines[2].starts_with("version: ")
-            && lines[3] == "tags: [\"rt-a\",\"rt-b\"]"
+            && lines[3] == "tags: [\"rt.a\",\"rt.b\"]"
             && lines[4] == "related: []",
         "{note}"
     );

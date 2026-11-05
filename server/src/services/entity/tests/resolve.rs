@@ -81,24 +81,24 @@ async fn resolve_by_name_gets_or_creates() {
     let svc = entity_service(memory_pool().await);
     let mut rx = svc.hub.subscribe();
 
-    let first = resolve(&svc, "Note", by_name("  Water plants "), true)
+    let first = resolve(&svc, "Note", by_name("  Watering "), true)
         .await
         .expect("create");
     assert!(first.created);
     let entity = first.entity.expect("entity");
     assert_eq!(entity.structure_type, "Note");
-    assert_eq!(entity.name, "Water plants");
+    assert_eq!(entity.name, "Watering");
     assert_eq!(upserted_ids(&mut rx), std::slice::from_ref(&entity.id));
 
     // Case-insensitive, and scoped to the structure.
-    let again = resolve(&svc, "Note", by_name("WATER PLANTS"), true)
+    let again = resolve(&svc, "Note", by_name("WATERING"), true)
         .await
         .expect("get");
     assert!(!again.created);
     assert_eq!(again.entity.expect("entity").id, entity.id);
     assert!(upserted_ids(&mut rx).is_empty());
 
-    let tag = resolve(&svc, "Tag", by_name("Water plants"), true)
+    let tag = resolve(&svc, "Tag", by_name("Watering"), true)
         .await
         .expect("a Tag of the same name");
     assert!(tag.created);

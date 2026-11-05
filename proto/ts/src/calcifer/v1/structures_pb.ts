@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file calcifer/v1/structures.proto.
  */
 export const file_calcifer_v1_structures: GenFile = /*@__PURE__*/
-  fileDesc("ChxjYWxjaWZlci92MS9zdHJ1Y3R1cmVzLnByb3RvEgtjYWxjaWZlci52MSIqCgxTZWxlY3RPcHRpb24SCwoDa2V5GAEgASgJEg0KBWxhYmVsGAIgASgJIq8BCgtQcm9wZXJ0eURlZhIKCgJpZBgBIAEoCRInCgRraW5kGAIgASgOMhkuY2FsY2lmZXIudjEuUHJvcGVydHlLaW5kEg0KBWxhYmVsGAMgASgJEioKB29wdGlvbnMYBCADKAsyGS5jYWxjaWZlci52MS5TZWxlY3RPcHRpb24SFgoOZGVmYXVsdF9vcHRpb24YBSABKAkSGAoQdGFyZ2V0X3N0cnVjdHVyZRgGIAEoCSL2AQoMU3RydWN0dXJlRGVmEgwKBHR5cGUYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwbHVyYWwYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLAoKcHJvcGVydGllcxgFIAMoCzIYLmNhbGNpZmVyLnYxLlByb3BlcnR5RGVmEhEKCWNyZWF0YWJsZRgGIAEoCBITCgttZW50aW9uYWJsZRgHIAEoCBIUCgx1bmlxdWVfbmFtZXMYCCABKAgSFQoNbmFtZV9lZGl0YWJsZRgJIAEoCBIOCgZmYWNldHMYCiADKAkSEgoKcmVsYXRlc190bxgLIAMoCSJ3CghGYWNldERlZhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBnBsdXJhbBgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIsCgpwcm9wZXJ0aWVzGAUgAygLMhguY2FsY2lmZXIudjEuUHJvcGVydHlEZWYq5gEKDFByb3BlcnR5S2luZBIdChlQUk9QRVJUWV9LSU5EX1VOU1BFQ0lGSUVEEAASGgoWUFJPUEVSVFlfS0lORF9SSUNIVEVYVBABEhYKElBST1BFUlRZX0tJTkRfVEVYVBACEhgKFFBST1BFUlRZX0tJTkRfTlVNQkVSEAMSFgoSUFJPUEVSVFlfS0lORF9EQVRFEAQSGAoUUFJPUEVSVFlfS0lORF9TRUxFQ1QQBRIaChZQUk9QRVJUWV9LSU5EX1JFTEFUSU9OEAYSGwoXUFJPUEVSVFlfS0lORF9SRUxBVElPTlMQB2IGcHJvdG8z");
+  fileDesc("ChxjYWxjaWZlci92MS9zdHJ1Y3R1cmVzLnByb3RvEgtjYWxjaWZlci52MSIqCgxTZWxlY3RPcHRpb24SCwoDa2V5GAEgASgJEg0KBWxhYmVsGAIgASgJIq8BCgtQcm9wZXJ0eURlZhIKCgJpZBgBIAEoCRInCgRraW5kGAIgASgOMhkuY2FsY2lmZXIudjEuUHJvcGVydHlLaW5kEg0KBWxhYmVsGAMgASgJEioKB29wdGlvbnMYBCADKAsyGS5jYWxjaWZlci52MS5TZWxlY3RPcHRpb24SFgoOZGVmYXVsdF9vcHRpb24YBSABKAkSGAoQdGFyZ2V0X3N0cnVjdHVyZRgGIAEoCSKgAgoMU3RydWN0dXJlRGVmEgwKBHR5cGUYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwbHVyYWwYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSLAoKcHJvcGVydGllcxgFIAMoCzIYLmNhbGNpZmVyLnYxLlByb3BlcnR5RGVmEhEKCWNyZWF0YWJsZRgGIAEoCBITCgttZW50aW9uYWJsZRgHIAEoCBIUCgx1bmlxdWVfbmFtZXMYCCABKAgSFQoNbmFtZV9lZGl0YWJsZRgJIAEoCBIOCgZmYWNldHMYCiADKAkSEgoKcmVsYXRlc190bxgLIAMoCRIoCgluYW1lX3J1bGUYDCABKA4yFS5jYWxjaWZlci52MS5OYW1lUnVsZSJ3CghGYWNldERlZhIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBnBsdXJhbBgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIsCgpwcm9wZXJ0aWVzGAUgAygLMhguY2FsY2lmZXIudjEuUHJvcGVydHlEZWYq5gEKDFByb3BlcnR5S2luZBIdChlQUk9QRVJUWV9LSU5EX1VOU1BFQ0lGSUVEEAASGgoWUFJPUEVSVFlfS0lORF9SSUNIVEVYVBABEhYKElBST1BFUlRZX0tJTkRfVEVYVBACEhgKFFBST1BFUlRZX0tJTkRfTlVNQkVSEAMSFgoSUFJPUEVSVFlfS0lORF9EQVRFEAQSGAoUUFJPUEVSVFlfS0lORF9TRUxFQ1QQBRIaChZQUk9QRVJUWV9LSU5EX1JFTEFUSU9OEAYSGwoXUFJPUEVSVFlfS0lORF9SRUxBVElPTlMQByo7CghOYW1lUnVsZRIZChVOQU1FX1JVTEVfVU5TUEVDSUZJRUQQABIUChBOQU1FX1JVTEVfRE9UVEVEEAFiBnByb3RvMw");
 
 /**
  * @generated from message calcifer.v1.SelectOption
@@ -165,6 +165,11 @@ export type StructureDef = Message<"calcifer.v1.StructureDef"> & {
    * @generated from field: repeated string relates_to = 11;
    */
   relatesTo: string[];
+
+  /**
+   * @generated from field: calcifer.v1.NameRule name_rule = 12;
+   */
+  nameRule: NameRule;
 };
 
 /**
@@ -275,4 +280,32 @@ export enum PropertyKind {
  */
 export const PropertyKindSchema: GenEnum<PropertyKind> = /*@__PURE__*/
   enumDesc(file_calcifer_v1_structures, 0);
+
+/**
+ * What a structure's names may be. CreateEntity, RenameEntity and a creating
+ * ResolveEntity refuse a name that breaks it.
+ *
+ * @generated from enum calcifer.v1.NameRule
+ */
+export enum NameRule {
+  /**
+   * any name
+   *
+   * @generated from enum value: NAME_RULE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * letters and digits with single dots between them: v1.2, program.apollo
+   *
+   * @generated from enum value: NAME_RULE_DOTTED = 1;
+   */
+  DOTTED = 1,
+}
+
+/**
+ * Describes the enum calcifer.v1.NameRule.
+ */
+export const NameRuleSchema: GenEnum<NameRule> = /*@__PURE__*/
+  enumDesc(file_calcifer_v1_structures, 1);
 

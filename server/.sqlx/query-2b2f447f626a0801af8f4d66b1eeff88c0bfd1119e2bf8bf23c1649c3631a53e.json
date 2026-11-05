@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\", structure_type, name, name_key FROM entities\n           ORDER BY created_at, id",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "name": "structure_type",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "structure_type"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "name_key",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "2b2f447f626a0801af8f4d66b1eeff88c0bfd1119e2bf8bf23c1649c3631a53e"
+}

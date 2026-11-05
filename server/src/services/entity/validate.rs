@@ -2,7 +2,7 @@ use tonic::Status;
 
 use crate::dates::is_iso_day;
 use crate::error::AppError;
-use crate::structures::{self, PropertyKind};
+use crate::structures::{self, PropertyKind, StructureDef};
 use calcifer::v1::{property_value, Entity};
 
 /// Check every property of an entity against its structure. See
@@ -148,4 +148,15 @@ pub(crate) fn check_name_chars(name: &str) -> Result<(), Status> {
         ));
     }
     Ok(())
+}
+
+/// `InvalidArgument` for a name (already trimmed) that `check_name_chars`
+/// refuses, or that breaks its structure's name rule (`NameRule`). Every path
+/// that names an entity of `def` calls it.
+pub(super) fn check_name(def: &StructureDef, name: &str) -> Result<(), Status> {
+    check_name_chars(name)?;
+    match def.name_rule_violation(name) {
+        Some(why) => Err(Status::invalid_argument(why)),
+        None => Ok(()),
+    }
 }

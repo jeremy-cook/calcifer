@@ -13,11 +13,15 @@ service EntityService {
   // INVALID_ARGUMENT.
   rpc ListEntities(ListEntitiesRequest) returns (ListEntitiesResponse);
   // Create a new entity from intent. The server mints the id, timestamps,
-  // default properties and default name ("Untitled <structure name>", or for a
-  // unique-names structure the first free "Untitled <name> N"). INVALID_ARGUMENT
+  // default properties and default name ("Untitled <structure name>", fitted to
+  // its name rule, so "Untitled.Tag"; for a unique-names structure the first
+  // free one, numbered from 2: "Untitled.Tag.2"). INVALID_ARGUMENT
   // for a structure_type not in the registry, a property value of the wrong
-  // kind, or a name (once trimmed) containing "|" or "]]", which the agent's
-  // [[Name|Alias]] link syntax can't express; FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
+  // kind, a name (once trimmed) containing "|" or "]]", which the agent's
+  // [[Name|Alias]] link syntax can't express, or a name that breaks the
+  // structure's name rule (StructureDef.name_rule: a Tag name is letters and
+  // digits with single dots between them, like v1.2; the message names the
+  // rule and a name that follows it); FAILED_PRECONDITION for a structure that isn't creatable (a DailyNote
   // comes from ResolveEntity by date); ALREADY_EXISTS for a taken Tag name.
   // `facets` are checked as in AttachFacet (INVALID_ARGUMENT for an unknown one,
   // FAILED_PRECONDITION for one the structure doesn't accept), and a value for
@@ -25,7 +29,8 @@ service EntityService {
   rpc CreateEntity(CreateEntityRequest) returns (CreateEntityResponse);
   // Change only an entity's name. Other properties are untouched, so a rename
   // doesn't overwrite a concurrent SetEntityProperty. The name is trimmed; a blank
-  // one, or one containing "|" or "]]", is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
+  // one, one containing "|" or "]]", or one that breaks the structure's name
+  // rule (as in CreateEntity) is INVALID_ARGUMENT. NOT_FOUND for an unknown id, FAILED_PRECONDITION
   // for a structure whose name isn't editable (DailyNote), ALREADY_EXISTS for a
   // taken Tag name.
   rpc RenameEntity(RenameEntityRequest) returns (RenameEntityResponse);
@@ -56,9 +61,10 @@ service EntityService {
   // Names match case-insensitively. Only Tag names are unique, so for other
   // structures several entities can share a name: the one with the oldest
   // created_at wins, and the lowest id breaks ties. A day has at most one
-  // DailyNote. A name (once trimmed) containing "|" or "]]" is never created: with
-  // create_if_missing and no match it is INVALID_ARGUMENT; without, it is
-  // NOT_FOUND like any unknown name.
+  // DailyNote. A name (once trimmed) containing "|" or "]]", or breaking the
+  // structure's name rule (as in CreateEntity: a Tag named "apollo-11" or
+  // "Apollo 11"), is never created: with create_if_missing and no match it is
+  // INVALID_ARGUMENT; without, it is NOT_FOUND like any unknown name.
   rpc ResolveEntity(ResolveEntityRequest) returns (ResolveEntityResponse);
   // The links pointing AT an entity: one Backlink per link row, so a source
   // that links from two properties appears twice. Newest `created_at` first;

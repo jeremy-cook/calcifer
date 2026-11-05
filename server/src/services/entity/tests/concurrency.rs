@@ -110,8 +110,8 @@ async fn racing_resolves_of_one_tag_return_the_same_tag() {
 
     for round in 0..5 {
         let (a, b) = tokio::join!(
-            resolve(&svc, "Tag", by_name(&format!("urgent {round}")), true),
-            resolve(&svc, "Tag", by_name(&format!("URGENT {round}")), true),
+            resolve(&svc, "Tag", by_name(&format!("urgent{round}")), true),
+            resolve(&svc, "Tag", by_name(&format!("URGENT{round}")), true),
         );
         let (a, b) = (a.expect("first resolve"), b.expect("second resolve"));
         assert_eq!(

@@ -4,6 +4,10 @@
 //! A structure's natural keys (`keys`) are enforced by the `entity_keys` table
 //! (ADR 10): the registry declares them, the write paths fill the table.
 
+use std::sync::LazyLock;
+
+use regex::Regex;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PropertyKind {
     Richtext,
@@ -44,6 +48,63 @@ pub enum KeySource {
     Property(&'static str),
 }
 
+/// What a structure's names may be. Every path that names an entity checks it:
+/// CreateEntity, RenameEntity and a creating ResolveEntity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NameRule {
+    Any,
+    /// Letters and digits with single dots between them (`v1.2`,
+    /// `program.apollo`), so `#name` reads as one word wherever it's written:
+    /// the agent's markdown, the editor's `#` menu and quick-add.
+    Dotted,
+}
+
+static DOTTED: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[\p{L}\p{N}]+(?:\.[\p{L}\p{N}]+)*$").unwrap());
+static NOT_LETTERS_OR_DIGITS: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"[^\p{L}\p{N}]+").unwrap());
+
+impl NameRule {
+    /// Whether `name` (already trimmed) follows the rule.
+    pub fn allows(self, name: &str) -> bool {
+        match self {
+            NameRule::Any => true,
+            NameRule::Dotted => DOTTED.is_match(name),
+        }
+    }
+
+    /// `name` rewritten to follow the rule. Dotted: each run of characters
+    /// other than letters and digits becomes one dot, and none is kept at
+    /// either end (`apollo-11` -> `apollo.11`). Empty when nothing is left.
+    pub fn fit(self, name: &str) -> String {
+        match self {
+            NameRule::Any => name.trim().to_string(),
+            NameRule::Dotted => NOT_LETTERS_OR_DIGITS
+                .split(name)
+                .filter(|part| !part.is_empty())
+                .collect::<Vec<_>>()
+                .join("."),
+        }
+    }
+
+    /// The `n`th name from `base`, for picking a free one: `base n`, or
+    /// `base.n` under the dotted rule.
+    pub fn numbered(self, base: &str, n: usize) -> String {
+        match self {
+            NameRule::Any => format!("{base} {n}"),
+            NameRule::Dotted => format!("{base}.{n}"),
+        }
+    }
+
+    /// What the rule asks of a name, for an error.
+    pub fn describe(self) -> &'static str {
+        match self {
+            NameRule::Any => "any text",
+            NameRule::Dotted => "letters and digits with single dots between them, like v1.2",
+        }
+    }
+}
+
 /// A natural key: a value that identifies an entity of the structure besides its
 /// id. No two entities of a structure share a key's value.
 #[derive(Debug)]
@@ -63,6 +124,7 @@ pub struct StructureDef {
     pub creatable: bool,
     pub mentionable: bool,
     pub name_editable: bool,
+    pub name_rule: NameRule,
     pub keys: &'static [KeyDef],
     /// Facet ids this structure accepts.
     pub facets: &'static [&'static str],
@@ -95,6 +157,31 @@ impl StructureDef {
     /// The key sourced from the name, if the structure declares one.
     pub fn name_key(&self) -> Option<&'static KeyDef> {
         self.keys.iter().find(|k| k.source == KeySource::Name)
+    }
+
+    /// The name of an entity created without one: `Untitled <name>`, fitted to
+    /// the name rule (`Untitled.Tag`).
+    pub fn default_name(&self) -> String {
+        self.name_rule.fit(&format!("Untitled {}", self.name))
+    }
+
+    /// Why `name` (already trimmed) breaks the name rule, naming the name that
+    /// would follow it; `None` when it doesn't break it.
+    pub fn name_rule_violation(&self, name: &str) -> Option<String> {
+        if self.name_rule.allows(name) {
+            return None;
+        }
+        let fitted = self.name_rule.fit(name);
+        let hint = if fitted.is_empty() {
+            String::new()
+        } else {
+            format!("; try {fitted:?}")
+        };
+        Some(format!(
+            "{name:?} isn't a valid {0} name: a {0} name is {1}{hint}",
+            self.name,
+            self.name_rule.describe()
+        ))
     }
 }
 
@@ -159,6 +246,7 @@ pub const STRUCTURES: &[StructureDef] = &[
         creatable: true,
         mentionable: true,
         name_editable: true,
+        name_rule: NameRule::Any,
         keys: &[],
         facets: &["todo"],
         relates_to: &["Note"],
@@ -167,12 +255,13 @@ pub const STRUCTURES: &[StructureDef] = &[
         type_: "Tag",
         name: "Tag",
         plural: "Tags",
-        description: "a label, written #tag in note content",
+        description: "a label, written #tag in note content; its name is letters and digits with single dots between them (v1.2)",
         properties: &[],
         creatable: true,
         // Reached via `#`, not bare `@`.
         mentionable: false,
         name_editable: true,
+        name_rule: NameRule::Dotted,
         keys: &[KeyDef {
             key: "name",
             source: KeySource::Name,
@@ -194,6 +283,7 @@ pub const STRUCTURES: &[StructureDef] = &[
         creatable: false,
         mentionable: false,
         name_editable: false,
+        name_rule: NameRule::Any,
         keys: &[KeyDef {
             key: "date",
             source: KeySource::Property("date"),
@@ -402,6 +492,71 @@ mod tests {
         let name = "ΟΔΟΣ ΑΘΗΝΑΣ";
         assert!(fold_name(name).starts_with(&fold_name("ΟΔΟΣ")));
         assert_eq!(fold_name("ΟΔΟΣ"), fold_name("οδοσ"));
+    }
+
+    #[test]
+    fn dotted_names_are_words_with_single_dots() {
+        for name in ["v1.2", "program.apollo", "apollo11", "Королёв", "a"] {
+            assert!(NameRule::Dotted.allows(name), "{name}");
+        }
+        for name in [
+            "apollo-11",
+            "apollo_11",
+            "Apollo 11",
+            ".v1",
+            "v1.",
+            "v1..2",
+            "",
+        ] {
+            assert!(!NameRule::Dotted.allows(name), "{name}");
+        }
+        assert!(NameRule::Any.allows("Apollo 11"));
+    }
+
+    #[test]
+    fn fit_makes_a_dotted_name() {
+        assert_eq!(NameRule::Dotted.fit("apollo-11"), "apollo.11");
+        assert_eq!(NameRule::Dotted.fit(" Apollo 11 "), "Apollo.11");
+        assert_eq!(NameRule::Dotted.fit("_a__b--c."), "a.b.c");
+        assert_eq!(NameRule::Dotted.fit("v1.2"), "v1.2");
+        assert_eq!(NameRule::Dotted.fit("---"), "");
+        assert_eq!(NameRule::Any.fit(" Apollo 11 "), "Apollo 11");
+    }
+
+    #[test]
+    fn default_names_follow_the_name_rule() {
+        for s in STRUCTURES {
+            assert!(s.name_rule.allows(&s.default_name()), "{}", s.type_);
+        }
+        assert_eq!(
+            structure("Tag").expect("Tag").default_name(),
+            "Untitled.Tag"
+        );
+        assert_eq!(
+            structure("Note").expect("Note").default_name(),
+            "Untitled Note"
+        );
+    }
+
+    #[test]
+    fn a_violation_names_the_rule_and_a_fitted_name() {
+        let tag = structure("Tag").expect("Tag");
+        assert_eq!(
+            tag.name_rule_violation("apollo-11").as_deref(),
+            Some(
+                r#""apollo-11" isn't a valid Tag name: a Tag name is letters and digits with single dots between them, like v1.2; try "apollo.11""#
+            )
+        );
+        assert!(tag
+            .name_rule_violation("---")
+            .is_some_and(|m| !m.contains("try")));
+        assert_eq!(tag.name_rule_violation("v1.2"), None);
+        assert_eq!(
+            structure("Note")
+                .expect("Note")
+                .name_rule_violation("Apollo 11"),
+            None
+        );
     }
 
     #[test]

@@ -1,6 +1,8 @@
 use tonic::{Request, Response, Status};
 
-use crate::structures::{FacetDef, PropertyDef, PropertyKind, StructureDef, FACETS, STRUCTURES};
+use crate::structures::{
+    FacetDef, NameRule, PropertyDef, PropertyKind, StructureDef, FACETS, STRUCTURES,
+};
 use calcifer::v1::{
     self as proto, structure_service_server::StructureService as StructureServiceTrait,
     ListStructuresRequest, ListStructuresResponse,
@@ -36,6 +38,15 @@ impl From<PropertyKind> for proto::PropertyKind {
             PropertyKind::Select => proto::PropertyKind::Select,
             PropertyKind::Relation => proto::PropertyKind::Relation,
             PropertyKind::Relations => proto::PropertyKind::Relations,
+        }
+    }
+}
+
+impl From<NameRule> for proto::NameRule {
+    fn from(rule: NameRule) -> Self {
+        match rule {
+            NameRule::Any => proto::NameRule::Unspecified,
+            NameRule::Dotted => proto::NameRule::Dotted,
         }
     }
 }
@@ -82,6 +93,7 @@ impl From<&StructureDef> for proto::StructureDef {
                 .iter()
                 .map(std::string::ToString::to_string)
                 .collect(),
+            name_rule: proto::NameRule::from(def.name_rule).into(),
         }
     }
 }
@@ -274,6 +286,7 @@ mod tests {
             );
             assert_eq!(wire.facets, def.facets);
             assert_eq!(wire.relates_to, def.relates_to);
+            assert_eq!(wire.name_rule(), proto::NameRule::from(def.name_rule));
             assert_eq!(wire.properties.len(), def.properties.len());
             for (wp, dp) in wire.properties.iter().zip(def.properties) {
                 assert_eq!(wp.id, dp.id);
