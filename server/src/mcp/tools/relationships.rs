@@ -4,16 +4,16 @@ use tonic::{Code, Request, Status};
 use crate::structures::{self};
 use calcifer::v1::entity_service_server::EntityService as EntityServiceTrait;
 use calcifer::v1::{
-    AddRelationshipRequest, Entity, ListBacklinksRequest, ListEntitiesRequest,
-    RemoveRelationshipRequest,
+    AddRelationshipRequest, Entity, ListBacklinksRequest, RemoveRelationshipRequest,
 };
 
-use super::{fail, is_code, timestamp_ms, Knowledge, ToolError, ToolResult};
+use super::{fail, is_code, timestamp_ms, Knowledge, Named, ToolError, ToolResult};
 
 /// The link scope the server derives from an entity's direct relationships (ADR 12).
 pub(super) const RELATED_SCOPE: &str = "@related";
 
 pub(super) struct BacklinkSource {
+    pub(super) id: String,
     pub(super) name: String,
     pub(super) structure_type: String,
     pub(super) property_ids: Vec<String>,
@@ -35,30 +35,31 @@ impl Knowledge {
             .list_backlinks(Request::new(req))
             .await?
             .into_inner();
-        let mut sources: Vec<(String, BacklinkSource)> = Vec::new();
+        let mut sources: Vec<BacklinkSource> = Vec::new();
         for backlink in res.backlinks {
             let Some(source) = backlink.source else {
                 continue;
             };
-            let at = if let Some(at) = sources.iter().position(|(id, _)| *id == source.id) {
+            let at = if let Some(at) = sources.iter().position(|s| s.id == source.id) {
                 at
             } else {
-                let entry = BacklinkSource {
+                sources.push(BacklinkSource {
+                    id: source.id,
                     name: source.name,
                     structure_type: source.structure_type,
                     property_ids: Vec::new(),
-                };
-                sources.push((source.id, entry));
+                });
                 sources.len() - 1
             };
-            sources[at].1.property_ids.push(backlink.source_property_id);
+            sources[at].property_ids.push(backlink.source_property_id);
         }
-        Ok(sources.into_iter().map(|(_, s)| s).collect())
+        Ok(sources)
     }
 
-    /// The names of the entities `entity` holds direct relationships to (its
-    /// `@related` links), oldest first, ties by target id as the server orders the
-    /// rows it derives them from. A target that no longer exists is skipped.
+    /// How get_note lists the entities `entity` holds direct relationships to
+    /// (its `@related` links): each by `shown_name`, so a name other notes share
+    /// is its id. Oldest first, ties by target id as the server orders the rows
+    /// it derives them from. A target that no longer exists is skipped.
     pub(super) async fn related_names(&self, entity: &Entity) -> Result<Vec<String>, Status> {
         let mut links: Vec<(i64, &str)> = entity
             .links
@@ -73,7 +74,7 @@ impl Knowledge {
         links.sort_unstable();
         let found = try_join_all(links.into_iter().map(|(_, id)| async move {
             match self.entity(id).await {
-                Ok(target) => Ok(Some(target.name)),
+                Ok(target) => Ok(Some(self.shown_name(&target).await?)),
                 Err(e) if is_code(&e, Code::NotFound) => Ok(None),
                 Err(e) => Err(e),
             }
@@ -83,10 +84,10 @@ impl Knowledge {
     }
 
     pub async fn get_backlinks(&self, name: &str) -> ToolResult {
-        let id = self.existing_note_id(name).await?;
-        let sources = self.backlink_sources(&id).await?;
+        let note = self.existing_note(name).await?;
+        let sources = self.backlink_sources(&note.id).await?;
         if sources.is_empty() {
-            return Ok(format!("Nothing links to \"{name}\" yet."));
+            return Ok(format!("Nothing links to \"{}\" yet.", note.name));
         }
         Ok(sources
             .iter()
@@ -95,58 +96,25 @@ impl Knowledge {
             .join("\n"))
     }
 
-    /// The Note `value` names: an id when it parses as a UUID and names an
-    /// existing Note, else a name matched case-insensitively over every Note.
-    /// Nothing is created. Notes have no name key, so several matches is an error
-    /// that lists them for the agent to call again by id. A value that names only
-    /// something else (a Tag, a day) is told only Notes can be related.
+    /// The Note `value` names or has as its id, as `named_note` finds it (a name
+    /// several notes share is refused). A value that names only something else
+    /// (a Tag, a day) is told only Notes can be related.
     pub(super) async fn note_by_name_or_id(&self, value: &str) -> Result<Entity, ToolError> {
-        let value = value.trim();
-        let mut other: Option<String> = None;
-        if uuid::Uuid::parse_str(value).is_ok() {
-            match self.entity(value).await {
-                Ok(entity) if entity.structure_type == "Note" => return Ok(entity),
-                Ok(entity) => other = Some(entity.structure_type),
-                Err(e) if is_code(&e, Code::NotFound) => {}
-                Err(e) => return Err(e.into()),
-            }
-        }
-        let req = ListEntitiesRequest {
-            structure_type: String::new(),
-        };
-        let entities = self
-            .entity
-            .list_entities(Request::new(req))
-            .await?
-            .into_inner()
-            .entities;
-        let folded = structures::fold_name(value);
-        let (notes, others): (Vec<Entity>, Vec<Entity>) = entities
-            .into_iter()
-            .filter(|n| structures::fold_name(&n.name) == folded)
-            .partition(|n| n.structure_type == "Note");
-        let mut matches = notes;
-        match matches.len() {
-            0 => match other.or_else(|| others.into_iter().next().map(|e| e.structure_type)) {
-                Some(kind) => fail(format!(
-                    "\"{value}\" is a {kind}, not a Note; only Notes can be related."
-                )),
-                None => fail(format!(
-                    "No note named or with id \"{value}\". Use search_notes."
-                )),
-            },
-            1 => Ok(matches.remove(0)),
-            _ => {
-                let listed: Vec<String> = matches
-                    .iter()
-                    .map(|n| format!("- {} ({})", n.name, n.id))
-                    .collect();
-                fail(format!(
-                    "Several notes are named \"{value}\":\n{}\nCall again with the id.",
-                    listed.join("\n")
+        let kind = match self.named_note(value).await? {
+            Named::One(entity) if entity.structure_type == "Note" => return Ok(*entity),
+            Named::One(entity) => entity.structure_type,
+            Named::Other(kind) => kind,
+            Named::Nothing => {
+                return fail(format!(
+                    "No note named or with id \"{}\". Use search_notes.",
+                    value.trim()
                 ))
             }
-        }
+        };
+        fail(format!(
+            "\"{}\" is a {kind}, not a Note; only Notes can be related.",
+            value.trim()
+        ))
     }
 
     /// Both ends of link_notes / unlink_notes, `from` resolved first so its error
@@ -203,9 +171,9 @@ pub(super) fn is_related(entity: &Entity, target_id: &str) -> bool {
     })
 }
 
-/// The source's name, plus why it links: `related` for a direct relationship,
-/// then `via` the properties that aren't rich-text docs. A source that links only
-/// from its docs stays bare.
+/// The source's name and id, then why it links: `related` for a direct
+/// relationship, then `via` the properties that aren't rich-text docs. A source
+/// that links only from its docs has no reason.
 pub(super) fn backlink_label(source: &BacklinkSource) -> String {
     let docs = structures::richtext_properties(&source.structure_type);
     let mut reasons: Vec<String> = Vec::new();
@@ -221,10 +189,11 @@ pub(super) fn backlink_label(source: &BacklinkSource) -> String {
     if !via.is_empty() {
         reasons.push(format!("via {}", via.join(", ")));
     }
+    let named = format!("{} ({})", source.name, source.id);
     if reasons.is_empty() {
-        source.name.clone()
+        named
     } else {
-        format!("{} ({})", source.name, reasons.join(", "))
+        format!("{named}: {}", reasons.join(", "))
     }
 }
 
@@ -236,6 +205,7 @@ mod tests {
     fn backlink_label_names_relationships_and_non_doc_properties() {
         let label = |property_ids: &[&str]| {
             backlink_label(&BacklinkSource {
+                id: "a1".into(),
                 name: "A".into(),
                 structure_type: "Note".into(),
                 property_ids: property_ids
@@ -244,14 +214,18 @@ mod tests {
                     .collect(),
             })
         };
-        assert_eq!(label(&["content"]), "A", "rich-text sources stay bare");
-        assert_eq!(label(&["@related"]), "A (related)");
-        assert_eq!(label(&["content", "@related"]), "A (related)");
-        assert_eq!(label(&["tags"]), "A (via tags)");
-        assert_eq!(label(&["content", "tags"]), "A (via tags)");
+        assert_eq!(
+            label(&["content"]),
+            "A (a1)",
+            "rich-text sources give no reason"
+        );
+        assert_eq!(label(&["@related"]), "A (a1): related");
+        assert_eq!(label(&["content", "@related"]), "A (a1): related");
+        assert_eq!(label(&["tags"]), "A (a1): via tags");
+        assert_eq!(label(&["content", "tags"]), "A (a1): via tags");
         assert_eq!(
             label(&["tags", "content", "@related"]),
-            "A (related, via tags)",
+            "A (a1): related, via tags",
             "related comes first"
         );
     }

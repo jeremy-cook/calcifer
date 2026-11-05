@@ -26,6 +26,23 @@ async fn daily_notes_are_one_per_day() {
         .contains("June 13, 2026"));
 }
 
+// I-82: a daily note's id reads it too, as get_note's frontmatter gives it.
+#[tokio::test]
+async fn get_note_by_id_reads_a_daily_note() {
+    let f = fixture().await;
+    f.k.append_to_daily_note("2026-10-24", "Met the team.")
+        .await
+        .unwrap();
+    let by_date = f.k.get_note(NoteKey::Date("2026-10-24")).await.unwrap();
+    let id = by_date
+        .lines()
+        .find_map(|l| l.strip_prefix("id: "))
+        .unwrap()
+        .trim_matches('"')
+        .to_string();
+    assert_eq!(f.k.get_note(NoteKey::Name(&id)).await.unwrap(), by_date);
+}
+
 #[tokio::test]
 async fn get_note_by_date_reads_the_daily_note() {
     let f = fixture().await;
@@ -36,11 +53,11 @@ async fn get_note_by_date_reads_the_daily_note() {
     let note = f.k.get_note(NoteKey::Date("2026-10-24")).await.unwrap();
     assert_eq!(
         frontmatter_keys(&note),
-        ["name", "version", "date"],
+        ["name", "id", "version", "date"],
         "{note}"
     );
     assert!(
-        note.starts_with("---\nname: \"October 24, 2026\"\nversion: "),
+        note.starts_with("---\nname: \"October 24, 2026\"\nid: "),
         "{note}"
     );
     assert!(note.contains("\ndate: \"2026-10-24\"\n"), "{note}");

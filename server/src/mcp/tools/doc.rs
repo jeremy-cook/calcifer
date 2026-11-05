@@ -15,7 +15,15 @@ use calcifer::v1::{
 };
 
 use super::lines::BlockSpan;
-use super::{blocks, empty_doc, fail, is_code, Knowledge, ToolError};
+use super::{blocks, empty_doc, fail, is_code, is_id, Knowledge, ToolError};
+
+/// What a reference in markdown names.
+enum Target {
+    One(String),
+    Nothing,
+    /// A name several entities share, their ids oldest first.
+    Several(Vec<String>),
+}
 
 /// What a write that links to missing targets tells the agent: each target as
 /// it would be written, and how to fix the call.
@@ -106,31 +114,68 @@ impl Knowledge {
     /// `Reference::key`, plus the references that name nothing. Only a #tag is
     /// created when missing: it has no body to write and no tool creates one,
     /// while a [[wikilink]] to a missing target is a mistake to report, not a
-    /// note to invent.
+    /// note to invent. A name several entities share is an error that lists
+    /// them, so a link never goes to one of them silently (I-82).
     pub(super) async fn resolve_references<'a>(
         &self,
         references: &'a [Reference],
     ) -> Result<(HashMap<String, String>, Vec<&'a Reference>), ToolError> {
-        let found = try_join_all(references.iter().map(|r| async move {
-            let create = r.structure_type == "Tag";
-            match self.resolve_name(&r.structure_type, &r.name, create).await {
-                Ok(res) => Ok((r, res.entity.map(|e| e.id))),
-                Err(e) if is_code(&e, Code::NotFound) => Ok((r, None)),
-                Err(e) => Err(e),
-            }
-        }))
+        let found = try_join_all(
+            references
+                .iter()
+                .map(|r| async move { Ok::<_, Status>((r, self.reference_target(r).await?)) }),
+        )
         .await?;
         let mut ids = HashMap::new();
         let mut missing = Vec::new();
-        for (r, id) in found {
-            match id {
-                Some(id) => {
+        let mut shared = Vec::new();
+        for (r, target) in found {
+            match target {
+                Target::One(id) => {
                     ids.insert(r.key(), id);
                 }
-                None => missing.push(r),
+                Target::Nothing => missing.push(r),
+                Target::Several(ids) => shared.push((r, ids)),
             }
         }
+        if !shared.is_empty() {
+            let mut listed = Vec::new();
+            for (r, ids) in shared {
+                let link = markdown::mention_markdown(&ChipTarget {
+                    name: r.name.clone(),
+                    structure_type: r.structure_type.clone(),
+                });
+                listed.push(format!("{link} names:\n{}", self.candidates(&ids).await?));
+            }
+            return fail(format!(
+                "Nothing was written: a link names more than one note, so it can't say which. {}\nLink the one you mean by its id, as [[<id>]].",
+                listed.join("\n")
+            ));
+        }
         Ok((ids, missing))
+    }
+
+    /// The entity a reference names: by id when its name is the id of an entity
+    /// of its structure, else by name. A missing #tag's Tag is created.
+    async fn reference_target(&self, r: &Reference) -> Result<Target, Status> {
+        if is_id(&r.name) {
+            match self.entity(r.name.trim()).await {
+                Ok(e) if e.structure_type == r.structure_type => return Ok(Target::One(e.id)),
+                Ok(_) => {}
+                Err(e) if is_code(&e, Code::NotFound) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        if r.structure_type == "Tag" {
+            let res = self.resolve_name("Tag", &r.name, true).await?;
+            return Ok(res.entity.map_or(Target::Nothing, |e| Target::One(e.id)));
+        }
+        let mut ids = self.ids_named(&r.structure_type, &r.name).await?;
+        Ok(match ids.len() {
+            0 => Target::Nothing,
+            1 => Target::One(ids.remove(0)),
+            _ => Target::Several(ids),
+        })
     }
 
     /// The markdown as a doc with every chip resolved. A link to anything that
@@ -147,8 +192,8 @@ impl Knowledge {
         Ok(parsed.resolve(&ids))
     }
 
-    /// Each chip target's current name and structure, fetched in parallel. A
-    /// target that no longer exists is left out.
+    /// Each chip target's current name (or id, see `shown_name`) and structure,
+    /// fetched in parallel. A target that no longer exists is left out.
     pub(super) async fn chip_targets(
         &self,
         doc: &Value,
@@ -158,7 +203,7 @@ impl Knowledge {
                 Ok(e) => Ok(Some((
                     id,
                     ChipTarget {
-                        name: e.name,
+                        name: self.shown_name(&e).await?,
                         structure_type: e.structure_type,
                     },
                 ))),

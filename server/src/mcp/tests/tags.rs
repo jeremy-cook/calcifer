@@ -153,6 +153,20 @@ async fn tag_entity_adds_and_removes() {
     assert_eq!(again.unwrap(), "Tags on \"X\": ml.", "repeats are folded");
 }
 
+// I-82: a tag can be given by its Tag's id, and the note by its id.
+#[tokio::test]
+async fn tag_entity_takes_ids() {
+    let f = fixture().await;
+    f.create("Tag", "ml").await;
+    f.k.create_note("X", "Body.", None).await.unwrap();
+    let (note, ml) = (f.note_id("X").await, tag_id(&f, "ml").await);
+
+    let added = f.k.tag_entity(&note, &tag_args(&[&ml]), &[]).await;
+    assert_eq!(added.unwrap(), "Tags on \"X\": ml.");
+    let removed = f.k.tag_entity(&note, &[], &tag_args(&[&ml])).await;
+    assert_eq!(removed.unwrap(), "Tags on \"X\": none.");
+}
+
 #[tokio::test]
 async fn tag_entity_keeps_a_concurrent_tag() {
     let f = fixture().await;

@@ -5,6 +5,7 @@ mod edit;
 mod notes;
 mod protocol;
 mod relationships;
+mod same_names;
 mod search;
 mod structures;
 mod tags;

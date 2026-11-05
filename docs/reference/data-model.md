@@ -616,14 +616,17 @@ event. The row's `created_at` is when it was added.
 
 `ResolveEntity` is the one get-or-create path for both clients (`[[wikilinks]]`, `@`
 mentions and `#tags` in the browser; every name lookup and daily note in the MCP
-server). The `name` key trims the name and matches it case-insensitively within
-`structure_type`, which is required and must be in the registry. For a structure with a
-`name` natural key (Tag) the match is on its folded key in `entity_keys`, so it folds
-Unicode case. Only Tag names are
-unique, so for other structures (matched with the ASCII-only `entities_name_ci` index)
-several entities can share a name: the lookup returns
+server). The `name` key matches names within `structure_type`, which is required and
+must be in the registry, by the one folding rule every name comparison uses
+(`fold_name`: trimmed, and lowercased a character at a time with Unicode case folding;
+I-83). For a structure with a `name` natural key (Tag) the match is on its folded key in
+`entity_keys`; for the others it's on `entities.name_key`, the folded name, indexed with
+`structure_type` so a prefix of it is an index range too. The boot refolds any
+`name_key` (and a Tag's name key) that isn't `fold_name` of its name. Only Tag names are
+unique, so for other structures several entities can share a name: the lookup returns
 the one with the oldest `created_at`, and the lowest `id` breaks ties, so the same
-name always resolves to the same entity. The `date` key takes a canonical ISO day and finds
+name always resolves to the same entity. The MCP tools don't pick: they refuse a shared
+name (below). The `date` key takes a canonical ISO day and finds
 the DailyNote whose `date` key in `entity_keys` matches. `INVALID_ARGUMENT` for a missing key, an empty
 name, an empty or unknown `structure_type` (name), a malformed day, or a `structure_type` other than ""
 or `DailyNote` (date). A miss returns `NOT_FOUND` unless `create_if_missing` is set, in
@@ -748,35 +751,41 @@ It exposes thirteen tools:
 `create_daily_note` · `append_to_daily_note` · `list_structures`
 
 `search_notes` makes one `Search` call in its `mode` (default hybrid) and writes each
-hit's snippet with its matches in `**bold**`, so they never read as wikilinks.
+hit as `- [Structure] Name (id): snippet`, its matches in `**bold**`, so they never read as
+wikilinks.
 
-`get_note`, `query_text_location` and `edit_note` take exactly one of `name` (a Note) or
-`date` (a DailyNote, `yyyy-MM-dd`); both or neither is a tool error. A date is looked up
+Every tool that takes a note's name takes its id in the same argument (I-82): a value that
+parses as a UUID and names an existing entity is used as an id; otherwise it's matched
+against the Notes' names by `fold_name`, and nothing is created. Notes have no name key
+(ADR 11), so several can share a name: a bare name more than one Note has is a tool error
+listing each as `- name (id), created <UTC time>`, oldest first, for the agent to call
+again by id, and nothing is written. A name no Note has but another structure does is
+`"x" is a Tag, not a Note.`; a name nothing has is `No note named "x".` (`No note with id`
+for an id).
+
+`get_note`, `query_text_location` and `edit_note` take exactly one of `name` (a Note's
+name or id, or a DailyNote's id) or `date` (a DailyNote, `yyyy-MM-dd`); both or neither is
+a tool error. A date is looked up
 with `ResolveEntity` by date and never created: a missing day is an error that points at
 `append_to_daily_note`, and a malformed one fails with the server's `INVALID_ARGUMENT`
 message. They read and write the body of whichever they find, and their messages name it by
-kind: `Note "X"` or `Daily note "October 24, 2026"`. `append_to_note`, `tag_entity` and
-`get_backlinks` stay Note-only, by name; `link_notes` and `unlink_notes` are Note-only, by
-name or id.
+kind: `Note "X"` or `Daily note "October 24, 2026"`. `append_to_note`, `tag_entity`,
+`get_backlinks`, `link_notes` and `unlink_notes` are Note-only.
 
-`get_note` returns the note's markdown under a frontmatter block of `name`, `version`,
-`tags` and `related`, each a JSON value on its own line. `tags` is the names of the note's
+`get_note` returns the note's markdown under a frontmatter block of `name`, `id`,
+`version`, `tags` and `related`, each a JSON value on its own line. `tags` is the names of the note's
 Tags in the property's stored order, `[]` when it has none; a ref whose Tag no longer
-exists is skipped. `related` is the names of the notes it holds direct relationships to,
-oldest first by the link's `created_at` (ties by target id), `[]` when it has none; change
+exists is skipped. `related` is the notes it holds direct relationships to, each by name, or by
+id while another note has the same name (as links are written, below), oldest first by the link's `created_at` (ties by target id), `[]` when it has none; change
 it with `link_notes` and `unlink_notes`. `create_note` ignores a `related:` line, so a
 `get_note` result copied into `create_note` keeps its tags but relates the copy to nothing.
-A daily note's block is `name`, `version` and `date` (the ISO day) and neither `tags` nor
+A daily note's block is `name`, `id`, `version` and `date` (the ISO day) and neither `tags` nor
 `related`, since only Notes have them.
 
 `link_notes(from, to)` relates one note to another through `AddRelationship` and writes no
 text into either; `unlink_notes(from, to)` removes that relationship through
-`RemoveRelationship`. Each argument is a note's name or id, and nothing is created: a
-value that parses as a UUID and names an existing Note is used as an id; otherwise it's
-matched against every Note's name, case-insensitively with the registry's Unicode
-folding. No match is a tool error, pointing at `search_notes`. Several matches is a tool
-error listing each as `- name (id)`, since Notes have no name key (ADR 11); the agent calls
-again with the id. `from` is resolved first, so its error is the one reported, and the
+`RemoveRelationship`. Each argument is a note's name or id, found as above, except that a
+value naming only something else says only Notes can be related. `from` is resolved first, so its error is the one reported, and the
 server's own errors (a note related to itself, say) come through. The result is `Related
 "A" -> "B".` or, when it already was, `"A" was already related to "B".`; `unlink_notes`
 says `Unrelated "A" -> "B".` or `"A" wasn't related to "B".`. A relationship is one-way,
@@ -784,10 +793,10 @@ so `link_notes("A", "B")` shows in A's `related` and in B's `get_backlinks`, not
 `related`. A `[[wikilink]]` in a note's text isn't a relationship, and `unlink_notes`
 doesn't remove it.
 
-`get_backlinks` lists each source note once, however many links it has. A source with a
-direct relationship to the note is labelled `(related)`; one that links from a
-non-rich-text property is labelled `via <property ids>`, and one with both
-`(related, via tags)`. A source that links only from its documents is bare.
+`get_backlinks` lists each source note once, however many links it has, as `- Name (id)`.
+A source with a direct relationship to the note adds `: related`; one that links from a
+non-rich-text property adds `: via <property ids>`, and one with both
+`: related, via tags`. A source that links only from its documents adds nothing.
 
 `list_structures` formats the structure registry (`structures.rs`): each structure's type,
 description, properties (kinds, select options and defaults, relation targets), the
@@ -797,10 +806,14 @@ facets it accepts (`facets: todo`) and, when it has any, the structures it may r
 Note`). No tool attaches or detaches a facet.
 
 Writes go through the same service methods the browser's RPCs reach. Markdown is converted
-to TipTap JSON in `server/src/mcp/markdown/`, resolving `[[wikilink]]` and `#tag` through
-`ResolveEntity` by name. A missing `#tag` is created; a `[[wikilink]]` to a missing target
-fails the call, which writes nothing. A body `#tag` only references its Tag; it doesn't
-tag the note. `create_note` fails for a name that already exists or breaks the name rule (a `|` or
+to TipTap JSON in `server/src/mcp/markdown/`, resolving `[[wikilink]]` and `#tag` by name
+(`#tag` through `ResolveEntity`). The converter groups references by `fold_name`, so two
+spellings of one name are one link target. `[[<id>]]` (or `[[Structure/<id>]]`) links the
+entity with that id. A missing `#tag` is created; a `[[wikilink]]` to a missing target
+fails the call, which writes nothing, and so does a `[[Name]]` several notes share, with
+an error listing them to link by id. Reading, a link to a note whose name another note
+shares is written `[[<id>]]`, which reads back as the same note; otherwise by name. A body `#tag` only references its Tag; it doesn't
+tag the note. `create_note` fails for a name that already exists (listing the notes that have it) or breaks the name rule (a `|` or
 `]]`), and takes an optional
 `tags` list: each name is resolved or created as a Tag (repeats folded) and set as the
 note's `tags` property through `SetEntityProperty`, after the body is written. Without a
@@ -812,7 +825,7 @@ links (`tags: N`).
 
 `tag_entity(name, add, remove)` tags or untags an existing note, found by name as
 `append_to_note` finds it and never created. Only Notes have `tags` today (ADR 11).
-`add` and `remove` are lists of tag names, each optional, but one must be non-empty; a name
+`add` and `remove` are lists of tag names or Tag ids, each optional, but one must be non-empty; a name
 in both lists (compared case-insensitively) fails the call and writes nothing. Each `add`
 name is resolved or created as a Tag (repeats folded) and added with `AddRelationTarget`;
 each `remove` name is looked up without creating, a Tag that doesn't exist or that the note

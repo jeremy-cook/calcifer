@@ -193,7 +193,15 @@ async fn get_backlinks_labels_related_sources() {
     let backlinks = f.k.get_backlinks("B").await.unwrap();
     let mut lines: Vec<&str> = backlinks.lines().collect();
     lines.sort_unstable();
-    assert_eq!(lines, ["- A (related)", "- Mentioner"], "{backlinks}");
+    let (a, mentioner) = (f.note_id("A").await, f.note_id("Mentioner").await);
+    assert_eq!(
+        lines,
+        [
+            format!("- A ({a}): related"),
+            format!("- Mentioner ({mentioner})")
+        ],
+        "{backlinks}"
+    );
 
     // A mention and a relationship from one source is one line.
     f.k.append_to_note("A", "Also [[B]].").await.unwrap();
@@ -203,15 +211,15 @@ async fn get_backlinks_labels_related_sources() {
         1,
         "{backlinks}"
     );
-    assert!(backlinks.contains("- A (related)"), "{backlinks}");
+    assert!(
+        backlinks.contains(&format!("- A ({a}): related")),
+        "{backlinks}"
+    );
 
     f.k.unlink_notes("A", "B").await.unwrap();
     let backlinks = f.k.get_backlinks("B").await.unwrap();
     assert!(!backlinks.contains("related"), "{backlinks}");
-    assert!(
-        backlinks.contains("- A\n") || backlinks.ends_with("- A"),
-        "{backlinks}"
-    );
+    assert!(backlinks.contains(&format!("- A ({a})")), "{backlinks}");
 }
 
 #[tokio::test]

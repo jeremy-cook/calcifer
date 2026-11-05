@@ -17,7 +17,7 @@ use calcifer::v1::{
 
 use super::doc::{aliased_links, doc_ref, unknown_targets};
 use super::edit::{frontmatter_tags, strip_frontmatter};
-use super::{fail, is_code, timestamp_ms, Knowledge, NoteKey, ToolError, ToolResult};
+use super::{fail, is_code, is_id, timestamp_ms, Knowledge, NoteKey, ToolError, ToolResult};
 
 impl Knowledge {
     /// Create a note that doesn't exist yet. An existing note is an error, not an
@@ -39,15 +39,13 @@ impl Knowledge {
         if let Some(tags) = tags {
             check_tag_names(tags)?;
         }
-        let exists = || {
-            ToolError(format!(
-                "A note named \"{name}\" already exists; nothing was written. Use get_note, then edit_note or append_to_note to change it."
-            ))
-        };
-        match self.resolve_name("Note", name, false).await {
-            Ok(_) => return Err(exists()),
-            Err(e) if is_code(&e, Code::NotFound) => {}
-            Err(e) => return Err(e.into()),
+        let existing = self.ids_named("Note", name).await?;
+        if !existing.is_empty() {
+            return fail(format!(
+                "A note named \"{}\" already exists; nothing was written. Use get_note, then edit_note or append_to_note to change it:\n{}",
+                name.trim(),
+                self.candidates(&existing).await?
+            ));
         }
         // Before anything is written: resolving #tags below creates Tags, and a
         // refused name would leave them behind.
@@ -127,11 +125,12 @@ impl Knowledge {
         ))
     }
 
-    /// Each tag name's Tag id, created when missing, without repeats.
+    /// Each tag's Tag id, created when missing, without repeats. A tag is a name,
+    /// or a Tag's id.
     pub(super) async fn resolve_tags(&self, tags: &[String]) -> Result<Vec<String>, ToolError> {
-        let found = try_join_all(tags.iter().map(|t| self.resolve_name("Tag", t, true))).await?;
+        let found = try_join_all(tags.iter().map(|t| self.tag_id(t, true))).await?;
         let mut ids: Vec<String> = Vec::new();
-        for id in found.into_iter().filter_map(|res| res.entity.map(|e| e.id)) {
+        for id in found.into_iter().flatten() {
             if !ids.contains(&id) {
                 ids.push(id);
             }
@@ -139,11 +138,30 @@ impl Knowledge {
         Ok(ids)
     }
 
+    /// The Tag `value` names or has as its id; with `create`, a missing one is
+    /// created by name. Tag names are unique (ADR 8), so a name is never shared.
+    async fn tag_id(&self, value: &str, create: bool) -> Result<Option<String>, Status> {
+        if is_id(value) {
+            match self.entity(value.trim()).await {
+                Ok(e) if e.structure_type == "Tag" => return Ok(Some(e.id)),
+                Ok(_) => {}
+                Err(e) if is_code(&e, Code::NotFound) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        match self.resolve_name("Tag", value, create).await {
+            Ok(res) => Ok(res.entity.map(|e| e.id)),
+            Err(e) if !create && is_code(&e, Code::NotFound) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
     pub async fn append_to_note(&self, name: &str, markdown: &str) -> ToolResult {
-        let id = self.existing_note_id(name).await?;
+        let note = self.existing_note(name).await?;
+        let id = note.id;
         let addition = self.parse_markdown(markdown).await?;
         let body = doc_ref("Note", &id)?;
-        self.append_doc(&body, &format!("Note \"{name}\""), &addition)
+        self.append_doc(&body, &format!("Note \"{}\"", note.name), &addition)
             .await?;
         let ent = self.entity(&id).await?;
         Ok(format!(
@@ -159,7 +177,7 @@ impl Knowledge {
     /// the note doesn't have, is skipped. Nothing is written when both lists are
     /// empty or a name is in both. Returns the note's tags afterwards.
     pub async fn tag_entity(&self, name: &str, add: &[String], remove: &[String]) -> ToolResult {
-        let id = self.existing_note_id(name).await?;
+        let id = self.existing_note(name).await?.id;
         if add.is_empty() && remove.is_empty() {
             return fail("Give at least one tag name in add or remove; nothing was written.");
         }
@@ -176,15 +194,10 @@ impl Knowledge {
         let add_ids = self.resolve_tags(add).await?;
         let mut remove_ids: Vec<String> = Vec::new();
         for tag in remove {
-            match self.resolve_name("Tag", tag, false).await {
-                Ok(res) => {
-                    let tag_id = res.entity.map(|e| e.id).unwrap_or_default();
-                    if !remove_ids.contains(&tag_id) {
-                        remove_ids.push(tag_id);
-                    }
+            if let Some(tag_id) = self.tag_id(tag, false).await? {
+                if !remove_ids.contains(&tag_id) {
+                    remove_ids.push(tag_id);
                 }
-                Err(e) if is_code(&e, Code::NotFound) => {}
-                Err(e) => return Err(e.into()),
             }
         }
 
@@ -236,15 +249,17 @@ impl Knowledge {
         Ok(names)
     }
 
-    /// The note as markdown under a frontmatter block: name, version, tags and
-    /// related for a note, name, version and date for a daily note (it has no tags
-    /// or relationships). Values are JSON, which is valid YAML, so a name with a
-    /// colon or a quote can't break the block. `version` is what edit_note checks
-    /// its line numbers against; `tags` is the names in the note's `tags`
-    /// property, `[]` when it has none, and what create_note reads back; `related`
-    /// is the names of the notes it holds direct relationships to, oldest first,
-    /// `[]` when none, and create_note ignores it; `date` is the day's ISO date.
-    /// A note or a day that isn't there is an error: nothing is created.
+    /// The note as markdown under a frontmatter block: name, id, version, tags
+    /// and related for a note, name, id, version and date for a daily note (it
+    /// has no tags or relationships). Values are JSON, which is valid YAML, so a
+    /// name with a colon or a quote can't break the block. `id` is what every
+    /// tool takes in place of a name several notes share; `version` is what
+    /// edit_note checks its line numbers against; `tags` is the names in the
+    /// note's `tags` property, `[]` when it has none, and what create_note reads
+    /// back; `related` is the notes it holds direct relationships to, oldest
+    /// first, each by `shown_name`, `[]` when none, and create_note ignores it;
+    /// `date` is the day's ISO date. A note or a day that isn't there is an
+    /// error: nothing is created.
     pub async fn get_note(&self, key: NoteKey<'_>) -> ToolResult {
         let found = self.existing_doc(&key).await?;
         let (doc, updated_at) = self
@@ -254,16 +269,18 @@ impl Knowledge {
         let version = timestamp_ms(&updated_at);
         let frontmatter = if found.structure_type == "DailyNote" {
             format!(
-                "name: {}\nversion: {version}\ndate: {}",
+                "name: {}\nid: {}\nversion: {version}\ndate: {}",
                 json!(found.name),
+                json!(found.id),
                 json!(found.date.as_deref().unwrap_or_default())
             )
         } else {
             let tags = self.tag_names(&found.entity).await?;
             let related = self.related_names(&found.entity).await?;
             format!(
-                "name: {}\nversion: {version}\ntags: {}\nrelated: {}",
+                "name: {}\nid: {}\nversion: {version}\ntags: {}\nrelated: {}",
                 json!(found.name),
+                json!(found.id),
                 json!(tags),
                 json!(related)
             )
@@ -292,7 +309,10 @@ impl Knowledge {
                     mark_matches(&h.snippet, &h.matches)
                 };
                 let entity = h.entity.clone().unwrap_or_default();
-                format!("- [{}] {}: {detail}", entity.structure_type, entity.name)
+                format!(
+                    "- [{}] {} ({}): {detail}",
+                    entity.structure_type, entity.name, entity.id
+                )
             })
             .collect();
         Ok(lines.join("\n"))

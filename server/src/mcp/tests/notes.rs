@@ -20,9 +20,10 @@ async fn a_note_with_a_link_and_a_tag_derives_two_links_and_backlinks() {
         "{saved}"
     );
 
+    let transformers = f.note_id("Transformers").await;
     assert_eq!(
         f.k.get_backlinks("Attention").await.unwrap(),
-        "- Transformers"
+        format!("- Transformers ({transformers})")
     );
     assert_eq!(
         f.k.get_backlinks("Transformers").await.unwrap(),
@@ -49,7 +50,7 @@ async fn a_note_with_a_link_and_a_tag_derives_two_links_and_backlinks() {
     );
     assert_eq!(
         f.k.get_backlinks("Positional Encoding").await.unwrap(),
-        "- Transformers"
+        format!("- Transformers ({transformers})")
     );
 }
 
@@ -120,7 +121,7 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
         "{note}"
     );
     assert!(
-        note.starts_with("---\nname: \"Round Trip\"\nversion: "),
+        note.starts_with("---\nname: \"Round Trip\"\nid: "),
         "{note}"
     );
     let frontmatter = note
@@ -130,11 +131,12 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
         .unwrap();
     let lines: Vec<&str> = frontmatter.lines().collect();
     assert!(
-        lines.len() == 4
+        lines.len() == 5
             && lines[0].starts_with("name: ")
-            && lines[1].starts_with("version: ")
-            && lines[2] == "tags: [\"rt-a\",\"rt-b\"]"
-            && lines[3] == "related: []",
+            && lines[1].starts_with("id: ")
+            && lines[2].starts_with("version: ")
+            && lines[3] == "tags: [\"rt-a\",\"rt-b\"]"
+            && lines[4] == "related: []",
         "{note}"
     );
 
@@ -169,7 +171,7 @@ async fn get_note_copied_into_create_note_links_the_same_targets() {
 }
 
 #[tokio::test]
-async fn get_note_frontmatter_has_name_version_tags_and_related() {
+async fn get_note_frontmatter_has_name_id_version_tags_and_related() {
     let f = fixture().await;
     f.k.create_note("Target", "Body.", None).await.unwrap();
     f.k.create_note("Source", "Points at [[Target]].", None)
@@ -186,7 +188,11 @@ async fn get_note_frontmatter_has_name_version_tags_and_related() {
         .lines()
         .map(|l| l.split_once(':').unwrap().0)
         .collect();
-    assert_eq!(keys, ["name", "version", "tags", "related"], "{note}");
+    assert_eq!(keys, ["name", "id", "version", "tags", "related"], "{note}");
+    assert!(
+        frontmatter.contains(&format!("\nid: \"{}\"\n", f.note_id("Target").await)),
+        "{note}"
+    );
 
     let backlinks = f.k.get_backlinks("Target").await.unwrap();
     assert!(backlinks.contains("Source"), "{backlinks}");
