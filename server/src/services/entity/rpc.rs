@@ -4,7 +4,6 @@ use futures::stream::BoxStream;
 use tonic::{Request, Response, Status};
 
 use super::construct::{daily_note_name, new_entity};
-use super::fts::{fts_delete, fts_upsert_name};
 use super::keys::{
     declared_keys, key_value, map_unique_violation, property_key_value, set_key, shown_key_value,
 };
@@ -19,6 +18,7 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_property};
+use crate::search_index::{fts_delete, reindex};
 use crate::structures::{self, fold_name, FacetDef, KeySource};
 use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
@@ -110,7 +110,7 @@ impl EntityServiceTrait for EntityService {
         }))
     }
 
-    // The name (and its FTS row) and updated_at only: properties are untouched,
+    // The name (and the search rows that read it) and updated_at only: properties are untouched,
     // so a rename doesn't undo a concurrent SetProperty (I-15). A structure with
     // `name_editable = false` (a DailyNote, named for its date) can't be renamed.
     // The name is trimmed, as Create trims it, and can't be blank, contain `|` or
@@ -162,10 +162,10 @@ impl EntityServiceTrait for EntityService {
                 .await
                 .map_err(|e| map_unique_violation(e, &structure_type, def, name))?;
         }
-        fts_upsert_name(&mut tx, &id, name)
-            .await
-            .map_err(Status::from)?;
+        // The entities that link to it are reindexed too: their chips read the name.
+        let reindexed = reindex(&mut tx, &id).await.map_err(AppError::from)?;
         tx.commit().await.map_err(AppError::from)?;
+        self.embed_all(reindexed);
 
         let saved = self.load_entity(&id).await.map_err(Status::from)?;
         self.hub
@@ -179,7 +179,8 @@ impl EntityServiceTrait for EntityService {
     // properties of the same entity don't undo each other (I-11). Validates the
     // property with the same checks Create uses: `validate_property` (I-9, I-16)
     // and, through `sync_relation_property`, `check_relation_targets` (I-2).
-    // Only a DailyNote's `date` changes the name (and so the FTS name row).
+    // Only a DailyNote's `date` changes the name. The search rows are reindexed,
+    // since a relation property may hold Tags.
     async fn set_entity_property(
         &self,
         req: Request<SetEntityPropertyRequest>,
@@ -304,11 +305,6 @@ impl EntityServiceTrait for EntityService {
             .execute(&mut *tx)
             .await
             .map_err(AppError::from)?;
-            if let Some(name) = &name {
-                fts_upsert_name(&mut tx, &entity_id, name)
-                    .await
-                    .map_err(Status::from)?;
-            }
         } else {
             sqlx::query!(
                 "UPDATE entities SET updated_at = ? WHERE id = ?",
@@ -320,7 +316,9 @@ impl EntityServiceTrait for EntityService {
             .map_err(AppError::from)?;
         }
 
+        let reindexed = reindex(&mut tx, &entity_id).await.map_err(AppError::from)?;
         tx.commit().await.map_err(AppError::from)?;
+        self.embed_all(reindexed);
 
         let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
         self.hub
@@ -363,7 +361,7 @@ impl EntityServiceTrait for EntityService {
 
         // entity_fts (FTS5) can't cascade either. Its row is found through
         // entity_fts_rowids, which the entity delete cascades away, so first.
-        fts_delete(&mut tx, &id).await.map_err(Status::from)?;
+        fts_delete(&mut tx, &id).await.map_err(AppError::from)?;
 
         // The entities that relate to this one, read before the delete cascades their
         // rows away. They're republished below, so no replica shows the relationship.
@@ -398,6 +396,11 @@ impl EntityServiceTrait for EntityService {
             .await
             .map_err(AppError::from)?;
         }
+        // A stripped entity may have lost a Tag from a property.
+        let mut reindexed = Vec::new();
+        for entity_id in &stripped {
+            reindexed.extend(reindex(&mut tx, entity_id).await.map_err(AppError::from)?);
+        }
         let republish: std::collections::BTreeSet<String> =
             stripped.into_iter().chain(relationship_sources).collect();
 
@@ -409,6 +412,7 @@ impl EntityServiceTrait for EntityService {
             .map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
+        self.embed_all(reindexed);
         self.hub
             .publish(watch_entities_response::Event::DeletedId(id));
         for entity_id in &republish {

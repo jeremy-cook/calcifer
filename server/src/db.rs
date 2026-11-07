@@ -6,6 +6,7 @@ use std::time::Duration;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{ConnectOptions, Sqlite, SqlitePool, Transaction};
 
+use crate::search_index;
 use crate::structures::{self, fold_name, StructureDef};
 
 static VEC_INIT: Once = Once::new();
@@ -72,12 +73,14 @@ pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {
 }
 
 /// Run the migrations, then bring every folded name up to `fold_name` (see
-/// `refold_names`) and every name under its structure's name rule (see
-/// `fit_names`).
+/// `refold_names`), every name under its structure's name rule (see
+/// `fit_names`), and give every entity a search row (see
+/// `search_index::index_missing`).
 pub(crate) async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     sqlx::migrate!().run(pool).await?;
     refold_names(pool).await?;
-    fit_names(pool).await
+    fit_names(pool).await?;
+    search_index::index_missing(pool).await
 }
 
 /// Set each entity's `name_key`, and its name key's `entity_keys` value if its
@@ -140,7 +143,9 @@ async fn refold_names(pool: &SqlitePool) -> sqlx::Result<()> {
 /// numbered (`apollo.11.2`): nothing is merged. A name key another entity
 /// holds anyway (see `refold_names`) leaves that entity as it was, with a
 /// warning. Chips in rich text keep the label they were written with, as after
-/// any rename. Once every name follows its rule it only reads.
+/// any rename; the search rows of the entities that link to it are reindexed,
+/// so search reads the new name (their embeddings catch up on their next save).
+/// Once every name follows its rule it only reads.
 async fn fit_names(pool: &SqlitePool) -> sqlx::Result<()> {
     let rows = sqlx::query!(
         r#"SELECT id AS "id!", structure_type, name, name_key FROM entities
@@ -213,15 +218,7 @@ async fn fit_names(pool: &SqlitePool) -> sqlx::Result<()> {
         )
         .execute(&mut *tx)
         .await?;
-        // Runtime query: sqlx can't introspect the FTS5 table (see `fts_set`).
-        sqlx::query(
-            "UPDATE entity_fts SET name = ?
-             WHERE rowid = (SELECT fts_rowid FROM entity_fts_rowids WHERE entity_id = ?)",
-        )
-        .bind(&name)
-        .bind(&row.id)
-        .execute(&mut *tx)
-        .await?;
+        search_index::reindex(&mut tx, &row.id).await?;
         tracing::info!(
             entity_id = row.id,
             from = row.name,

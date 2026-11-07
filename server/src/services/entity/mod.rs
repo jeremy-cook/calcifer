@@ -4,7 +4,7 @@
 //! - [`write`], [`resolve`] and [`relations`] are the write paths the handlers share:
 //!   persisting and replacing, get-or-create by name or date, and relation and
 //!   relationship edits.
-//! - [`load`] hydrates entities; [`fts`] keeps the name and body search rows.
+//! - [`load`] hydrates entities. The search rows are `crate::search_index`'s.
 //! - [`construct`] builds a new entity; [`validate`] checks property values and
 //!   names; [`keys`] keeps the natural-key rows; [`lookup`] reads the structure
 //!   registry and an entity's facets.
@@ -16,7 +16,6 @@ use crate::embed::EmbedHandle;
 use crate::watch::WatchHub;
 
 mod construct;
-mod fts;
 mod keys;
 mod load;
 mod lookup;
@@ -29,7 +28,6 @@ mod validate;
 mod watch;
 mod write;
 
-pub(crate) use fts::fts_upsert_body;
 pub(crate) use load::{load_entities_by_id, load_entity, ts_from_millis};
 pub(crate) use validate::{check_name_chars, reject_reserved_property_id};
 
@@ -46,5 +44,12 @@ pub struct EntityService {
 impl EntityService {
     pub fn new(pool: SqlitePool, hub: WatchHub, embed: EmbedHandle) -> Self {
         Self { pool, hub, embed }
+    }
+
+    /// Queue for embedding the entities a committed write's `reindex` changed.
+    fn embed_all(&self, ids: Vec<String>) {
+        for id in ids {
+            self.embed.enqueue(id);
+        }
     }
 }

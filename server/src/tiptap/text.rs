@@ -1,32 +1,38 @@
 //! A doc as plain text: the one rule for the FTS `body` column and for
 //! embedding chunks (I-54).
 
+use std::collections::HashMap;
+
 use serde_json::Value;
 
 use super::{parse, MENTION_TYPES};
 use crate::error::AppError;
 
+/// The current name of each entity a doc's chips may point at, by id.
+pub(crate) type ChipNames = HashMap<String, String>;
+
 /// Collect the plain-text content of a TipTap JSON doc into a single string (see
 /// `collect_text` for the rule). Used to feed the FTS `body` column (M7) —
 /// sibling to `references::extract_doc_references`, walking the same node tree. An empty /
 /// blank doc yields an empty string.
-pub fn extract_plain_text(doc_json: &str) -> Result<String, AppError> {
+pub fn extract_plain_text(doc_json: &str, names: &ChipNames) -> Result<String, AppError> {
     let Some(doc) = parse(doc_json)? else {
         return Ok(String::new());
     };
     let mut out = String::new();
-    collect_text(&doc, &mut out);
+    collect_text(&doc, names, &mut out);
     Ok(out.trim().to_string())
 }
 
 /// Append the plain text under `node` to `out`: the one text rule for FTS and
 /// embedding chunks (I-54). Inline nodes join with no separator: a `text` node
-/// gives its `text`, a `mention`/`hashtag` its `attrs.label` and a `dateChip`
-/// its `attrs.date` (each only if a string), and a `hardBreak` gives a space.
-/// Any other node with `content` is a block, set off from its neighbours by one
-/// space. Labels are the snapshot stored in the doc, so they can be stale after
-/// a rename. The result can carry a leading or trailing space; callers trim.
-pub(crate) fn collect_text(node: &Value, out: &mut String) {
+/// gives its `text`, a `mention`/`hashtag` its target's name in `names` (by
+/// `attrs.id`), else its stored `attrs.label`, so a renamed target reads as its
+/// new name (I-103), a `dateChip` its `attrs.date` (each only if a string), and
+/// a `hardBreak` a space. Any other node with `content` is a block, set off from
+/// its neighbours by one space. The result can carry a leading or trailing
+/// space; callers trim.
+pub(crate) fn collect_text(node: &Value, names: &ChipNames, out: &mut String) {
     let node_type = node.get("type").and_then(Value::as_str);
     let attr = |key: &str| {
         node.get("attrs")
@@ -39,7 +45,10 @@ pub(crate) fn collect_text(node: &Value, out: &mut String) {
                 out.push_str(text);
             }
         }
-        Some(t) if MENTION_TYPES.contains(&t) => out.push_str(attr("label").unwrap_or_default()),
+        Some(t) if MENTION_TYPES.contains(&t) => {
+            let current = attr("id").and_then(|id| names.get(id)).map(String::as_str);
+            out.push_str(current.or(attr("label")).unwrap_or_default());
+        }
         Some("dateChip") => out.push_str(attr("date").unwrap_or_default()),
         Some("hardBreak") => out.push(' '),
         _ => {
@@ -48,7 +57,7 @@ pub(crate) fn collect_text(node: &Value, out: &mut String) {
             };
             block_boundary(out);
             for child in content {
-                collect_text(child, out);
+                collect_text(child, names, out);
             }
             block_boundary(out);
         }
@@ -81,7 +90,10 @@ mod tests {
                 ]}
             ]}
         ]}"#;
-        assert_eq!(extract_plain_text(doc).unwrap(), "Hello world second item");
+        assert_eq!(
+            extract_plain_text(doc, &ChipNames::new()).unwrap(),
+            "Hello world second item"
+        );
     }
 
     // I-54: inline nodes join without a separator, and chips give their text.
@@ -102,14 +114,30 @@ mod tests {
             {"type":"paragraph","content":[{"type":"text","text":"next"}]}
         ]}"#;
         assert_eq!(
-            extract_plain_text(doc).unwrap(),
+            extract_plain_text(doc, &ChipNames::new()).unwrap(),
             "bolder, see Ada Lovelace and history on 2026-06-15 next"
+        );
+    }
+
+    // I-103: a chip reads as its target's current name, its stored label only
+    // when the target's name isn't known.
+    #[test]
+    fn a_chip_reads_as_its_targets_current_name() {
+        let doc = r#"{"type":"doc","content":[{"type":"paragraph","content":[
+            {"type":"mention","attrs":{"id":"e1","label":"Mercury"}},
+            {"type":"text","text":" and "},
+            {"type":"hashtag","attrs":{"id":"gone","label":"old"}}
+        ]}]}"#;
+        let names = ChipNames::from([("e1".to_string(), "Project Mercury".to_string())]);
+        assert_eq!(
+            extract_plain_text(doc, &names).unwrap(),
+            "Project Mercury and old"
         );
     }
 
     #[test]
     fn empty_doc_yields_empty_text() {
-        assert_eq!(extract_plain_text("").unwrap(), "");
-        assert_eq!(extract_plain_text("   ").unwrap(), "");
+        assert_eq!(extract_plain_text("", &ChipNames::new()).unwrap(), "");
+        assert_eq!(extract_plain_text("   ", &ChipNames::new()).unwrap(), "");
     }
 }

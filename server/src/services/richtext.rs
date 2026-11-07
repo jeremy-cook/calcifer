@@ -5,12 +5,10 @@ use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::links::store::{live_targets, replace_scoped_links};
-use crate::services::entity::{
-    fts_upsert_body, load_entity, reject_reserved_property_id, ts_from_millis,
-};
+use crate::search_index::reindex;
+use crate::services::entity::{load_entity, reject_reserved_property_id, ts_from_millis};
 use crate::structures;
 use crate::tiptap::references::extract_doc_references;
-use crate::tiptap::text::extract_plain_text;
 use crate::watch::WatchHub;
 use calcifer::v1::{
     rich_text_service_server::RichTextService as RichTextServiceTrait, watch_entities_response,
@@ -238,30 +236,16 @@ impl RichTextServiceTrait for RichTextService {
             .map_err(AppError::from)?;
         }
 
-        // 5. Sync the FTS `body` as the entity-scoped concatenation of all its docs'
-        //    plain text (mirrors the referenced_dates union above). `name` is owned
-        //    by EntityService and left as it is.
-        let mut fts_body = String::new();
-        for d in &all_docs {
-            if let Ok(text) = extract_plain_text(d) {
-                if text.is_empty() {
-                    continue;
-                }
-                if !fts_body.is_empty() {
-                    fts_body.push(' ');
-                }
-                fts_body.push_str(&text);
-            }
-        }
-
-        fts_upsert_body(&mut tx, &entity_id, &fts_body)
-            .await
-            .map_err(Status::from)?;
+        // 5. Reindex the entity's search row, whose `body` is the plain text of
+        //    all its docs, read with the links just written.
+        let reindexed = reindex(&mut tx, &entity_id).await.map_err(AppError::from)?;
 
         tx.commit().await.map_err(AppError::from)?;
 
         // Content changed: queue the entity for (re)embedding off the hot-path.
-        self.embed.enqueue(&entity_id);
+        for id in reindexed {
+            self.embed.enqueue(id);
+        }
 
         let saved = RichText {
             r#ref: Some(r),

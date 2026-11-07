@@ -7,6 +7,7 @@ use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_property;
 use crate::links::store::{replace_scoped_links, LinkTarget};
+use crate::search_index::reindex;
 use crate::structures::{self, PropertyKind};
 use calcifer::v1::{
     property_value, watch_entities_response, Entity, EntityRef, EntityRefList, PropertyValue,
@@ -162,7 +163,10 @@ impl EntityService {
         .execute(&mut *tx)
         .await
         .map_err(AppError::from)?;
+        // The property may hold Tags, which search reads.
+        let reindexed = reindex(&mut tx, entity_id).await.map_err(AppError::from)?;
         tx.commit().await.map_err(AppError::from)?;
+        self.embed_all(reindexed);
 
         let saved = self.load_entity(entity_id).await.map_err(Status::from)?;
         self.hub

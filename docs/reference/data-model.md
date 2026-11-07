@@ -719,20 +719,34 @@ or below it, which the snapshot already includes.
 `SearchService.Search` is the RAG substrate; it isn't surfaced in the UI yet. Its
 `mode` picks one of three rankings:
 
-- **Lexical** — FTS5 (`entity_fts`, `tokenize='unicode61'`) over entity names plus
-  plain text extracted from documents, each query term prefix-matched, ranked by
-  `bm25()`. Kept in sync inside the same transactions as `RichTextService.PutRichText` and
-  entity create/update/delete. FTS5 can't look up its `entity_id UNINDEXED` column, so
-  each entity's row is addressed by rowid: `entity_fts_rowids` maps an entity id to
-  its `fts_rowid` (assigned on first write, stable across `VACUUM`, cascading from
-  `entities`). A rename updates `name` and a save updates `body` in place. FTS5 rows
-  don't cascade, so `DeleteEntity` deletes the entity's row before the entity.
-- **Semantic** — vector KNN over chunk embeddings, best chunk per entity. Documents
+- **Lexical** — FTS5 (`entity_fts`, `tokenize='porter unicode61'`, so words are
+  stemmed and "engines" finds "engine") over three columns: the entity's `name`, the
+  `tags` its properties hold (their names, so a note is found by its Tags) and `body`,
+  the plain text of its documents (`richtext-doc.md`, "Text"). Each query term is
+  prefix-matched, ranked by `bm25()` with the name weighted 10, Tags 5 and the body 1;
+  an entity whose folded name is the query comes first in every mode.
+  `search_index::reindex` rewrites an entity's row from what it is now, inside the
+  transaction of every write that can change it (create, rename, a property, a
+  relation target, a document save, the Tag-stripping of a delete), and when its name
+  changed, the rows of the entities that link to it, whose chips read the name. It
+  returns the ids whose text changed, which the writer queues for embedding. FTS5
+  can't look up its `entity_id UNINDEXED` column, so each entity's row is addressed by
+  rowid: `entity_fts_rowids` maps an entity id to its `fts_rowid` (assigned on first
+  write, stable across `VACUUM`, cascading from `entities`). FTS5 rows don't cascade,
+  so `DeleteEntity` deletes the entity's row before the entity. At boot,
+  `search_index::index_missing` indexes every entity that has no row, which after a
+  migration that rebuilds the table is all of them.
+- **Semantic** — vector KNN over chunk embeddings, best chunk per entity. An
+  entity's first chunk is its name and its Tags (`Apollo 11` / `Tags: program.apollo,
+  nasa`), on its own, so every entity is found by its name; prefixing them to the first
+  body chunk instead cost 4 of the Q1 scorecard's 29 top-1 hits. Documents
   are chunked on heading and paragraph boundaries (~500 tokens) into `chunks`;
   embeddings land in a `sqlite-vec` `vec0` table (`entity_vec`) at a dimension pinned
   by the migration, one per chunk, sharing the chunk's `id`. The embed worker replaces
   an entity's chunks off the write path; if the entity is deleted while its docs are
   embedding, the chunk insert fails its foreign key and the worker drops that run.
+  When it starts it queues every entity with no chunks, so a migration that deletes
+  them (as batch 3's did) re-embeds everything.
 - **Hybrid** (the default, and what `UNSPECIFIED` means) — the lexical and semantic
   rankings fused by reciprocal-rank fusion.
 

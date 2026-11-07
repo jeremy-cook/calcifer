@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT l.target_id AS \"id!\", t.name AS \"name!\"\n               FROM links l JOIN entities t ON t.id = l.target_id\n               WHERE l.entity_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "name": "name!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "5af5ef9f7e49e6ae8e7ae7bdd5365529a7bafc1540a9520f051869ac0a1fe01f"
+}

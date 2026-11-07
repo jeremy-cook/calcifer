@@ -1,6 +1,9 @@
-//! Chunk a TipTap JSON doc into ~500-token text slices for embedding.
+//! Chunk an entity's TipTap JSON docs into ~500-token text slices for embedding.
 //!
-//! We walk the doc's top-level blocks (paragraphs, headings, list items, …),
+//! A header (the entity's name and Tags, from `search_index`) is the first
+//! chunk, on its own (I-87): leading the first body chunk with it instead lost
+//! 4 of 29 top-1 semantic hits on the Q1 scorecard, since a note's distinctive
+//! text then shares its vector with labels many notes carry. Then we walk each doc's top-level blocks (paragraphs, headings, list items, …),
 //! flatten each block to plain text with `tiptap::text::collect_text`, the same rule
 //! `extract_plain_text` uses for FTS (I-54), then greedily pack whole blocks into
 //! chunks until adding the next block would exceed the token budget. Blocks are never split mid-way (a single
@@ -12,36 +15,39 @@
 
 use serde_json::Value;
 
-use crate::tiptap::text::collect_text;
+use crate::tiptap::text::{collect_text, ChipNames};
 
 /// Target chunk size in approximate tokens (whitespace words). MiniLM truncates
 /// past ~256 wordpieces; 500 words sits near that once subword expansion is
 /// accounted for, and fastembed truncates the overflow rather than erroring.
 const CHUNK_TARGET_TOKENS: usize = 500;
 
-/// Split a TipTap doc into ordered chunk texts. Returns an empty vec for a
-/// blank/empty/invalid doc (the worker treats that as "this entity has no
-/// embeddable content" and clears its rows).
-pub fn chunk_doc(doc_json: &str) -> Vec<String> {
-    if doc_json.trim().is_empty() {
-        return vec![];
+/// Split `header` and the blocks of `docs` into ordered chunk texts: the
+/// header alone, unless blank, then the docs' blocks packed, a chip reading as
+/// its target's name in `names`. A blank, empty or invalid doc adds nothing.
+pub fn chunk_docs(header: &str, docs: &[String], names: &ChipNames) -> Vec<String> {
+    let header = header.trim();
+    let mut blocks = Vec::new();
+    for doc_json in docs {
+        if let Ok(doc) = serde_json::from_str::<Value>(doc_json) {
+            blocks.extend(block_texts(&doc, names));
+        }
     }
-    let doc: Value = match serde_json::from_str(doc_json) {
-        Ok(v) => v,
-        Err(_) => return vec![],
-    };
-
-    let blocks = block_texts(&doc);
-    pack(blocks)
+    let mut chunks = Vec::new();
+    if !header.is_empty() {
+        chunks.push(header.to_string());
+    }
+    chunks.extend(pack(blocks));
+    chunks
 }
 
 /// Flatten each top-level block of the doc into one plain-text string, dropping
 /// blanks. Falls back to treating the whole doc as one block when it has no
 /// `content` array.
-fn block_texts(doc: &Value) -> Vec<String> {
+fn block_texts(doc: &Value, names: &ChipNames) -> Vec<String> {
     let Some(content) = doc.get("content").and_then(Value::as_array) else {
         let mut s = String::new();
-        collect_text(doc, &mut s);
+        collect_text(doc, names, &mut s);
         let s = s.trim().to_string();
         return if s.is_empty() { vec![] } else { vec![s] };
     };
@@ -50,7 +56,7 @@ fn block_texts(doc: &Value) -> Vec<String> {
         .iter()
         .filter_map(|block| {
             let mut s = String::new();
-            collect_text(block, &mut s);
+            collect_text(block, names, &mut s);
             let s = s.trim().to_string();
             if s.is_empty() {
                 None
@@ -89,11 +95,40 @@ fn pack(blocks: Vec<String>) -> Vec<String> {
 mod tests {
     use super::*;
 
+    /// The chunks of one doc with no header.
+    fn chunk_doc(doc: &str) -> Vec<String> {
+        chunk_docs("", &[doc.to_string()], &ChipNames::new())
+    }
+
     #[test]
     fn empty_doc_yields_no_chunks() {
         assert!(chunk_doc("").is_empty());
         assert!(chunk_doc("   ").is_empty());
         assert!(chunk_doc("{not json").is_empty());
+    }
+
+    // I-87: the header is the first chunk, on its own.
+    #[test]
+    fn the_header_is_the_first_chunk() {
+        let doc = r#"{"type":"doc","content":[
+            {"type":"paragraph","content":[{"type":"text","text":"hello world"}]}
+        ]}"#;
+        let names = ChipNames::new();
+        assert_eq!(
+            chunk_docs(
+                "Apollo 11\nTags: program.apollo",
+                &[doc.to_string()],
+                &names
+            ),
+            vec![
+                "Apollo 11\nTags: program.apollo".to_string(),
+                "hello world".to_string()
+            ]
+        );
+        assert_eq!(
+            chunk_docs("Apollo 11", &[], &names),
+            vec!["Apollo 11".to_string()]
+        );
     }
 
     #[test]

@@ -5,9 +5,11 @@
 //! `EmbedHandle::enqueue(entity_id)` after their transaction commits. The handle
 //! pushes the id onto an unbounded channel and returns instantly — the request
 //! never waits on chunking or the ONNX model. A single spawned task drains the
-//! channel, and for each id: reads the entity's richtext docs, re-chunks +
-//! re-embeds, and delete-then-inserts that entity's `chunks`/`entity_vec` rows
-//! (wholesale per entity, mirroring how `entity_fts` is owned by the writers).
+//! channel, and for each id: reads the entity's search text (`search_index`: its
+//! name, Tags and richtext docs), re-chunks + re-embeds, and delete-then-inserts
+//! that entity's `chunks`/`entity_vec` rows (wholesale per entity, mirroring how
+//! `entity_fts` is owned by the writers). On start it queues every entity that
+//! has no chunks, which after a migration that drops them is every entity.
 //!
 //! `EmbedHandle` also exposes `embed_query` so `SearchService.Search` (semantic
 //! and hybrid modes) can embed the search string through the same model. When
@@ -27,9 +29,9 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tracing::{Instrument, Span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::embed::chunk::chunk_doc;
 use crate::embed::provider::{Embedder, LocalEmbedder, EMBED_DIM};
 use crate::error::AppError;
+use crate::search_index::SearchText;
 
 /// Cheap-to-clone handle the write paths and SearchService hold. `inner` is None
 /// when the embedder could not initialise — every method then degrades safely.
@@ -161,7 +163,7 @@ pub fn spawn(pool: SqlitePool, meter: &Meter) -> EmbedHandle {
     let (tx, rx) = mpsc::unbounded_channel::<Job>();
     let queued = queue_depth(meter);
     tokio::spawn(run(
-        pool,
+        pool.clone(),
         rx,
         embedder.clone(),
         queued.clone(),
@@ -173,12 +175,36 @@ pub fn spawn(pool: SqlitePool, meter: &Meter) -> EmbedHandle {
         "semantic embed worker started"
     );
 
-    EmbedHandle {
+    let handle = EmbedHandle {
         inner: Some(Arc::new(HandleInner {
             tx,
             embedder,
             queued,
         })),
+    };
+    tokio::spawn(queue_unembedded(pool, handle.clone()));
+    handle
+}
+
+/// Queue every entity that has no chunks. Every entity with a name has at
+/// least one once embedded, so after the first pass this queues nothing.
+async fn queue_unembedded(pool: SqlitePool, handle: EmbedHandle) {
+    let ids: Result<Vec<String>, _> = sqlx::query_scalar(
+        "SELECT id FROM entities e
+         WHERE NOT EXISTS (SELECT 1 FROM chunks c WHERE c.entity_id = e.id)
+         ORDER BY created_at, id",
+    )
+    .fetch_all(&pool)
+    .await;
+    match ids {
+        Ok(ids) if ids.is_empty() => {}
+        Ok(ids) => {
+            tracing::info!(count = ids.len(), "queued entities with no embeddings");
+            for id in ids {
+                handle.enqueue(id);
+            }
+        }
+        Err(e) => tracing::warn!(error = %e, "couldn't list entities with no embeddings"),
     }
 }
 
@@ -227,18 +253,14 @@ async fn reembed_entity(
     embedder: &Arc<dyn Embedder>,
     entity_id: &str,
 ) -> Result<usize, AppError> {
-    // Concatenate the entity's richtext docs (it may have several properties),
-    // then chunk the combined content. Runtime query: plain table, but keep the
-    // whole module consistent on the unchecked API.
-    let docs: Vec<String> = sqlx::query_scalar("SELECT doc FROM richtext WHERE entity_id = ?")
-        .bind(entity_id)
-        .fetch_all(pool)
-        .await?;
-
-    let mut chunks: Vec<String> = Vec::new();
-    for doc in &docs {
-        chunks.extend(chunk_doc(doc));
-    }
+    // The entity's name and Tags, then its richtext docs (it may have several
+    // properties), chunked together. A deleted entity has nothing to embed.
+    let mut conn = pool.acquire().await?;
+    let Some(text) = SearchText::load(&mut conn, entity_id).await? else {
+        return Ok(0);
+    };
+    drop(conn);
+    let chunks = text.chunks();
 
     // Embed off the async runtime (CPU-bound ONNX). Clone the work into the
     // blocking thread; an empty chunk list skips the model entirely.

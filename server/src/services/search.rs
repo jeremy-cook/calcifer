@@ -26,8 +26,9 @@ const MATCH_CLOSE: char = '\u{E001}';
 
 /// Turn a raw user query into a prefix-matching FTS5 MATCH expression so a
 /// partial term like "trans" finds "Transformers". Each whitespace-separated
-/// term is split on the characters the index's tokenizer (`unicode61`) splits
-/// on, so "1969-07-20" is the tokens `1969 07 20` it was indexed as. The pieces
+/// term is split on the characters the index's tokenizer (`porter unicode61`)
+/// splits on, so "1969-07-20" is the tokens `1969 07 20` it was indexed as.
+/// FTS5 stems each piece as it stems the index, so "engines" finds "engine". The pieces
 /// are wrapped in double-quotes (a literal phrase, no FTS operator survives) and
 /// suffixed with `*`, a prefix scan on the phrase's last piece. Terms are
 /// space-joined → implicit AND. Returns "" when nothing usable remains.
@@ -123,15 +124,8 @@ impl SearchService {
         let rows = self.fts_rows(&match_query, limit).await?;
 
         // A note whose name is the query comes first, wherever bm25 puts it
-        // (even past `limit`). Only the name column can hold such a note.
-        let named_query = format!("name : ({match_query})");
-        let named = self.fts_rows(&named_query, limit).await?;
-        let wanted = structures::fold_name(query);
-        let exact: Vec<FtsRow> = named
-            .into_iter()
-            .filter(|row| structures::fold_name(&row.name) == wanted)
-            .collect();
-
+        // (even past `limit`).
+        let exact = self.named(query, limit).await?;
         let exact_ids: Vec<String> = exact.iter().map(|row| row.id.clone()).collect();
         Ok(exact
             .into_iter()
@@ -141,8 +135,26 @@ impl SearchService {
             .collect())
     }
 
+    /// The FTS5 rows of the entities whose name, folded, is the query: what
+    /// every mode puts first (I-87). Only the name column can hold one.
+    async fn named(&self, query: &str, limit: i64) -> Result<Vec<FtsRow>, AppError> {
+        let match_query = to_prefix_match(query);
+        if match_query.is_empty() {
+            return Ok(vec![]);
+        }
+        let named = self
+            .fts_rows(&format!("name : ({match_query})"), limit)
+            .await?;
+        let wanted = structures::fold_name(query);
+        Ok(named
+            .into_iter()
+            .filter(|row| structures::fold_name(&row.name) == wanted)
+            .collect())
+    }
+
     /// The `limit` best FTS5 rows for a MATCH expression. A note's name counts
-    /// ten times a body match: `entity_id` (unindexed) has weight 0.
+    /// ten times a body match and a Tag it carries five times: `entity_id`
+    /// (unindexed) has weight 0.
     async fn fts_rows(&self, match_query: &str, limit: i64) -> Result<Vec<FtsRow>, AppError> {
         let rows = sqlx::query_as::<_, (String, String, String)>(
             r#"SELECT entity_id,
@@ -150,7 +162,7 @@ impl SearchService {
                       snippet(entity_fts, -1, ?, ?, '…', 12)
                FROM entity_fts
                WHERE entity_fts MATCH ?
-               ORDER BY bm25(entity_fts, 0, 10, 1)
+               ORDER BY bm25(entity_fts, 0, 10, 5, 1)
                LIMIT ?"#,
         )
         .bind(MATCH_OPEN.to_string())
@@ -221,8 +233,9 @@ impl SearchService {
 
     /// Rank for `mode`. Semantic embeds the query and runs vector KNN; hybrid
     /// fuses that ranking with FTS5 via reciprocal-rank fusion (score =
-    /// Σ 1/(RRF_K + rank) across the lists an entity appears in). Both degrade to
-    /// lexical when embeddings are disabled. Unspecified means hybrid.
+    /// Σ 1/(RRF_K + rank) across the lists an entity appears in). In both, as in
+    /// lexical, an entity named the query comes first. Both degrade to lexical
+    /// when embeddings are disabled. Unspecified means hybrid.
     #[tracing::instrument(skip_all)]
     async fn rank(&self, query: &str, limit: i64, mode: SearchMode) -> Result<Ranked, AppError> {
         let hybrid = match mode {
@@ -238,16 +251,18 @@ impl SearchService {
         };
 
         let vector = self.vector_hits(&query_vec, limit).await?;
-        if hybrid {
+        let ranked = if hybrid {
             let fts = self.fts_hits(query, limit).await?;
-            return Ok(rrf_fuse(&vector, &fts, limit as usize));
-        }
-        // Pure vector: score = -distance (nearer = higher), no snippet.
-        Ok(vector
-            .into_iter()
-            .take(limit as usize)
-            .map(|(id, dist)| (id, -dist, Snippet::default()))
-            .collect())
+            rrf_fuse(&vector, &fts, limit as usize)
+        } else {
+            // Pure vector: score = -distance (nearer = higher), no snippet.
+            vector
+                .into_iter()
+                .map(|(id, dist)| (id, -dist, Snippet::default()))
+                .collect()
+        };
+        let exact = self.named(query, limit).await?;
+        Ok(named_first(exact, ranked, limit as usize))
     }
 
     /// Hydrate ranked tuples into SearchHits in one batch load, keeping rank
@@ -278,7 +293,7 @@ impl SearchService {
 #[tonic::async_trait]
 impl SearchServiceTrait for SearchService {
     /// Search in the request's mode (see `rank`). Lexical ranks by bm25 over the
-    /// `entity_fts` FTS5 index (name + body) and returns a `snippet()` over
+    /// `entity_fts` FTS5 index (name, Tags and body) and returns a `snippet()` over
     /// whichever column matched. Scores sort descending = most relevant.
     async fn search(
         &self,
@@ -301,6 +316,30 @@ impl SearchServiceTrait for SearchService {
         let hits = self.hydrate(ranked).await?;
         Ok(Response::new(SearchResponse { hits }))
     }
+}
+
+/// Put the entities in `exact` first, each scored just above the best of
+/// `ranked` and keeping the snippet it had there (none if it wasn't), then the
+/// rest of `ranked`, `limit` in all.
+fn named_first(exact: Vec<FtsRow>, mut ranked: Ranked, limit: usize) -> Ranked {
+    if exact.is_empty() {
+        ranked.truncate(limit);
+        return ranked;
+    }
+    let score = ranked.first().map_or(0.0, |r| r.1) + 1.0;
+    let mut first: Ranked = exact
+        .into_iter()
+        .map(|row| {
+            let snippet = match ranked.iter().position(|r| r.0 == row.id) {
+                Some(at) => ranked.remove(at).2,
+                None => Snippet::default(),
+            };
+            (row.id, score, snippet)
+        })
+        .collect();
+    first.extend(ranked);
+    first.truncate(limit);
+    first
 }
 
 /// Reciprocal-rank fusion of the vector and FTS rankings. Each list contributes
@@ -352,12 +391,15 @@ mod tests {
     use super::*;
     use crate::embed::provider::{Embedder, EMBED_DIM};
     use crate::services::entity::load_entity;
-    use crate::test_support::{entity_service, memory_pool, note, richtext_service};
+    use crate::test_support::{entity_service, memory_pool, note, richtext_service, tag};
     use crate::watch::WatchHub;
     use calcifer::v1::entity_service_server::EntityService as _;
     use calcifer::v1::rich_text_service_server::RichTextService as _;
     use calcifer::v1::Entity;
-    use calcifer::v1::{PutRichTextRequest, RenameEntityRequest};
+    use calcifer::v1::{
+        AddRelationTargetRequest, PutRichTextRequest, RemoveRelationTargetRequest,
+        RenameEntityRequest,
+    };
 
     /// Embeds every text as the unit vector on axis 0, so a chunk stored on axis
     /// 0 is the nearest neighbour of any query.
@@ -544,6 +586,24 @@ mod tests {
         assert_eq!(names(&unspecified), names(&hybrid));
     }
 
+    // I-87: in every mode, the note named the query comes first, even when its
+    // vector is farther than another's.
+    #[tokio::test]
+    async fn the_note_named_the_query_comes_first_in_every_mode() {
+        let pool = memory_pool().await;
+        let near = create(&pool, "Sailboat").await;
+        store_chunk(&pool, &near.id, &axis(0)).await;
+        let named = create(&pool, "Vessel").await;
+        store_chunk(&pool, &named.id, &axis(1)).await;
+        let svc = SearchService::new(pool, EmbedHandle::with_embedder(Arc::new(AxisEmbedder)));
+
+        for mode in [SearchMode::Semantic, SearchMode::Hybrid] {
+            let hits = search(&svc, "vessel", mode).await;
+            assert_eq!(names(&hits), vec!["Vessel", "Sailboat"], "{mode:?}");
+            assert!(hits[0].score > hits[1].score, "{mode:?}");
+        }
+    }
+
     #[tokio::test]
     async fn semantic_and_hybrid_fall_back_to_lexical_without_embeddings() {
         let pool = memory_pool().await;
@@ -597,11 +657,12 @@ mod tests {
         }
     }
 
-    // I-54: body text joins a word split across marks and includes a chip's label.
+    // I-54: body text joins a word split across marks and includes a chip's
+    // text, its target's name.
     #[tokio::test]
     async fn lexical_search_finds_split_words_and_mentioned_names() {
         let pool = memory_pool().await;
-        let ada = create(&pool, "Ada").await;
+        let ada = create(&pool, "Lovelace").await;
         let source = create(&pool, "Journal").await;
         let doc = format!(
             r#"{{"type":"doc","content":[{{"type":"paragraph","content":[
@@ -622,10 +683,10 @@ mod tests {
             .expect("put");
         let svc = SearchService::new(pool, EmbedHandle::disabled());
 
-        for query in ["babbage", "lovelace"] {
-            let hits = search(&svc, query, SearchMode::Lexical).await;
-            assert_eq!(names(&hits), vec!["Journal"], "{query}");
-        }
+        let hits = search(&svc, "babbage", SearchMode::Lexical).await;
+        assert_eq!(names(&hits), vec!["Journal"]);
+        let hits = search(&svc, "lovelace", SearchMode::Lexical).await;
+        assert_eq!(names(&hits), vec!["Lovelace", "Journal"]);
     }
 
     // I-86: a date chip is indexed as its ISO date, and a hyphenated word as the
@@ -797,6 +858,116 @@ mod tests {
             assert_eq!(names(&hits), vec!["Zeppelin"], "{query}");
         }
         assert!(search(&svc, "airship", SearchMode::Lexical)
+            .await
+            .is_empty());
+    }
+
+    // I-104: words are stemmed, so a plural finds the singular and back.
+    #[tokio::test]
+    async fn lexical_search_stems_words() {
+        let pool = memory_pool().await;
+        let engine = create(&pool, "Saturn V").await;
+        put_text(&pool, &engine.id, "five F-1 engine bells").await;
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        for query in ["F-1 engines", "engine", "bell"] {
+            let hits = search(&svc, query, SearchMode::Lexical).await;
+            assert_eq!(names(&hits), vec!["Saturn V"], "{query}");
+        }
+    }
+
+    /// Add (or with `remove`, remove) `tag_id` to the note's `tags`.
+    async fn retag(pool: &SqlitePool, note_id: &str, tag_id: &str, remove: bool) {
+        let svc = entity_service(pool.clone());
+        let (entity_id, property_id, target_id) =
+            (note_id.to_string(), "tags".to_string(), tag_id.to_string());
+        if remove {
+            svc.remove_relation_target(Request::new(RemoveRelationTargetRequest {
+                entity_id,
+                property_id,
+                target_id,
+            }))
+            .await
+            .expect("remove tag");
+        } else {
+            svc.add_relation_target(Request::new(AddRelationTargetRequest {
+                entity_id,
+                property_id,
+                target_id,
+            }))
+            .await
+            .expect("add tag");
+        }
+    }
+
+    async fn rename(pool: &SqlitePool, id: &str, name: &str) {
+        entity_service(pool.clone())
+            .rename_entity(Request::new(RenameEntityRequest {
+                id: id.to_string(),
+                name: name.to_string(),
+            }))
+            .await
+            .expect("rename");
+    }
+
+    // I-87: a note is found by the Tags it carries, under their current names.
+    #[tokio::test]
+    async fn a_note_is_found_by_its_tags() {
+        let pool = memory_pool().await;
+        let program = entity_service(pool.clone())
+            .create_entity(Request::new(tag("program.apollo")))
+            .await
+            .expect("create tag")
+            .into_inner()
+            .entity
+            .expect("tag");
+        let mission = create(&pool, "Eleventh mission").await;
+        retag(&pool, &mission.id, &program.id, false).await;
+        let svc = SearchService::new(pool.clone(), EmbedHandle::disabled());
+
+        let hits = search(&svc, "program.apollo", SearchMode::Lexical).await;
+        assert_eq!(names(&hits), vec!["program.apollo", "Eleventh mission"]);
+
+        rename(&pool, &program.id, "program.artemis").await;
+        let hits = search(&svc, "artemis", SearchMode::Lexical).await;
+        assert_eq!(names(&hits), vec!["program.artemis", "Eleventh mission"]);
+        assert!(search(&svc, "apollo", SearchMode::Lexical).await.is_empty());
+
+        retag(&pool, &mission.id, &program.id, true).await;
+        let hits = search(&svc, "artemis", SearchMode::Lexical).await;
+        assert_eq!(names(&hits), vec!["program.artemis"]);
+    }
+
+    // I-103: after a rename, a note that mentions the entity is found by the
+    // new name and not the old.
+    #[tokio::test]
+    async fn a_rename_reindexes_the_notes_that_mention_it() {
+        let pool = memory_pool().await;
+        let target = create(&pool, "Mercury").await;
+        let journal = create(&pool, "Journal").await;
+        let doc = format!(
+            r#"{{"type":"doc","content":[{{"type":"paragraph","content":[
+                {{"type":"text","text":"flew on "}},
+                {{"type":"mention","attrs":{{"id":"{}","label":"Mercury"}}}}
+            ]}}]}}"#,
+            target.id
+        );
+        richtext_service(pool.clone(), WatchHub::new())
+            .put_rich_text(Request::new(PutRichTextRequest {
+                entity_id: journal.id.clone(),
+                property_id: "content".to_string(),
+                doc,
+                expected_updated_at: None,
+            }))
+            .await
+            .expect("put");
+
+        rename(&pool, &target.id, "Gemini").await;
+        let svc = SearchService::new(pool, EmbedHandle::disabled());
+
+        let hits = search(&svc, "gemini", SearchMode::Lexical).await;
+        assert_eq!(names(&hits), vec!["Gemini", "Journal"]);
+        assert!(search(&svc, "mercury", SearchMode::Lexical)
             .await
             .is_empty());
     }

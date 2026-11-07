@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.name AS \"name!\" FROM links l JOIN entities t ON t.id = l.target_id\n               WHERE l.entity_id = ? AND t.structure_type = 'Tag'\n                 AND l.source_property_id IN\n                     (SELECT property_id FROM properties WHERE entity_id = l.entity_id)\n               ORDER BY l.created_at, l.link_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "name!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2473091b52b595502160ab8bdbc3a859be0d642f6cad1fc37db288ef91a63b4e"
+}

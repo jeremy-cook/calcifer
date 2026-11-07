@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name FROM entities WHERE id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "name",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "name"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "20f33ff561a0b32817b43772ec3fecd8e19045ce4ca1da34dcac37e63d426615"
+}

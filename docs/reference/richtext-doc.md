@@ -73,9 +73,11 @@ One rule gives the text for both search and embeddings (`collect_text` in `tipta
 walking the tree depth-first in document order:
 
 - Inline nodes are joined with no separator. A `text` node gives its `text`; a
-  `mention` or `hashtag` gives its `attrs.label` and a `dateChip` its `attrs.date`,
-  each only if it's a string. A `hardBreak` gives a space. So `**bold**er` (two text
-  nodes, `bold` and `er`) is indexed as `bolder`, and a chip reads as its label.
+  `mention` or `hashtag` gives its target's current name (the entity `attrs.id`
+  names), or its stored `attrs.label` when the target is gone; a `dateChip` gives its
+  `attrs.date`, each only if it's a string. A `hardBreak` gives a space. So
+  `**bold**er` (two text nodes, `bold` and `er`) is indexed as `bolder`, and a chip
+  reads as the name its target has now.
 - Any other node with `content` is a block. Blocks are separated by one space.
 
 It feeds two indexes:
@@ -84,17 +86,20 @@ It feeds two indexes:
   the result. An entity's FTS `body` is the plain text of all its rich-text documents,
   joined with spaces. A document is found by a mentioned entity's name, a tag's name or
   a date chip's day.
-- **Embeddings.** `chunk_doc` flattens each top-level block (each child of the root's
+- **Embeddings.** `chunk_docs` flattens each top-level block (each child of the root's
   `content`) with the same rule, drops blank blocks, and packs whole blocks into chunks
   of about 500 words, joined by newlines. A block is never split, so one very long
-  block becomes one chunk.
+  block becomes one chunk. The entity's name and Tags come first, as a chunk of their
+  own (see Retrieval in `data-model.md`).
 
-Labels are the snapshot stored in the chip, so after a rename the old name is what's
-indexed until the chip's label is rewritten.
+`server/src/search_index.rs` reads an entity this way. A rename reindexes the entities
+that link to the renamed one, so search finds them by the new name and not the old
+(I-103), even though the label stored in their chips is still the old one.
 
 Existing documents aren't reindexed when this rule changes. Each document's FTS text
 and embedding chunks follow the current rule from its next save; until then they keep
-the text they were indexed with.
+the text they were indexed with. A migration that rebuilds the index (as batch 3's
+did) reindexes everything at the next boot.
 
 ---
 

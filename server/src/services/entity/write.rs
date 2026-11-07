@@ -1,18 +1,18 @@
 use tonic::Status;
 
-use super::fts::fts_upsert_name;
 use super::keys::{declared_keys, key_value, map_unique_violation, set_key, shown_key_value};
 use super::validate::validate_properties;
 use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_links;
+use crate::search_index::reindex;
 use crate::structures::fold_name;
 use calcifer::v1::Entity;
 
 impl EntityService {
     /// Insert a brand-new entity built by `new_entity` (row, properties, relation
-    /// links and FTS name) in one tx and return the hydrated result. Shared by
+    /// links and search row) in one tx and return the hydrated result. Shared by
     /// Create and Resolve. A new entity has no content, so no content-derived
     /// links or referenced dates: those are `RichTextService.PutRichText`'s (ADR 3).
     /// Every key the structure declares is written too, so a taken one is
@@ -60,11 +60,11 @@ impl EntityService {
             .map_err(|e| map_unique_violation(e, &entity.structure_type, def, shown))?;
         }
         sync_relation_links(&mut tx, entity, now).await?;
-        fts_upsert_name(&mut tx, &entity.id, &entity.name).await?;
+        let reindexed = reindex(&mut tx, &entity.id).await.map_err(AppError::from)?;
         tx.commit().await.map_err(AppError::from)?;
-        // New entity: queue for embedding (no-op until it has content, but keeps
-        // the path uniform — Resolve's creates flow here too).
-        self.embed.enqueue(&entity.id);
+        // Its name and Tags are embedded before it has content. Resolve's creates
+        // flow here too.
+        self.embed_all(reindexed);
         Ok(self.load_entity(&entity.id).await?)
     }
 

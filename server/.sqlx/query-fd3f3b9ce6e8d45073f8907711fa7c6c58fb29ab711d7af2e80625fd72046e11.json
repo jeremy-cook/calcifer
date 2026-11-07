@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT entity_id AS \"entity_id!\" FROM links\n           WHERE target_id = ? AND entity_id <> ? ORDER BY entity_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "entity_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fd3f3b9ce6e8d45073f8907711fa7c6c58fb29ab711d7af2e80625fd72046e11"
+}
