@@ -14,8 +14,12 @@
 // database per size and its server's log; a database already there is measured
 // as it is. CALCIFER_SERVER is the server binary (default
 // server/target/release/calcifer-server; build it first). FASTEMBED_CACHE_DIR is
-// the embedding model's cache (default server/.fastembed_cache); without a model
-// the server runs lexical-only and the numbers leave embedding out.
+// the embedding model's cache (default server/.fastembed_cache). With a model,
+// the script waits for the embed worker to finish before it measures, which
+// takes about a minute and a half per thousand entities.
+// CALCIFER_SCALE_EMBED=off runs the server without one instead (lexical-only:
+// nothing embeds, so nothing runs beside the measurements). The snapshot and a
+// save's write don't read embeddings, so their numbers are comparable either way.
 //
 // No dependencies: it speaks gRPC-Web over fetch and writes the few protobuf
 // fields it needs by hand, so it runs with plain `node` (24 or later, for
@@ -32,6 +36,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const scaleDir = resolve(process.env.CALCIFER_SCALE_DIR ?? join(tmpdir(), 'calcifer-scale'))
 const serverBin = resolve(process.env.CALCIFER_SERVER ?? join(root, 'server/target/release/calcifer-server'))
 const modelCache = resolve(process.env.FASTEMBED_CACHE_DIR ?? join(root, 'server/.fastembed_cache'))
+const embed = process.env.CALCIFER_SCALE_EMBED !== 'off'
 const realDb = join(root, 'server/calcifer.db')
 const basePort = 18_180
 
@@ -292,8 +297,11 @@ async function startServer(size) {
     CALCIFER_ADDR: `127.0.0.1:${port}`,
     CALCIFER_MCP_ADDR: `127.0.0.1:${port + 1}`,
     CALCIFER_UI_DIR: join(root, 'web/dist'),
-    FASTEMBED_CACHE_DIR: modelCache,
     RUST_LOG: 'warn',
+    // Without the model: an empty cache, and a download that fails at once.
+    ...(embed
+      ? { FASTEMBED_CACHE_DIR: modelCache }
+      : { FASTEMBED_CACHE_DIR: join(scaleDir, 'no-model'), HF_ENDPOINT: 'http://127.0.0.1:9' }),
   }
   // The scratch directory as cwd, so no .env is found and nothing lands in the repo.
   const child = spawn(serverBin, [], { cwd: scaleDir, env, stdio: ['ignore', log, log] })
@@ -402,7 +410,7 @@ async function measure(size) {
       await seed(server.port, size)
       console.log(`  seeded in ${Math.round((Date.now() - started) / 1000)} s`)
     }
-    await settleEmbeddings(size)
+    if (embed) await settleEmbeddings(size)
     await snapshot(server.port) // warm the page cache
     const snaps = []
     for (let i = 0; i < 5; i++) snaps.push(await snapshot(server.port))
