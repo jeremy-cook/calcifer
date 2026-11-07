@@ -5,12 +5,13 @@ use std::str::FromStr;
 
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::SqlitePool;
+use tokio::sync::broadcast;
 
 use crate::embed::EmbedHandle;
 use crate::services::entity::EntityService;
 use crate::services::richtext::RichTextService;
 use crate::watch::WatchHub;
-use calcifer::v1::CreateEntityRequest;
+use calcifer::v1::{watch_entities_response, CreateEntityRequest, WatchEntitiesResponse};
 
 /// A fresh in-memory database with every migration applied. Each `:memory:`
 /// connection is its own database, so the pool is pinned to exactly one
@@ -112,4 +113,23 @@ fn create_request(structure_type: &str, name: &str) -> CreateEntityRequest {
         properties: Default::default(),
         facets: vec![],
     }
+}
+
+/// The next event waiting on `rx` that the browser's replica reads (`snapshot`,
+/// `upserted`, `deleted_id`, `rich_text_changed`), skipping the change feed's
+/// (ADR 9); None when no more are waiting. Writes publish before they return,
+/// so a test reads what a call published without awaiting.
+pub(crate) fn next_replica_event(
+    rx: &mut broadcast::Receiver<WatchEntitiesResponse>,
+) -> Option<WatchEntitiesResponse> {
+    use watch_entities_response::Event;
+    while let Ok(event) = rx.try_recv() {
+        if !matches!(
+            event.event,
+            Some(Event::Changed(_) | Event::Deleted(_) | Event::Ready(_) | Event::Resync(_))
+        ) {
+            return Some(event);
+        }
+    }
+    None
 }

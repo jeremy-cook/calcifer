@@ -217,7 +217,7 @@ async fn deleting_a_target_republishes_its_relationship_sources() {
 
     delete(&svc, &b.id).await;
 
-    let first = rx.recv().await.expect("deleted event");
+    let first = next_replica_event(&mut rx).expect("deleted event");
     assert_eq!(
         first.event,
         Some(watch_entities_response::Event::DeletedId(b.id.clone()))
@@ -225,7 +225,7 @@ async fn deleting_a_target_republishes_its_relationship_sources() {
     let mut expected = [(&a_before, &a), (&c_before, &c)];
     expected.sort_by_key(|(_, e)| e.id.clone());
     for (before, source) in expected {
-        let event = rx.recv().await.expect("upserted event");
+        let event = next_replica_event(&mut rx).expect("upserted event");
         let Some(watch_entities_response::Event::Upserted(upserted)) = event.event else {
             panic!("expected an upsert, got {event:?}");
         };
@@ -240,7 +240,7 @@ async fn deleting_a_target_republishes_its_relationship_sources() {
         );
         assert_eq!(upserted, svc.load_entity(&source.id).await.expect("load"));
     }
-    assert!(rx.try_recv().is_err(), "no further events");
+    assert!(next_replica_event(&mut rx).is_none(), "no further events");
 
     // C's relationship to the other note is untouched.
     let c_after = svc.load_entity(&c.id).await.expect("load c");
@@ -263,12 +263,16 @@ async fn deleting_a_source_removes_its_relationships() {
     delete(&svc, &a.id).await;
 
     assert_eq!(relationship_row_count(&pool).await, 0);
-    let first = rx.recv().await.expect("deleted event");
+    let first = next_replica_event(&mut rx).expect("deleted event");
     assert_eq!(
         first.event,
         Some(watch_entities_response::Event::DeletedId(a.id.clone()))
     );
-    assert!(rx.try_recv().is_err(), "the target isn't republished");
+    // The target lost a backlink: the change feed says so, the replica doesn't.
+    assert!(
+        next_replica_event(&mut rx).is_none(),
+        "the target isn't republished"
+    );
     let b_after = svc.load_entity(&b.id).await.expect("load b");
     assert_eq!(b_after, b);
 }

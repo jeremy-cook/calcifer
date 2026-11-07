@@ -56,17 +56,22 @@ service EntityService {
   // DailyNote.
   rpc SetEntityProperty(SetEntityPropertyRequest) returns (SetEntityPropertyResponse);
   rpc DeleteEntity(DeleteEntityRequest) returns (DeleteEntityResponse);
-  // One-way replication of the whole entity set (ADR 9):
-  // - The first message on every stream is a `snapshot`.
-  // - After it come events with increasing `revision`.
+  // A change feed (ADR 9), which for now also replicates the whole entity set:
+  // - Every stream starts with a `snapshot`, then `ready`.
+  // - After them come events with increasing `revision`. Each entity write
+  //   sends `upserted` and `changed` with the entity, and a delete sends
+  //   `deleted_id` and `deleted`. A write that adds or removes links also
+  //   sends `changed` for each target it gained or lost.
   // - Whenever the server can't guarantee continuity (the subscriber lagged),
-  //   it sends a fresh `snapshot`, and the client must replace its whole set.
+  //   it sends a fresh `snapshot`, which replaces the client's whole set, then
+  //   `resync`, which marks everything the client read stale.
   // - A snapshot doesn't include rich-text docs; clients refetch any doc they
   //   hold.
   // - Revisions restart when the server restarts. Clients never compare
   //   revisions across streams.
-  // A reconnect is a new stream, so it starts with a snapshot; there is no
-  // resume from a revision.
+  // A reconnect is a new stream; there is no resume from a revision.
+  // The replica's events (`snapshot`, `upserted`, `deleted_id`) go once the
+  // browser reads through the view-shaped reads (ADR 9, rollout step 6).
   rpc WatchEntities(WatchEntitiesRequest) returns (stream WatchEntitiesResponse);
   // Get-or-create one entity by a key: a (structure_type, name) pair for
   // [[wikilinks]], mentions and #tags, or a calendar day for its DailyNote. The
@@ -381,11 +386,26 @@ message WatchEntitiesResponse {
     RichText rich_text_changed = 3;
     // Replaces the client's whole entity set. Rich-text docs aren't included.
     EntitySnapshot snapshot = 4;
+    // The stream is open: anything written after this reaches it as an
+    // event, so a client reads nothing before it.
+    WatchReady ready = 5;
+    // An entity as it is now: written, or a link to it added or removed.
+    EntityChanged changed = 6;
+    EntityDeleted deleted = 7;
+    // Events were missed: everything read before this may be stale.
+    WatchResync resync = 8;
   }
   // Monotonic per server process. A snapshot carries the revision it is
-  // current as of; the events after it carry higher ones.
+  // current as of, and the `ready` or `resync` after it the same one; the
+  // events after them carry higher ones.
   uint64 revision = 15;
 }
+
+message WatchReady {}
+message WatchResync {}
+message EntityChanged { Entity entity = 1; }
+// The structure says which lists the entity was in.
+message EntityDeleted { EntityRef ref = 1; }
 
 message GetRichTextRequest {
   string entity_id = 1;

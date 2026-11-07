@@ -73,18 +73,18 @@ async fn delete_publishes_upserts_for_stripped_entities() {
 
     delete(&svc, &gone.id).await;
 
-    let first = rx.recv().await.expect("deleted event");
+    let first = next_replica_event(&mut rx).expect("deleted event");
     assert_eq!(
         first.event,
         Some(watch_entities_response::Event::DeletedId(gone.id.clone()))
     );
-    let second = rx.recv().await.expect("upserted event");
+    let second = next_replica_event(&mut rx).expect("upserted event");
     let Some(watch_entities_response::Event::Upserted(upserted)) = second.event else {
         panic!("expected an upsert, got {second:?}");
     };
     assert_eq!(upserted.id, todo.id);
     assert_eq!(relation_ids(&upserted, "tags"), Some(vec![kept.id.clone()]));
-    assert!(rx.try_recv().is_err(), "no further events");
+    assert!(next_replica_event(&mut rx).is_none(), "no further events");
 }
 
 #[tokio::test]
@@ -115,12 +115,15 @@ async fn delete_leaves_rich_text_mentions_out_of_properties() {
     let after = svc.load_entity(&mentioner.id).await.expect("load");
     assert_eq!(after.properties, before.properties);
     assert_eq!(after.updated_at, before.updated_at);
-    let event = rx.recv().await.expect("deleted event");
+    let event = next_replica_event(&mut rx).expect("deleted event");
     assert_eq!(
         event.event,
         Some(watch_entities_response::Event::DeletedId(gone.id.clone()))
     );
-    assert!(rx.try_recv().is_err(), "no upsert for a rich-text mention");
+    assert!(
+        next_replica_event(&mut rx).is_none(),
+        "no upsert for a rich-text mention"
+    );
 }
 
 #[tokio::test]

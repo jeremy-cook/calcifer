@@ -41,7 +41,8 @@ use calcifer::v1::{
 
 use super::*;
 use crate::test_support::{
-    entity_service, memory_pool, note, richtext_service, tag, todo, with_facets, ScratchDb,
+    entity_service, memory_pool, next_replica_event, note, richtext_service, tag, todo,
+    with_facets, ScratchDb,
 };
 use calcifer::v1::rich_text_service_server::RichTextService as _;
 use calcifer::v1::PutRichTextRequest;
@@ -488,13 +489,14 @@ async fn facet_row_count(pool: &SqlitePool) -> i64 {
         .expect("count entity_facets")
 }
 
-/// The one `upserted` entity on `rx`, and nothing after it.
+/// The one `upserted` entity among the replica's events on `rx`, and nothing
+/// after it.
 fn only_upsert(rx: &mut broadcast::Receiver<WatchEntitiesResponse>) -> Entity {
-    let event = rx.try_recv().expect("an event");
+    let event = next_replica_event(rx).expect("an event");
     let Some(watch_entities_response::Event::Upserted(entity)) = event.event else {
         panic!("expected an upsert, got {event:?}");
     };
-    assert!(rx.try_recv().is_err(), "no further events");
+    assert!(next_replica_event(rx).is_none(), "no further events");
     entity
 }
 

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use futures::stream::BoxStream;
 use tonic::{Request, Response, Status};
@@ -15,11 +15,12 @@ use super::validate::{
     check_name, check_name_chars, reject_reserved_property_id, validate_property,
 };
 use super::value_key::value_key;
-use super::watch::watch_stream;
+use super::watch::{link_targets, publish_write, watch_stream};
 use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_property};
+use crate::links::store::replace_scoped_links;
 use crate::search::fts::{fts_delete, reindex};
 use crate::structures::{self, fold_name, FacetDef, KeySource};
 use calcifer::v1::{
@@ -28,14 +29,14 @@ use calcifer::v1::{
     AddRelationTargetResponse, AddRelationshipRequest, AddRelationshipResponse, AttachFacetRequest,
     AttachFacetResponse, Backlink, CountReferencesRequest, CountReferencesResponse,
     CreateEntityRequest, CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse,
-    DetachFacetRequest, DetachFacetResponse, Entity, GetEntitiesRequest, GetEntitiesResponse,
-    GetEntityRequest, GetEntityResponse, ListBacklinksRequest, ListBacklinksResponse,
-    ListCalendarRequest, ListCalendarResponse, ListEntitiesRequest, ListEntitiesResponse,
-    MatchNamesRequest, MatchNamesResponse, PropertyValue, RemoveRelationTargetRequest,
-    RemoveRelationTargetResponse, RemoveRelationshipRequest, RemoveRelationshipResponse,
-    RenameEntityRequest, RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse,
-    SetEntityPropertyRequest, SetEntityPropertyResponse, WatchEntitiesRequest,
-    WatchEntitiesResponse,
+    DetachFacetRequest, DetachFacetResponse, Entity, EntityRef, GetEntitiesRequest,
+    GetEntitiesResponse, GetEntityRequest, GetEntityResponse, ListBacklinksRequest,
+    ListBacklinksResponse, ListCalendarRequest, ListCalendarResponse, ListEntitiesRequest,
+    ListEntitiesResponse, MatchNamesRequest, MatchNamesResponse, PropertyValue,
+    RemoveRelationTargetRequest, RemoveRelationTargetResponse, RemoveRelationshipRequest,
+    RemoveRelationshipResponse, RenameEntityRequest, RenameEntityResponse, ResolveEntityRequest,
+    ResolveEntityResponse, SetEntityPropertyRequest, SetEntityPropertyResponse,
+    WatchEntitiesRequest, WatchEntitiesResponse,
 };
 
 #[tonic::async_trait]
@@ -130,8 +131,9 @@ impl EntityServiceTrait for EntityService {
         } else {
             self.persist_new_entity(&entity).await?
         };
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        // Its relation values' targets gained a backlink.
+        let targets = link_targets(&saved);
+        publish_write(&self.pool, &self.hub, saved.clone(), targets).await?;
         Ok(Response::new(CreateEntityResponse {
             entity: Some(saved),
         }))
@@ -195,8 +197,7 @@ impl EntityServiceTrait for EntityService {
         self.embed_all(reindexed);
 
         let saved = self.load_entity(&id).await.map_err(Status::from)?;
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        self.hub.publish_entity(saved.clone());
         Ok(Response::new(RenameEntityResponse {
             entity: Some(saved),
         }))
@@ -289,8 +290,9 @@ impl EntityServiceTrait for EntityService {
                 || facets.iter().filter_map(|f| structures::facet(f)).any(|f| {
                     structures::facet_relation_properties(f).contains(&property_id.as_str())
                 });
+        let mut targets = BTreeSet::new();
         if declared_relation || is_relation_value(value) || was_relation {
-            sync_relation_property(
+            targets = sync_relation_property(
                 &mut tx,
                 &entity_id,
                 &structure_type,
@@ -352,8 +354,7 @@ impl EntityServiceTrait for EntityService {
         self.embed_all(reindexed);
 
         let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        publish_write(&self.pool, &self.hub, saved.clone(), targets).await?;
         Ok(Response::new(SetEntityPropertyResponse {
             entity: Some(saved),
         }))
@@ -361,10 +362,12 @@ impl EntityServiceTrait for EntityService {
 
     /// Delete an entity and everything derived from it, strip its id from other
     /// entities' relation values (I-14), and drop the relationships that point at
-    /// it (ADR 12), all in one transaction. After commit it publishes `deleted_id`
-    /// first, then one `upserted` per changed entity in id order: those whose
-    /// relation values were stripped and those that held a relationship to it, so
-    /// no replica keeps the row.
+    /// it (ADR 12), all in one transaction. After commit it publishes the delete
+    /// first, then each changed entity in id order: those whose relation values
+    /// were stripped and those that held a relationship to it, so no replica
+    /// keeps the row. Last, `changed` alone for the other entities whose links
+    /// changed: the ones it linked to and the ones whose links to it are swept
+    /// (ADR 9).
     async fn delete_entity(
         &self,
         req: Request<DeleteEntityRequest>,
@@ -373,6 +376,23 @@ impl EntityServiceTrait for EntityService {
         let now = chrono::Utc::now().timestamp_millis();
 
         let mut tx = begin_write(&self.pool).await.map_err(AppError::from)?;
+
+        let structure_type =
+            sqlx::query_scalar!("SELECT structure_type FROM entities WHERE id = ?", id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(AppError::from)?;
+        // Both ends of its links, read before the cascade and the sweep below.
+        let linked: BTreeSet<String> = sqlx::query_scalar!(
+            r#"SELECT target_id AS "id!" FROM links WHERE entity_id = ?1
+               UNION SELECT entity_id FROM links WHERE target_id = ?1"#,
+            id
+        )
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(AppError::from)?
+        .into_iter()
+        .collect();
 
         // entity_vec (vec0) can't cascade and keys on chunk ids, so delete the
         // embeddings while the chunks that name them still exist; KNN never
@@ -432,7 +452,7 @@ impl EntityServiceTrait for EntityService {
         for entity_id in &stripped {
             reindexed.extend(reindex(&mut tx, entity_id).await.map_err(AppError::from)?);
         }
-        let republish: std::collections::BTreeSet<String> =
+        let republish: BTreeSet<String> =
             stripped.into_iter().chain(relationship_sources).collect();
 
         // Inbound links authored by OTHER entities aren't covered by the cascade — sweep them
@@ -444,12 +464,27 @@ impl EntityServiceTrait for EntityService {
 
         tx.commit().await.map_err(AppError::from)?;
         self.embed_all(reindexed);
-        self.hub
-            .publish(watch_entities_response::Event::DeletedId(id));
+        match structure_type {
+            Some(structure_type) => self.hub.publish_deleted(EntityRef {
+                id: id.clone(),
+                structure_type,
+            }),
+            // An unknown id deleted nothing, so the change feed hears nothing;
+            // the replica's event goes as it always has.
+            None => self
+                .hub
+                .publish(watch_entities_response::Event::DeletedId(id.clone())),
+        }
         for entity_id in &republish {
             let saved = self.load_entity(entity_id).await.map_err(Status::from)?;
-            self.hub
-                .publish(watch_entities_response::Event::Upserted(saved));
+            self.hub.publish_entity(saved);
+        }
+        let linked: Vec<String> = linked
+            .into_iter()
+            .filter(|e| *e != id && !republish.contains(e))
+            .collect();
+        for entity in load_in_order(&self.pool, &linked, &ReadMask::all()).await? {
+            self.hub.publish_changed(entity);
         }
         Ok(Response::new(DeleteEntityResponse {}))
     }
@@ -514,8 +549,7 @@ impl EntityServiceTrait for EntityService {
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        self.hub.publish_entity(saved.clone());
         Ok(Response::new(AttachFacetResponse {
             entity: Some(saved),
         }))
@@ -562,15 +596,12 @@ impl EntityServiceTrait for EntityService {
         .execute(&mut *tx)
         .await
         .map_err(AppError::from)?;
+        let mut targets = BTreeSet::new();
         for property_id in structures::facet_relation_properties(def) {
-            sqlx::query!(
-                "DELETE FROM links WHERE entity_id = ? AND source_property_id = ?",
-                entity_id,
-                property_id,
-            )
-            .execute(&mut *tx)
-            .await
-            .map_err(AppError::from)?;
+            let lost = replace_scoped_links(&mut tx, &entity_id, property_id, &[], now)
+                .await
+                .map_err(Status::from)?;
+            targets.extend(lost);
         }
         sqlx::query!(
             "UPDATE entities SET updated_at = ? WHERE id = ?",
@@ -583,8 +614,7 @@ impl EntityServiceTrait for EntityService {
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(&entity_id).await.map_err(Status::from)?;
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        publish_write(&self.pool, &self.hub, saved.clone(), targets).await?;
         Ok(Response::new(DetachFacetResponse {
             entity: Some(saved),
         }))

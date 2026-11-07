@@ -1,6 +1,8 @@
 //! Writes to the `links` table: one scoped replace that both link sources share,
 //! and the existence / real-type lookup for mention targets.
 
+use std::collections::BTreeSet;
+
 use crate::error::AppError;
 use crate::tiptap::references::MentionRef;
 
@@ -46,6 +48,8 @@ pub(crate) async fn live_targets(
 /// `relations::check_relation_targets`, so they exist and carry their real type.
 /// Runs inside an already-open transaction. Shared by `RichTextService.PutRichText`
 /// (content-derived links) and `relations::sync_relation_property` (relation-property links).
+/// Returns the ids of the targets the scope gained or lost, whose backlinks
+/// changed, so the writer publishes them (ADR 9).
 #[tracing::instrument(skip_all)]
 pub(crate) async fn replace_scoped_links(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
@@ -53,7 +57,7 @@ pub(crate) async fn replace_scoped_links(
     source_property_id: &str,
     targets: &[LinkTarget],
     now: i64,
-) -> Result<(), AppError> {
+) -> Result<BTreeSet<String>, AppError> {
     let existing = sqlx::query!(
         "SELECT link_id, target_id, created_at FROM links
          WHERE entity_id = ? AND source_property_id = ?",
@@ -75,6 +79,18 @@ pub(crate) async fn replace_scoped_links(
     .execute(&mut **tx)
     .await?;
 
+    let kept: BTreeSet<&str> = targets.iter().map(|t| t.id.as_str()).collect();
+    let mut touched: BTreeSet<String> = prev
+        .keys()
+        .filter(|id| !kept.contains(id.as_str()))
+        .cloned()
+        .collect();
+    touched.extend(
+        kept.iter()
+            .filter(|id| !prev.contains_key(**id))
+            .map(|id| (*id).to_string()),
+    );
+
     for m in targets {
         let (link_id, created_at) = match prev.get(&m.id) {
             Some((lid, ts)) => (lid.clone(), *ts),
@@ -93,5 +109,5 @@ pub(crate) async fn replace_scoped_links(
         .execute(&mut **tx)
         .await?;
     }
-    Ok(())
+    Ok(touched)
 }

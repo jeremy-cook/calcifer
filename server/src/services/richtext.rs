@@ -6,7 +6,9 @@ use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::links::store::{live_targets, replace_scoped_links};
 use crate::search::fts::reindex;
-use crate::services::entity::{load_entity, reject_reserved_property_id, ts_from_millis};
+use crate::services::entity::{
+    load_entity, publish_write, reject_reserved_property_id, ts_from_millis,
+};
 use crate::structures;
 use crate::tiptap::references::extract_doc_references;
 use crate::watch::WatchHub;
@@ -124,7 +126,8 @@ impl RichTextServiceTrait for RichTextService {
     /// Upserts the doc, then derives THIS property's links and the entity's referenced_dates
     /// from the doc content — so no client (browser, MCP agent, …) ever authors a link directly.
     /// With `expected_updated_at` set, the write is conditional on the stored doc's
-    /// `updated_at` (see the proto). Publishes `rich_text_changed` then `upserted`.
+    /// `updated_at` (see the proto). Publishes `rich_text_changed`, then the entity
+    /// and the link targets it gained or lost (`publish_write`).
     async fn put_rich_text(
         &self,
         req: Request<PutRichTextRequest>,
@@ -196,7 +199,7 @@ impl RichTextServiceTrait for RichTextService {
         let targets = live_targets(&mut tx, &refs.entities)
             .await
             .map_err(Status::from)?;
-        replace_scoped_links(&mut tx, &entity_id, &property_id, &targets, updated_at)
+        let touched = replace_scoped_links(&mut tx, &entity_id, &property_id, &targets, updated_at)
             .await
             .map_err(Status::from)?;
 
@@ -259,8 +262,9 @@ impl RichTextServiceTrait for RichTextService {
             .publish(watch_entities_response::Event::RichTextChanged(
                 saved.clone(),
             ));
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(entity));
+        publish_write(&self.pool, &self.hub, entity, touched)
+            .await
+            .map_err(Status::from)?;
 
         Ok(Response::new(PutRichTextResponse {
             rich_text: Some(saved),
@@ -272,7 +276,7 @@ impl RichTextServiceTrait for RichTextService {
 mod tests {
     use super::*;
     use crate::test_support::{
-        entity_service, memory_pool, note, richtext_service, tag, ScratchDb,
+        entity_service, memory_pool, next_replica_event, note, richtext_service, tag, ScratchDb,
     };
     use calcifer::v1::entity_service_server::EntityService as _;
     use calcifer::v1::{CreateEntityRequest, Entity};
@@ -455,18 +459,18 @@ mod tests {
             .await
             .expect("put");
 
-        match rx.try_recv().expect("first event").event {
+        match next_replica_event(&mut rx).expect("first event").event {
             Some(watch_entities_response::Event::RichTextChanged(rt)) => assert_eq!(rt, saved),
             other => panic!("expected rich_text_changed first, got {other:?}"),
         }
-        match rx.try_recv().expect("second event").event {
+        match next_replica_event(&mut rx).expect("second event").event {
             Some(watch_entities_response::Event::Upserted(e)) => {
                 assert_eq!(e.id, entity.id);
                 assert_eq!(e.updated_at, saved.updated_at);
             }
             other => panic!("expected upserted second, got {other:?}"),
         }
-        assert!(rx.try_recv().is_err(), "no further events");
+        assert!(next_replica_event(&mut rx).is_none(), "no further events");
     }
 
     #[tokio::test]

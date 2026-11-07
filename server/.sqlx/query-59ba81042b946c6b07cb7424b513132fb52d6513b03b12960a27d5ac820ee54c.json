@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT target_id AS \"id!\" FROM links WHERE entity_id = ?1\n               UNION SELECT entity_id FROM links WHERE target_id = ?1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "target_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "59ba81042b946c6b07cb7424b513132fb52d6513b03b12960a27d5ac820ee54c"
+}

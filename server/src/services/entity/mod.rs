@@ -12,7 +12,7 @@
 //!   names; [`keys`] keeps the natural-key rows; [`value_key`] is a property
 //!   value's sortable key; [`lookup`] reads the structure registry and an
 //!   entity's facets.
-//! - [`watch`] is the `WatchEntities` stream.
+//! - [`watch`] is the `WatchEntities` stream, and publishes what a write changed.
 
 use sqlx::SqlitePool;
 
@@ -39,6 +39,7 @@ mod write;
 pub(crate) use load::{load_entities_by_id, load_entity, ts_from_millis};
 pub(crate) use validate::{check_name_chars, reject_reserved_property_id};
 pub(crate) use value_key::value_key;
+pub(crate) use watch::publish_write;
 
 /// The reserved link scope a relationship's links are derived under (ADR 12, rules 8
 /// and 9). No property can use it: ids starting with `@` are refused.

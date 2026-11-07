@@ -1,6 +1,8 @@
 //! Links derived from `relation` / `relations` property values, as opposed to
 //! rich-text links, which `RichTextService.PutRichText` derives from a doc.
 
+use std::collections::BTreeSet;
+
 use super::store::{replace_scoped_links, LinkTarget};
 use crate::error::AppError;
 use crate::structures::{self, relation_properties};
@@ -25,6 +27,7 @@ pub(crate) async fn sync_relation_links(
         property_ids.extend(structures::facet_relation_properties(facet));
     }
 
+    // A new entity's gained targets are its links, so they aren't returned.
     for property_id in property_ids {
         let value = entity
             .properties
@@ -55,6 +58,7 @@ pub(crate) fn is_relation_value(value: Option<&property_value::Value>) -> bool {
 /// (`None`, or a non-relation value, clears them). The per-property step of
 /// `sync_relation_links`, also called on its own by `EntityService.SetEntityProperty`.
 /// Callers decide which properties are relation properties; this doesn't check.
+/// Returns the targets gained or lost, as `replace_scoped_links` does.
 pub(crate) async fn sync_relation_property(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     entity_id: &str,
@@ -62,7 +66,7 @@ pub(crate) async fn sync_relation_property(
     property_id: &str,
     value: Option<&property_value::Value>,
     now: i64,
-) -> Result<(), AppError> {
+) -> Result<BTreeSet<String>, AppError> {
     let refs: Vec<&EntityRef> = match value {
         Some(property_value::Value::Relation(r)) => vec![r],
         Some(property_value::Value::Relations(list)) => list.refs.iter().collect(),

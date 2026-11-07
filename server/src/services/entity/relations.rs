@@ -2,6 +2,7 @@ use tonic::Status;
 
 use super::lookup::structure_and_facets;
 use super::validate::reject_reserved_property_id;
+use super::watch::publish_write;
 use super::{EntityService, RELATED_SCOPE};
 use crate::db::begin_write;
 use crate::error::AppError;
@@ -9,9 +10,7 @@ use crate::links::relations::sync_relation_property;
 use crate::links::store::{replace_scoped_links, LinkTarget};
 use crate::search::fts::reindex;
 use crate::structures::{self, PropertyKind};
-use calcifer::v1::{
-    property_value, watch_entities_response, Entity, EntityRef, EntityRefList, PropertyValue,
-};
+use calcifer::v1::{property_value, Entity, EntityRef, EntityRefList, PropertyValue};
 
 impl EntityService {
     /// The shared body of AddRelationTarget and RemoveRelationTarget: change one
@@ -149,7 +148,7 @@ impl EntityService {
                 .map_err(AppError::from)?;
             }
         }
-        sync_relation_property(
+        let targets = sync_relation_property(
             &mut tx,
             entity_id,
             &structure_type,
@@ -173,8 +172,7 @@ impl EntityService {
         self.embed_all(reindexed);
 
         let saved = self.load_entity(entity_id).await.map_err(Status::from)?;
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        publish_write(&self.pool, &self.hub, saved.clone(), targets).await?;
         Ok(saved)
     }
 
@@ -284,7 +282,7 @@ impl EntityService {
             structure_type: row.structure_type,
         })
         .collect();
-        replace_scoped_links(&mut tx, entity_id, RELATED_SCOPE, &targets, now)
+        let touched = replace_scoped_links(&mut tx, entity_id, RELATED_SCOPE, &targets, now)
             .await
             .map_err(Status::from)?;
         sqlx::query!(
@@ -298,8 +296,7 @@ impl EntityService {
         tx.commit().await.map_err(AppError::from)?;
 
         let saved = self.load_entity(entity_id).await.map_err(Status::from)?;
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        publish_write(&self.pool, &self.hub, saved.clone(), touched).await?;
         Ok(saved)
     }
 }

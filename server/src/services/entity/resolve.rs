@@ -9,7 +9,7 @@ use super::EntityService;
 use crate::dates::is_iso_day;
 use crate::error::AppError;
 use crate::structures::{self, fold_name, NameRule, StructureDef};
-use calcifer::v1::{watch_entities_response, Entity, ResolveEntityResponse};
+use calcifer::v1::{Entity, ResolveEntityResponse};
 
 /// How many free names `persist_with_free_name` tries before it gives up.
 const FREE_NAME_ATTEMPTS: usize = 5;
@@ -267,10 +267,10 @@ impl EntityService {
         }
     }
 
-    /// Publish a Resolve-created entity and wrap it in the response.
+    /// Publish a Resolve-created entity and wrap it in the response. It has
+    /// only defaults, so no links, and no target to publish.
     pub(super) fn created(&self, saved: Entity) -> ResolveEntityResponse {
-        self.hub
-            .publish(watch_entities_response::Event::Upserted(saved.clone()));
+        self.hub.publish_entity(saved.clone());
         ResolveEntityResponse {
             entity: Some(saved),
             created: true,

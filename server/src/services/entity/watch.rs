@@ -1,20 +1,65 @@
+use std::collections::BTreeSet;
+
 use futures::stream::BoxStream;
 use sqlx::SqlitePool;
 use tokio::sync::broadcast::{self, error::RecvError};
 use tonic::Status;
 
-use super::load::load_entities;
+use super::load::{load_entities, load_in_order};
+use super::mask::ReadMask;
+use crate::error::AppError;
 use crate::watch::WatchHub;
-use calcifer::v1::{watch_entities_response, EntitySnapshot, WatchEntitiesResponse};
+use calcifer::v1::{
+    watch_entities_response, Entity, EntitySnapshot, WatchEntitiesResponse, WatchReady, WatchResync,
+};
+
+/// Publish a committed write (ADR 9): its entity, as `upserted` and `changed`,
+/// then `changed` for each other entity in `targets`, in id order: the link
+/// targets the write gained or lost, whose backlinks changed. A target deleted
+/// since is skipped. Call after the transaction commits, as `WatchHub::publish`
+/// requires.
+pub(crate) async fn publish_write(
+    pool: &SqlitePool,
+    hub: &WatchHub,
+    saved: Entity,
+    mut targets: BTreeSet<String>,
+) -> Result<(), AppError> {
+    targets.remove(&saved.id);
+    hub.publish_entity(saved);
+    let targets: Vec<String> = targets.into_iter().collect();
+    for target in load_in_order(pool, &targets, &ReadMask::all()).await? {
+        hub.publish_changed(target);
+    }
+    Ok(())
+}
+
+/// The ids of an entity's link targets: what a new entity gains.
+pub(super) fn link_targets(entity: &Entity) -> BTreeSet<String> {
+    entity
+        .links
+        .iter()
+        .filter_map(|l| Some(l.target.as_ref()?.id.clone()))
+        .collect()
+}
 
 /// What a Watch stream sends next.
 pub(super) enum WatchPhase {
-    /// A snapshot: at the start, and again after the receiver lags.
-    Snapshot,
+    /// A snapshot: at the start, and again after the receiver lags. Then the
+    /// marker, at the snapshot's revision.
+    Snapshot(Marker),
+    /// The marker after a snapshot: `ready` or `resync`.
+    Marker(Marker),
     /// Events newer than the last snapshot.
     Events,
     /// Nothing: a snapshot failed to load and the error has been sent.
     Done,
+}
+
+/// What follows a snapshot: `ready` on a new stream, `resync` after a lag.
+#[derive(Clone, Copy)]
+pub(super) enum Marker {
+    Ready,
+    Resync,
 }
 
 pub(super) struct WatchState {
@@ -26,11 +71,16 @@ pub(super) struct WatchState {
     phase: WatchPhase,
 }
 
-/// The Watch stream (ADR 9): a snapshot of every entity, then each event the
-/// snapshot doesn't cover, in revision order. When `rx` lags, the stream sends a
-/// fresh snapshot in place of the events it missed. `rx` must already be
-/// subscribed to `hub`. The first snapshot is sent as soon as the stream is
-/// polled, without waiting for an event.
+/// The Watch stream (ADR 9): a snapshot of every entity and `ready`, then each
+/// event the snapshot doesn't cover, in revision order. When `rx` lags, the
+/// stream sends a fresh snapshot and `resync` in place of the events it missed.
+/// `rx` must already be subscribed to `hub`. The first snapshot is sent as soon
+/// as the stream is polled, without waiting for an event.
+///
+/// A client that reads through queries rather than the snapshot waits for
+/// `ready` and queries after it: a write whose event the stream skips (at or
+/// below the snapshot's revision) committed before `ready` was sent, so its
+/// queries see it.
 ///
 /// Why nothing is lost:
 /// 1. `rx` is subscribed before the stream reads `R = hub.current_revision()`,
@@ -53,19 +103,19 @@ pub(super) fn watch_stream(
         hub,
         rx,
         covered: 0,
-        phase: WatchPhase::Snapshot,
+        phase: WatchPhase::Snapshot(Marker::Ready),
     };
     Box::pin(futures::stream::unfold(state, |mut s| async move {
         loop {
             match s.phase {
                 WatchPhase::Done => return None,
-                WatchPhase::Snapshot => {
+                WatchPhase::Snapshot(marker) => {
                     // Read R before loading, per step 2 above.
                     let revision = s.hub.current_revision();
                     return match load_entities(&s.pool, None).await {
                         Ok(entities) => {
                             s.covered = revision;
-                            s.phase = WatchPhase::Events;
+                            s.phase = WatchPhase::Marker(marker);
                             let event = WatchEntitiesResponse {
                                 event: Some(watch_entities_response::Event::Snapshot(
                                     EntitySnapshot { entities },
@@ -80,12 +130,24 @@ pub(super) fn watch_stream(
                         }
                     };
                 }
+                WatchPhase::Marker(marker) => {
+                    s.phase = WatchPhase::Events;
+                    let event = match marker {
+                        Marker::Ready => watch_entities_response::Event::Ready(WatchReady {}),
+                        Marker::Resync => watch_entities_response::Event::Resync(WatchResync {}),
+                    };
+                    let event = WatchEntitiesResponse {
+                        event: Some(event),
+                        revision: s.covered,
+                    };
+                    return Some((Ok(event), s));
+                }
                 WatchPhase::Events => match s.rx.recv().await {
                     Ok(event) if event.revision <= s.covered => continue,
                     Ok(event) => return Some((Ok(event), s)),
                     // Missed events: resync with the same receiver, which now
                     // holds the oldest events still in the channel.
-                    Err(RecvError::Lagged(_)) => s.phase = WatchPhase::Snapshot,
+                    Err(RecvError::Lagged(_)) => s.phase = WatchPhase::Snapshot(Marker::Resync),
                     Err(RecvError::Closed) => return None,
                 },
             }

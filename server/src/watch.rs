@@ -12,7 +12,9 @@ use std::sync::{Arc, Mutex};
 
 use tokio::sync::broadcast;
 
-use calcifer::v1::{watch_entities_response, WatchEntitiesResponse};
+use calcifer::v1::{
+    watch_entities_response, Entity, EntityChanged, EntityDeleted, EntityRef, WatchEntitiesResponse,
+};
 
 #[derive(Clone)]
 pub struct WatchHub {
@@ -30,10 +32,12 @@ impl Default for WatchHub {
 
 impl WatchHub {
     pub fn new() -> Self {
-        // Capacity 256: a slow subscriber sees RecvError::Lagged (answered with a
-        // fresh snapshot by `watch_entities`) rather than backpressuring or OOMing the
-        // server.
-        Self::with_capacity(256)
+        // Capacity 1024: a slow subscriber sees RecvError::Lagged (answered with a
+        // fresh snapshot and a resync by `watch_entities`) rather than
+        // backpressuring or OOMing the server. A write publishes two events for
+        // its entity and one per link target it gains or loses, so a save that
+        // adds thirty chips is about thirty.
+        Self::with_capacity(1024)
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
@@ -55,6 +59,31 @@ impl WatchHub {
             event: Some(event),
             revision: *revision,
         });
+    }
+
+    /// Publish a written entity: `upserted` for the browser's replica and
+    /// `changed` for the change feed (ADR 9), until the replica goes.
+    pub fn publish_entity(&self, entity: Entity) {
+        self.publish(watch_entities_response::Event::Upserted(entity.clone()));
+        self.publish_changed(entity);
+    }
+
+    /// Publish `changed` alone: an entity that a write didn't write but whose
+    /// state it changed, as a link target gained or lost. The replica derives
+    /// those itself, so it gets no `upserted`.
+    pub fn publish_changed(&self, entity: Entity) {
+        self.publish(watch_entities_response::Event::Changed(EntityChanged {
+            entity: Some(entity),
+        }));
+    }
+
+    /// Publish a delete: `deleted_id` for the replica and `deleted` for the
+    /// change feed.
+    pub fn publish_deleted(&self, entity: EntityRef) {
+        self.publish(watch_entities_response::Event::DeletedId(entity.id.clone()));
+        self.publish(watch_entities_response::Event::Deleted(EntityDeleted {
+            r#ref: Some(entity),
+        }));
     }
 
     /// The revision of the last published event (0 if none yet).
