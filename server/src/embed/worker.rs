@@ -5,7 +5,7 @@
 //! `EmbedHandle::enqueue(entity_id)` after their transaction commits. The handle
 //! pushes the id onto an unbounded channel and returns instantly — the request
 //! never waits on chunking or the ONNX model. A single spawned task drains the
-//! channel, and for each id: reads the entity's search text (`search_index`: its
+//! channel, and for each id: reads the entity's search text (`search::text`: its
 //! name, Tags and richtext docs), re-chunks + re-embeds, and delete-then-inserts
 //! that entity's `chunks`/`entity_vec` rows (wholesale per entity, mirroring how
 //! `entity_fts` is owned by the writers). On start it queues every entity that
@@ -31,7 +31,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::embed::provider::{Embedder, LocalEmbedder, EMBED_DIM};
 use crate::error::AppError;
-use crate::search_index::SearchText;
+use crate::search::text::SearchText;
 
 /// Cheap-to-clone handle the write paths and SearchService hold. `inner` is None
 /// when the embedder could not initialise — every method then degrades safely.

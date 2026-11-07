@@ -2,7 +2,7 @@
 -- Tags an entity's properties hold, so a note is found by its Tags (I-87), and
 -- the `porter` stemmer, so "engines" finds "engine" (I-104). Its `body` now reads
 -- each chip as its target's current name (I-103). FTS5 can't change a table's
--- columns or tokenizer, so it's rebuilt empty: `search_index::index_missing`,
+-- columns or tokenizer, so it's rebuilt empty: `search::fts::index_missing`,
 -- run after the migrations on every boot, fills it. `entity_fts_rowids` keeps
 -- each entity's rowid.
 DROP TABLE entity_fts;

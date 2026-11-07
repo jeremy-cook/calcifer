@@ -6,7 +6,7 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_links;
-use crate::search_index::reindex;
+use crate::search::fts::reindex;
 use crate::structures::fold_name;
 use calcifer::v1::Entity;
 

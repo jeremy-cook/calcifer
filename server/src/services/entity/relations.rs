@@ -7,7 +7,7 @@ use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::sync_relation_property;
 use crate::links::store::{replace_scoped_links, LinkTarget};
-use crate::search_index::reindex;
+use crate::search::fts::reindex;
 use crate::structures::{self, PropertyKind};
 use calcifer::v1::{
     property_value, watch_entities_response, Entity, EntityRef, EntityRefList, PropertyValue,

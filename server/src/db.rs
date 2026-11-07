@@ -6,7 +6,7 @@ use std::time::Duration;
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous};
 use sqlx::{ConnectOptions, Sqlite, SqlitePool, Transaction};
 
-use crate::search_index;
+use crate::search::fts;
 use crate::structures::{self, fold_name, StructureDef};
 
 static VEC_INIT: Once = Once::new();
@@ -75,12 +75,12 @@ pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {
 /// Run the migrations, then bring every folded name up to `fold_name` (see
 /// `refold_names`), every name under its structure's name rule (see
 /// `fit_names`), and give every entity a search row (see
-/// `search_index::index_missing`).
+/// `search::fts::index_missing`).
 pub(crate) async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     sqlx::migrate!().run(pool).await?;
     refold_names(pool).await?;
     fit_names(pool).await?;
-    search_index::index_missing(pool).await
+    fts::index_missing(pool).await
 }
 
 /// Set each entity's `name_key`, and its name key's `entity_keys` value if its
@@ -218,7 +218,7 @@ async fn fit_names(pool: &SqlitePool) -> sqlx::Result<()> {
         )
         .execute(&mut *tx)
         .await?;
-        search_index::reindex(&mut tx, &row.id).await?;
+        fts::reindex(&mut tx, &row.id).await?;
         tracing::info!(
             entity_id = row.id,
             from = row.name,

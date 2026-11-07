@@ -5,7 +5,7 @@ use crate::db::begin_write;
 use crate::embed::EmbedHandle;
 use crate::error::AppError;
 use crate::links::store::{live_targets, replace_scoped_links};
-use crate::search_index::reindex;
+use crate::search::fts::reindex;
 use crate::services::entity::{load_entity, reject_reserved_property_id, ts_from_millis};
 use crate::structures;
 use crate::tiptap::references::extract_doc_references;

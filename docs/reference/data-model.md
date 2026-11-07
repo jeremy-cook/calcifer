@@ -725,7 +725,7 @@ or below it, which the snapshot already includes.
   the plain text of its documents (`richtext-doc.md`, "Text"). Each query term is
   prefix-matched, ranked by `bm25()` with the name weighted 10, Tags 5 and the body 1;
   an entity whose folded name is the query comes first in every mode.
-  `search_index::reindex` rewrites an entity's row from what it is now, inside the
+  `search::fts::reindex` rewrites an entity's row from what it is now, inside the
   transaction of every write that can change it (create, rename, a property, a
   relation target, a document save, the Tag-stripping of a delete), and when its name
   changed, the rows of the entities that link to it, whose chips read the name. It
@@ -734,7 +734,7 @@ or below it, which the snapshot already includes.
   rowid: `entity_fts_rowids` maps an entity id to its `fts_rowid` (assigned on first
   write, stable across `VACUUM`, cascading from `entities`). FTS5 rows don't cascade,
   so `DeleteEntity` deletes the entity's row before the entity. At boot,
-  `search_index::index_missing` indexes every entity that has no row, which after a
+  `search::fts::index_missing` indexes every entity that has no row, which after a
   migration that rebuilds the table is all of them.
 - **Semantic** — vector KNN over chunk embeddings, best chunk per entity. An
   entity's first chunk is its name and its Tags (`Apollo 11` / `Tags: program.apollo,

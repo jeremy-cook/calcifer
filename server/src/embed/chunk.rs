@@ -1,6 +1,6 @@
 //! Chunk an entity's TipTap JSON docs into ~500-token text slices for embedding.
 //!
-//! A header (the entity's name and Tags, from `search_index`) is the first
+//! A header (the entity's name and Tags, from `search::text`) is the first
 //! chunk, on its own (I-87): leading the first body chunk with it instead lost
 //! 4 of 29 top-1 semantic hits on the Q1 scorecard, since a note's distinctive
 //! text then shares its vector with labels many notes carry. Then we walk each doc's top-level blocks (paragraphs, headings, list items, …),

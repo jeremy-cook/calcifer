@@ -4,7 +4,7 @@
 //! - [`write`], [`resolve`] and [`relations`] are the write paths the handlers share:
 //!   persisting and replacing, get-or-create by name or date, and relation and
 //!   relationship edits.
-//! - [`load`] hydrates entities. The search rows are `crate::search_index`'s.
+//! - [`load`] hydrates entities. The search rows are `crate::search`'s.
 //! - [`construct`] builds a new entity; [`validate`] checks property values and
 //!   names; [`keys`] keeps the natural-key rows; [`lookup`] reads the structure
 //!   registry and an entity's facets.

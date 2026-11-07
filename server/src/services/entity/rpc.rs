@@ -18,7 +18,7 @@ use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
 use crate::links::relations::{is_relation_value, sync_relation_property};
-use crate::search_index::{fts_delete, reindex};
+use crate::search::fts::{fts_delete, reindex};
 use crate::structures::{self, fold_name, FacetDef, KeySource};
 use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,

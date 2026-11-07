@@ -21,7 +21,7 @@ mod embed;
 mod error;
 mod links;
 mod mcp;
-mod search_index;
+mod search;
 mod security;
 mod services;
 mod structures;

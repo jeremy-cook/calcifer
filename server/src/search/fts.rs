@@ -1,103 +1,11 @@
-//! What search reads an entity as, and the `entity_fts` row that holds it.
-//!
-//! An entity is found by its name, the names of the Tags its properties hold,
-//! and the plain text of its rich-text docs, where a chip reads as its target's
-//! current name, not the label stored with it (I-87, I-103). [`reindex`]
-//! rewrites the FTS row from that inside the writer's transaction, and the embed
-//! worker chunks the same text, the name and Tags as the first chunk. When
-//! an entity's name changes, the entities that link to it are reindexed too, so
-//! their chips read the new name: the one reindex every write path shares.
-
-use std::collections::HashMap;
+//! The `entity_fts` rows. [`reindex`] rewrites an entity's row from its
+//! [`SearchText`] inside the writer's transaction, and when its name changed,
+//! the rows of the entities that link to it, so their chips read the new name:
+//! the one reindex every write path shares.
 
 use sqlx::{Sqlite, SqliteConnection, SqlitePool, Transaction};
 
-use crate::embed::chunk::chunk_docs;
-use crate::tiptap::text::extract_plain_text;
-
-/// An entity as search reads it: what the FTS row and the embedding chunks are
-/// built from.
-pub(crate) struct SearchText {
-    name: String,
-    /// The Tags its properties hold, in the order they were added.
-    tags: Vec<String>,
-    docs: Vec<String>,
-    /// The current name of each entity it links to, by id: what a chip reads as.
-    names: HashMap<String, String>,
-}
-
-impl SearchText {
-    /// The entity's search text as it is now, or None when there's no entity.
-    pub(crate) async fn load(
-        conn: &mut SqliteConnection,
-        entity_id: &str,
-    ) -> sqlx::Result<Option<Self>> {
-        let Some(name) = sqlx::query_scalar!("SELECT name FROM entities WHERE id = ?", entity_id)
-            .fetch_optional(&mut *conn)
-            .await?
-        else {
-            return Ok(None);
-        };
-        // A Tag in a property, not a `#tag` chip: a chip's link is scoped to its
-        // doc's property, which has no `properties` row.
-        let mut tags = sqlx::query_scalar!(
-            r#"SELECT t.name AS "name!" FROM links l JOIN entities t ON t.id = l.target_id
-               WHERE l.entity_id = ? AND t.structure_type = 'Tag'
-                 AND l.source_property_id IN
-                     (SELECT property_id FROM properties WHERE entity_id = l.entity_id)
-               ORDER BY l.created_at, l.link_id"#,
-            entity_id
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        let mut seen = std::collections::HashSet::new();
-        tags.retain(|tag| seen.insert(tag.clone()));
-        let docs = sqlx::query_scalar!(
-            r#"SELECT doc AS "doc!" FROM richtext WHERE entity_id = ? ORDER BY property_id"#,
-            entity_id
-        )
-        .fetch_all(&mut *conn)
-        .await?;
-        let names = sqlx::query!(
-            r#"SELECT DISTINCT l.target_id AS "id!", t.name AS "name!"
-               FROM links l JOIN entities t ON t.id = l.target_id
-               WHERE l.entity_id = ?"#,
-            entity_id
-        )
-        .fetch_all(&mut *conn)
-        .await?
-        .into_iter()
-        .map(|r| (r.id, r.name))
-        .collect();
-        Ok(Some(Self {
-            name,
-            tags,
-            docs,
-            names,
-        }))
-    }
-
-    /// The FTS `body`: each doc's plain text, joined by a space.
-    fn body(&self) -> String {
-        self.docs
-            .iter()
-            .filter_map(|doc| extract_plain_text(doc, &self.names).ok())
-            .filter(|text| !text.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
-    /// The embedding chunks: the name and the Tags, then the docs' blocks,
-    /// packed. Never empty, since a name never is.
-    pub(crate) fn chunks(&self) -> Vec<String> {
-        let mut header = self.name.clone();
-        if !self.tags.is_empty() {
-            header.push_str("\nTags: ");
-            header.push_str(&self.tags.join(", "));
-        }
-        chunk_docs(&header, &self.docs, &self.names)
-    }
-}
+use super::text::SearchText;
 
 /// The entity's `entity_fts` rowid, from `entity_fts_rowids`, assigning one if
 /// it has none yet. FTS5 can't look up its UNINDEXED `entity_id` column, so

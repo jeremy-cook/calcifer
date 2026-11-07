@@ -92,7 +92,7 @@ It feeds two indexes:
   block becomes one chunk. The entity's name and Tags come first, as a chunk of their
   own (see Retrieval in `data-model.md`).
 
-`server/src/search_index.rs` reads an entity this way. A rename reindexes the entities
+`search::text` (`server/src/search/`) reads an entity this way. A rename reindexes the entities
 that link to the renamed one, so search finds them by the new name and not the old
 (I-103), even though the label stored in their chips is still the old one.
 
