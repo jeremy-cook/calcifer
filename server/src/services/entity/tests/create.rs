@@ -137,6 +137,7 @@ async fn unknown_structure_types_are_rejected() {
     let err = svc
         .list_entities(Request::new(ListEntitiesRequest {
             structure_type: "Custom".to_string(),
+            ..Default::default()
         }))
         .await
         .expect_err("list of an unknown type");
@@ -145,6 +146,7 @@ async fn unknown_structure_types_are_rejected() {
     let all = svc
         .list_entities(Request::new(ListEntitiesRequest {
             structure_type: String::new(),
+            ..Default::default()
         }))
         .await
         .expect("list all")

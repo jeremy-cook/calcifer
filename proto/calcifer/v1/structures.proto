@@ -35,6 +35,8 @@ message PropertyDef {
   repeated SelectOption options = 4;     // select only, in display (and rank) order
   string default_option = 5;             // select only; empty = none
   string target_structure = 6;           // relation/relations only; empty = any
+  // Date only: its values are days on the calendar (EntityService.ListCalendar).
+  bool on_calendar = 7;
 }
 
 message StructureDef {

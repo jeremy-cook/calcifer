@@ -5,9 +5,13 @@
 //!   persisting and replacing, get-or-create by name or date, and relation and
 //!   relationship edits.
 //! - [`load`] hydrates entities. The search rows are `crate::search`'s.
+//! - [`reads`] are the view-shaped reads (ADR 9): list pages, name matches,
+//!   reference counts and the calendar. [`mask`] parses their read masks and
+//!   [`page`] their orders and page tokens.
 //! - [`construct`] builds a new entity; [`validate`] checks property values and
-//!   names; [`keys`] keeps the natural-key rows; [`lookup`] reads the structure
-//!   registry and an entity's facets.
+//!   names; [`keys`] keeps the natural-key rows; [`value_key`] is a property
+//!   value's sortable key; [`lookup`] reads the structure registry and an
+//!   entity's facets.
 //! - [`watch`] is the `WatchEntities` stream.
 
 use sqlx::SqlitePool;
@@ -19,17 +23,22 @@ mod construct;
 mod keys;
 mod load;
 mod lookup;
+mod mask;
+mod page;
+mod reads;
 mod relations;
 mod resolve;
 mod rpc;
 #[cfg(test)]
 mod tests;
 mod validate;
+mod value_key;
 mod watch;
 mod write;
 
 pub(crate) use load::{load_entities_by_id, load_entity, ts_from_millis};
 pub(crate) use validate::{check_name_chars, reject_reserved_property_id};
+pub(crate) use value_key::value_key;
 
 /// The reserved link scope a relationship's links are derived under (ADR 12, rules 8
 /// and 9). No property can use it: ids starting with `@` are refused.

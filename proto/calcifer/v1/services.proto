@@ -4,14 +4,28 @@ package calcifer.v1;
 
 import "calcifer/v1/entities.proto";
 import "calcifer/v1/structures.proto";
+import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 
 service EntityService {
   rpc GetEntity(GetEntityRequest) returns (GetEntityResponse);
-  // For the agent: the frontend's replica comes from WatchEntities (ADR 9). An empty
-  // structure_type lists every entity; one not in the registry is
-  // INVALID_ARGUMENT.
+  // The entities matching a structure, a facet and property filters, in an
+  // order, a page at a time (ADR 9). With no page_size it returns every match,
+  // as the agent's whole-structure list does.
   rpc ListEntities(ListEntitiesRequest) returns (ListEntitiesResponse);
+  // Entities by id, in the order asked for. An id with no entity is left out,
+  // and an id asked for twice comes back once.
+  rpc GetEntities(GetEntitiesRequest) returns (GetEntitiesResponse);
+  // For each target id, how many entities link to it: distinct sources, a
+  // source linking to itself left out, as in ListBacklinks.
+  rpc CountReferences(CountReferencesRequest) returns (CountReferencesResponse);
+  // The entities whose folded name (I-83) starts with the folded query, in
+  // folded-name order, then id: an exact match comes first.
+  rpc MatchNames(MatchNamesRequest) returns (MatchNamesResponse);
+  // What falls on each day from `start` to `end`: the values of date properties
+  // the registry flags `on_calendar`, the days of date chips, and the days
+  // entities were created on.
+  rpc ListCalendar(ListCalendarRequest) returns (ListCalendarResponse);
   // Create a new entity from intent. The server mints the id, timestamps,
   // default properties and default name ("Untitled <structure name>", fitted to
   // its name rule, so "Untitled.Tag"; for a unique-names structure the first
@@ -176,8 +190,121 @@ message SearchHit {
 
 message GetEntityRequest      { string id = 1; }
 message GetEntityResponse     { Entity entity = 1; }
-message ListEntitiesRequest   { string structure_type = 1; }
-message ListEntitiesResponse  { repeated Entity entities = 1; }
+message ListEntitiesRequest {
+  // Only entities of this structure; empty = every structure. One not in the
+  // registry is INVALID_ARGUMENT.
+  string structure_type = 1;
+  // Only entities with this facet attached; empty = any. One not in the
+  // registry is INVALID_ARGUMENT.
+  string facet = 2;
+  // Every filter must match.
+  repeated PropertyFilter filters = 3;
+  // One key and an optional direction, as in AIP-132: "updated_at", "created_at",
+  // "name" (folded, I-83) or "properties.<id>" for a date, select, text or
+  // number property, then " desc" or " asc" (the default). Ties go to the lower
+  // id. Entities without the property come last either way. Empty is
+  // "updated_at desc". Anything else is INVALID_ARGUMENT.
+  string order_by = 4;
+  // At most this many entities (AIP-158); 0 = every match. Negative is
+  // INVALID_ARGUMENT.
+  int32 page_size = 5;
+  // The previous response's next_page_token, for the page after it; empty for
+  // the first page. A token from another order_by is INVALID_ARGUMENT. Pages
+  // don't shift when entities earlier in the order are created or deleted.
+  string page_token = 6;
+  // The Entity fields to return (AIP-157); see Read masks below. Unset = all.
+  google.protobuf.FieldMask read_mask = 7;
+}
+message ListEntitiesResponse  {
+  repeated Entity entities = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+// A condition on one property's value. The property must be declared by a
+// structure or a facet with a date, select, text or number kind, or the
+// request is INVALID_ARGUMENT; an entity without the property never matches.
+// It filters by property id only: nothing in the server knows what a property
+// means.
+message PropertyFilter {
+  string property_id = 1;
+  oneof condition {
+    // The value is this one (a value of another kind matches nothing).
+    PropertyValue equals = 2;
+    // The value is one of these.
+    PropertyValues one_of = 3;
+    // A date property's day is in the range.
+    DateRange date_range = 4;
+  }
+}
+
+message PropertyValues { repeated PropertyValue values = 1; }
+
+// Days from `start` to `end`, both included, each an ISO "yyyy-MM-dd" day or
+// empty for no bound.
+message DateRange {
+  string start = 1;
+  string end = 2;
+}
+
+// Read masks (AIP-157): a `google.protobuf.FieldMask` over Entity. Its paths
+// are "name", "properties", "properties.<property id>" (one property, e.g.
+// "properties.todo.due"), "links", "referenced_dates", "facets", "created_at"
+// and "updated_at". `id` and `structure_type` always come back; a field left
+// out is empty. An unknown path is INVALID_ARGUMENT.
+
+message GetEntitiesRequest {
+  repeated string ids = 1;
+  google.protobuf.FieldMask read_mask = 2;   // see Read masks above; unset = all
+}
+message GetEntitiesResponse { repeated Entity entities = 1; }
+
+message CountReferencesRequest { repeated string entity_ids = 1; }
+message CountReferencesResponse {
+  // Every requested id, with 0 for one nothing links to (or no entity has).
+  map<string, uint32> counts = 1;
+}
+
+message MatchNamesRequest {
+  string query = 1;                          // folded and matched as a prefix; empty matches every name
+  repeated string structure_types = 2;       // empty = every structure; one not in the registry is INVALID_ARGUMENT
+  uint32 limit = 3;                          // 0 => server default (10)
+  google.protobuf.FieldMask read_mask = 4;   // see Read masks above; unset = all
+}
+message MatchNamesResponse { repeated Entity entities = 1; }
+
+message ListCalendarRequest {
+  // ISO "yyyy-MM-dd" days, both included. Either missing or not a real day, or
+  // end before start, is INVALID_ARGUMENT.
+  string start = 1;
+  string end = 2;
+  google.protobuf.FieldMask read_mask = 3;   // for `entities`; see Read masks above; unset = all
+}
+
+enum CalendarItemKind {
+  CALENDAR_ITEM_KIND_UNSPECIFIED = 0;
+  // The value of a date property flagged `on_calendar`; `property_id` says which.
+  CALENDAR_ITEM_KIND_PROPERTY = 1;
+  // A date chip in one of the entity's documents (`Entity.referenced_dates`).
+  CALENDAR_ITEM_KIND_REFERENCE = 2;
+  // The day the entity was created, in the server's local time zone, which is
+  // the browser's: they run on one machine (ADR 5).
+  CALENDAR_ITEM_KIND_CREATED = 3;
+}
+
+message CalendarItem {
+  string day = 1;                     // ISO "yyyy-MM-dd"
+  CalendarItemKind kind = 2;
+  string entity_id = 3;
+  string property_id = 4;             // PROPERTY only
+}
+
+message ListCalendarResponse {
+  // By day, then kind, entity id and property id.
+  repeated CalendarItem items = 1;
+  // Each item's entity once, by id.
+  repeated Entity entities = 2;
+}
 message CreateEntityRequest {
   string structure_type = 2;
   // Unset or empty: the server's default name. Ignored for a DailyNote, whose

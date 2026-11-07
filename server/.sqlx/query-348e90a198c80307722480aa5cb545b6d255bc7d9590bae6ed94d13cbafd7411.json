@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id AS \"id!\" FROM entities\n               WHERE structure_type IN (SELECT value FROM json_each(?1))\n                 AND name_key >= ?2 AND name_key < ?3\n               ORDER BY name_key, id LIMIT ?4",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "entities",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "348e90a198c80307722480aa5cb545b6d255bc7d9590bae6ed94d13cbafd7411"
+}

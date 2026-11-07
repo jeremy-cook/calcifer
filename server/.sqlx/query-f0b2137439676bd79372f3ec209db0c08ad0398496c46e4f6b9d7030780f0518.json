@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity_id AS \"entity_id!\", iso_date AS \"day!\" FROM referenced_dates\n               WHERE iso_date >= ? AND iso_date <= ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "referenced_dates",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "name": "day!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "referenced_dates",
+            "name": "iso_date"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "f0b2137439676bd79372f3ec209db0c08ad0398496c46e4f6b9d7030780f0518"
+}

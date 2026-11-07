@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT entity_id AS \"entity_id!\", property_id AS \"property_id!\",\n                  value_blob AS \"value_blob!\"\n           FROM properties\n           WHERE entity_id IN (SELECT id FROM entities\n                               WHERE (?1 IS NULL OR structure_type = ?1)\n                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))\n           ORDER BY entity_id, property_id",
+  "query": "SELECT entity_id AS \"entity_id!\", property_id AS \"property_id!\",\n                  value_blob AS \"value_blob!\"\n           FROM properties WHERE value_key IS NULL",
   "describe": {
     "columns": [
       {
@@ -38,7 +38,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 0
     },
     "nullable": [
       false,
@@ -46,5 +46,5 @@
       false
     ]
   },
-  "hash": "6bf12dd4cc2c281eb290808d9a04883f21b2a0cf18f5a97018c6835a14bdf652"
+  "hash": "f8755e0d78e4756d4b87ac4593c973c2808d35b437ee5d6e52f737e3fb8558a2"
 }

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT entity_id AS \"entity_id!\", link_id AS \"link_id!\", target_id AS \"target_id!\",\n                  target_structure AS \"target_structure!\",\n                  source_property_id AS \"source_property_id!\", created_at AS \"created_at!\"\n           FROM links\n           WHERE entity_id IN (SELECT id FROM entities\n                               WHERE (?1 IS NULL OR structure_type = ?1)\n                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))\n           ORDER BY entity_id, link_id",
+  "query": "SELECT entity_id AS \"entity_id!\", link_id AS \"link_id!\", target_id AS \"target_id!\",\n                      target_structure AS \"target_structure!\",\n                      source_property_id AS \"source_property_id!\", created_at AS \"created_at!\"\n               FROM links WHERE entity_id IN (SELECT value FROM json_each(?1))\n               ORDER BY entity_id, link_id",
   "describe": {
     "columns": [
       {
@@ -71,7 +71,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false,
@@ -82,5 +82,5 @@
       false
     ]
   },
-  "hash": "f6577eace8f151f07c7a5f673e29354eaf6377e760db22108a6a45a4f984a5a9"
+  "hash": "6ce9bced219ed7b4b032851a541ead4161c1c2fa57db7715581ae940fc0ef37e"
 }

@@ -1,0 +1,33 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT target_id AS \"target_id!\", COUNT(DISTINCT entity_id) AS \"count!: i64\"\n               FROM links\n               WHERE target_id IN (SELECT value FROM json_each(?1)) AND entity_id != target_id\n               GROUP BY target_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "target_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "links",
+            "name": "target_id"
+          }
+        }
+      },
+      {
+        "name": "count!: i64",
+        "ordinal": 1,
+        "type_info": "Null",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "3e939507df30c70714c370a559b2ecafb10fcc6ddfda72265fcbb72e1f8d1481"
+}

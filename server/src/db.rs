@@ -7,7 +7,9 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, S
 use sqlx::{ConnectOptions, Sqlite, SqlitePool, Transaction};
 
 use crate::search::fts;
+use crate::services::entity::value_key;
 use crate::structures::{self, fold_name, StructureDef};
+use calcifer::v1::PropertyValue;
 
 static VEC_INIT: Once = Once::new();
 
@@ -74,13 +76,59 @@ pub async fn connect(url: &str) -> sqlx::Result<SqlitePool> {
 
 /// Run the migrations, then bring every folded name up to `fold_name` (see
 /// `refold_names`), every name under its structure's name rule (see
-/// `fit_names`), and give every entity a search row (see
+/// `fit_names`), give every property value its `value_key` (see
+/// `fill_value_keys`), and give every entity a search row (see
 /// `search::fts::index_missing`).
 pub(crate) async fn migrate(pool: &SqlitePool) -> sqlx::Result<()> {
     sqlx::migrate!().run(pool).await?;
     refold_names(pool).await?;
     fit_names(pool).await?;
+    fill_value_keys(pool).await?;
     fts::index_missing(pool).await
+}
+
+/// Set `value_key` on every property row that has none and whose value has one
+/// (`services::entity::value_key`). The `view_reads` migration adds the column
+/// empty, since SQL can't decode `value_blob`; writes set it from then on. Once
+/// every row is filled it only reads the relation values, which have none.
+async fn fill_value_keys(pool: &SqlitePool) -> sqlx::Result<()> {
+    let rows = sqlx::query!(
+        r#"SELECT entity_id AS "entity_id!", property_id AS "property_id!",
+                  value_blob AS "value_blob!"
+           FROM properties WHERE value_key IS NULL"#
+    )
+    .fetch_all(pool)
+    .await?;
+    let mut keyed = Vec::new();
+    for row in rows {
+        let value: PropertyValue = match prost::Message::decode(&*row.value_blob) {
+            Ok(value) => value,
+            Err(e) => {
+                tracing::warn!(entity_id = row.entity_id, property_id = row.property_id, error = %e, "undecodable property value");
+                continue;
+            }
+        };
+        if let Some(key) = value_key(value.value.as_ref()) {
+            keyed.push((row.entity_id, row.property_id, key));
+        }
+    }
+    if keyed.is_empty() {
+        return Ok(());
+    }
+    let mut tx = begin_write(pool).await?;
+    for (entity_id, property_id, key) in &keyed {
+        sqlx::query!(
+            "UPDATE properties SET value_key = ? WHERE entity_id = ? AND property_id = ?",
+            key,
+            entity_id,
+            property_id
+        )
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    tracing::info!(count = keyed.len(), "filled property value keys");
+    Ok(())
 }
 
 /// Set each entity's `name_key`, and its name key's `entity_keys` value if its
@@ -416,6 +464,96 @@ mod tests {
             detail.contains(
                 "USING INDEX entities_name_key (structure_type=? AND name_key>? AND name_key<?)"
             ),
+            "{detail}"
+        );
+    }
+
+    /// The migration before `value_key`.
+    const BEFORE_VALUE_KEY: i64 = 20_261_106_000_000;
+
+    // ADR 9: the boot fills `value_key` for the scalar values stored before the
+    // column, and leaves relation values without one.
+    #[tokio::test]
+    async fn existing_values_get_value_keys() {
+        use calcifer::v1::{property_value::Value, EntityRefList, PropertyValue};
+
+        let pool = unmigrated_memory_pool().await;
+        sqlx::migrate!()
+            .run_to(BEFORE_VALUE_KEY, &pool)
+            .await
+            .expect("migrate to before value_key");
+        insert(&pool, "ship", "Note", "Ship").await;
+        let values = [
+            ("todo.due", Value::Date("2026-11-07".into())),
+            ("todo.status", Value::Select("open".into())),
+            ("tags", Value::Relations(EntityRefList::default())),
+        ];
+        for (property_id, value) in values {
+            let value = PropertyValue { value: Some(value) };
+            sqlx::query(
+                "INSERT INTO properties (entity_id, property_id, value_blob) VALUES ('ship', ?, ?)",
+            )
+            .bind(property_id)
+            .bind(prost::Message::encode_to_vec(&value))
+            .execute(&pool)
+            .await
+            .expect("insert property");
+        }
+
+        super::migrate(&pool).await.expect("migrate");
+
+        let keys: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT property_id, value_key FROM properties WHERE entity_id = 'ship'
+             ORDER BY property_id",
+        )
+        .fetch_all(&pool)
+        .await
+        .expect("value keys");
+        assert_eq!(
+            keys,
+            [
+                ("tags".to_string(), None),
+                ("todo.due".to_string(), Some("2026-11-07".to_string())),
+                ("todo.status".to_string(), Some("open".to_string())),
+            ]
+        );
+    }
+
+    /// The query plan's details for `sql`, joined.
+    async fn plan(pool: &SqlitePool, sql: &str) -> String {
+        let explain = sqlx::AssertSqlSafe(format!("EXPLAIN QUERY PLAN {sql}"));
+        let plan: Vec<(i64, i64, i64, String)> = sqlx::query_as(explain)
+            .fetch_all(pool)
+            .await
+            .expect("query plan");
+        plan.iter()
+            .map(|p| p.3.as_str())
+            .collect::<Vec<_>>()
+            .join("; ")
+    }
+
+    // A filter on a property's value, and a structure's list in update order,
+    // read an index rather than scan.
+    #[tokio::test]
+    async fn view_reads_use_their_indexes() {
+        let pool = memory_pool().await;
+        let detail = plan(
+            &pool,
+            "SELECT entity_id FROM properties
+             WHERE property_id = 'todo.due' AND value_key >= '2026-11-01' AND value_key <= '2026-11-07'",
+        )
+        .await;
+        assert!(
+            detail.contains("properties_value_key (property_id=? AND value_key>? AND value_key<?)"),
+            "{detail}"
+        );
+        let detail = plan(
+            &pool,
+            "SELECT id FROM entities WHERE structure_type = 'Note' ORDER BY updated_at DESC LIMIT 50",
+        )
+        .await;
+        assert!(
+            detail.contains("USING INDEX entities_structure_updated (structure_type=?)"),
             "{detail}"
         );
     }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO properties (entity_id, property_id, value_blob, value_key)\n                     VALUES (?, ?, ?, NULL)\n                     ON CONFLICT (entity_id, property_id)\n                     DO UPDATE SET value_blob = excluded.value_blob, value_key = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "64b6bd6209532b538a19886f314afc2687747fa8938e19b5a46a2339d4b24938"
+}

@@ -63,6 +63,7 @@ impl Fixture {
     async fn notes_named(&self, name: &str) -> Vec<String> {
         let req = ListEntitiesRequest {
             structure_type: "Note".into(),
+            ..Default::default()
         };
         self.entity
             .list_entities(Request::new(req))
@@ -79,6 +80,7 @@ impl Fixture {
     async fn entity_count(&self) -> usize {
         let req = ListEntitiesRequest {
             structure_type: String::new(),
+            ..Default::default()
         };
         self.entity
             .list_entities(Request::new(req))

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT id AS \"id!\", structure_type AS \"structure_type!\", name AS \"name!\",\n                          created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n                   FROM entities\n                   WHERE id IN (SELECT value FROM json_each(?1))\n                     AND (?2 IS NULL OR structure_type = ?2)\n                   ORDER BY updated_at DESC, id",
+  "query": "SELECT id AS \"id!\", structure_type AS \"structure_type!\", name AS \"name!\",\n                  created_at AS \"created_at!\", updated_at AS \"updated_at!\"\n           FROM entities WHERE id IN (SELECT value FROM json_each(?1))",
   "describe": {
     "columns": [
       {
@@ -60,7 +60,7 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       true,
@@ -70,5 +70,5 @@
       false
     ]
   },
-  "hash": "a9ef60bc4b709385f6aa366f83c20b3885a7d90f4ec5deb9ee6db464dbb766b6"
+  "hash": "4ab8ef147f25934bfa58953b2f924587e6214af92ed2c1d2df41e99f374bdf68"
 }

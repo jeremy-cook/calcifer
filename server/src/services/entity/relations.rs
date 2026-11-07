@@ -122,10 +122,14 @@ impl EntityService {
         });
         match &value {
             Some(value) => {
+                // A relations value has no value_key; the row's old one, if it held
+                // a value of another kind, goes.
                 let blob = prost::Message::encode_to_vec(value);
                 sqlx::query!(
-                    "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
-                     ON CONFLICT (entity_id, property_id) DO UPDATE SET value_blob = excluded.value_blob",
+                    "INSERT INTO properties (entity_id, property_id, value_blob, value_key)
+                     VALUES (?, ?, ?, NULL)
+                     ON CONFLICT (entity_id, property_id)
+                     DO UPDATE SET value_blob = excluded.value_blob, value_key = NULL",
                     entity_id,
                     property_id,
                     blob,

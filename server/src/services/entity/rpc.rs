@@ -7,12 +7,14 @@ use super::construct::{daily_note_name, new_entity};
 use super::keys::{
     declared_keys, key_value, map_unique_violation, property_key_value, set_key, shown_key_value,
 };
-use super::load::{load_entities, load_entities_by_id, ts_from_millis};
+use super::load::{load_entities_by_id, load_in_order, ts_from_millis};
 use super::lookup::{accepted_facet, known_facet, known_structure, structure_and_facets};
+use super::mask::ReadMask;
 use super::relations::{strip_relation_refs, RelationTargetOp, RelationshipOp};
 use super::validate::{
     check_name, check_name_chars, reject_reserved_property_id, validate_property,
 };
+use super::value_key::value_key;
 use super::watch::watch_stream;
 use super::EntityService;
 use crate::db::begin_write;
@@ -24,13 +26,16 @@ use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, AddRelationTargetRequest,
     AddRelationTargetResponse, AddRelationshipRequest, AddRelationshipResponse, AttachFacetRequest,
-    AttachFacetResponse, Backlink, CreateEntityRequest, CreateEntityResponse, DeleteEntityRequest,
-    DeleteEntityResponse, DetachFacetRequest, DetachFacetResponse, Entity, GetEntityRequest,
-    GetEntityResponse, ListBacklinksRequest, ListBacklinksResponse, ListEntitiesRequest,
-    ListEntitiesResponse, PropertyValue, RemoveRelationTargetRequest, RemoveRelationTargetResponse,
-    RemoveRelationshipRequest, RemoveRelationshipResponse, RenameEntityRequest,
-    RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
-    SetEntityPropertyResponse, WatchEntitiesRequest, WatchEntitiesResponse,
+    AttachFacetResponse, Backlink, CountReferencesRequest, CountReferencesResponse,
+    CreateEntityRequest, CreateEntityResponse, DeleteEntityRequest, DeleteEntityResponse,
+    DetachFacetRequest, DetachFacetResponse, Entity, GetEntitiesRequest, GetEntitiesResponse,
+    GetEntityRequest, GetEntityResponse, ListBacklinksRequest, ListBacklinksResponse,
+    ListCalendarRequest, ListCalendarResponse, ListEntitiesRequest, ListEntitiesResponse,
+    MatchNamesRequest, MatchNamesResponse, PropertyValue, RemoveRelationTargetRequest,
+    RemoveRelationTargetResponse, RemoveRelationshipRequest, RemoveRelationshipResponse,
+    RenameEntityRequest, RenameEntityResponse, ResolveEntityRequest, ResolveEntityResponse,
+    SetEntityPropertyRequest, SetEntityPropertyResponse, WatchEntitiesRequest,
+    WatchEntitiesResponse,
 };
 
 #[tonic::async_trait]
@@ -50,18 +55,40 @@ impl EntityServiceTrait for EntityService {
         &self,
         req: Request<ListEntitiesRequest>,
     ) -> Result<Response<ListEntitiesResponse>, Status> {
-        let filter = req.into_inner().structure_type;
-        // "" lists every structure.
-        if !filter.is_empty() {
-            known_structure(&filter)?;
-        }
+        Ok(Response::new(self.list_page(req.into_inner()).await?))
+    }
 
-        let structure_type = (!filter.is_empty()).then_some(filter.as_str());
-        let entities = load_entities(&self.pool, structure_type)
-            .await
-            .map_err(Status::from)?;
+    async fn get_entities(
+        &self,
+        req: Request<GetEntitiesRequest>,
+    ) -> Result<Response<GetEntitiesResponse>, Status> {
+        let GetEntitiesRequest { ids, read_mask } = req.into_inner();
+        let mask = ReadMask::parse(read_mask.as_ref())?;
+        let entities = load_in_order(&self.pool, &ids, &mask).await?;
+        Ok(Response::new(GetEntitiesResponse { entities }))
+    }
 
-        Ok(Response::new(ListEntitiesResponse { entities }))
+    async fn count_references(
+        &self,
+        req: Request<CountReferencesRequest>,
+    ) -> Result<Response<CountReferencesResponse>, Status> {
+        let counts = self.reference_counts(&req.into_inner().entity_ids).await?;
+        Ok(Response::new(CountReferencesResponse { counts }))
+    }
+
+    async fn match_names(
+        &self,
+        req: Request<MatchNamesRequest>,
+    ) -> Result<Response<MatchNamesResponse>, Status> {
+        let entities = self.name_matches(req.into_inner()).await?;
+        Ok(Response::new(MatchNamesResponse { entities }))
+    }
+
+    async fn list_calendar(
+        &self,
+        req: Request<ListCalendarRequest>,
+    ) -> Result<Response<ListCalendarResponse>, Status> {
+        Ok(Response::new(self.calendar(req.into_inner()).await?))
     }
 
     // Create by intent (ADR 8): the server builds the entity with `new_entity`,
@@ -224,12 +251,16 @@ impl EntityServiceTrait for EntityService {
         match &value {
             Some(value) => {
                 let blob = prost::Message::encode_to_vec(value);
+                let key = value_key(value.value.as_ref());
                 sqlx::query!(
-                    "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
-                     ON CONFLICT (entity_id, property_id) DO UPDATE SET value_blob = excluded.value_blob",
+                    "INSERT INTO properties (entity_id, property_id, value_blob, value_key)
+                     VALUES (?, ?, ?, ?)
+                     ON CONFLICT (entity_id, property_id)
+                     DO UPDATE SET value_blob = excluded.value_blob, value_key = excluded.value_key",
                     entity_id,
                     property_id,
                     blob,
+                    key,
                 )
                 .execute(&mut *tx)
                 .await
@@ -458,12 +489,15 @@ impl EntityServiceTrait for EntityService {
                 value: Some(property_value::Value::Select(default.to_string())),
             };
             let blob = prost::Message::encode_to_vec(&value);
+            let key = value_key(value.value.as_ref());
             sqlx::query!(
-                "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)
+                "INSERT INTO properties (entity_id, property_id, value_blob, value_key)
+                 VALUES (?, ?, ?, ?)
                  ON CONFLICT (entity_id, property_id) DO NOTHING",
                 entity_id,
                 property_id,
                 blob,
+                key,
             )
             .execute(&mut *tx)
             .await

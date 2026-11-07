@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity_id AS \"entity_id!\", property_id AS \"property_id!\",\n                      value_blob AS \"value_blob!\"\n               FROM properties\n               WHERE entity_id IN (SELECT value FROM json_each(?1))\n                 AND (?2 IS NULL OR property_id IN (SELECT value FROM json_each(?2)))",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "name": "property_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "property_id"
+          }
+        }
+      },
+      {
+        "name": "value_blob!",
+        "ordinal": 2,
+        "type_info": "Blob",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "value_blob"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "51d2f763fb9b7a174ff97e6af4b4a767cd70290188c23304e795318520b230a4"
+}

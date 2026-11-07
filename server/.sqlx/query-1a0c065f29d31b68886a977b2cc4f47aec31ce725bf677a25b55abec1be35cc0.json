@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT entity_id AS \"entity_id!\", property_id AS \"property_id!\",\n                      value_key AS \"day!\"\n               FROM properties\n               WHERE property_id IN (SELECT value FROM json_each(?1))\n                 AND value_key >= ?2 AND value_key <= ?3",
+  "describe": {
+    "columns": [
+      {
+        "name": "entity_id!",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "entity_id"
+          }
+        }
+      },
+      {
+        "name": "property_id!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "property_id"
+          }
+        }
+      },
+      {
+        "name": "day!",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "properties",
+            "name": "value_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1a0c065f29d31b68886a977b2cc4f47aec31ce725bf677a25b55abec1be35cc0"
+}

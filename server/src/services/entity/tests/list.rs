@@ -115,6 +115,7 @@ async fn list_ties_are_broken_by_id() {
     let listed = |structure_type: &str| {
         svc.list_entities(Request::new(ListEntitiesRequest {
             structure_type: structure_type.to_string(),
+            ..Default::default()
         }))
     };
     let all: Vec<String> = listed("")

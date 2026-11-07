@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT entity_id AS \"entity_id!\", iso_date AS \"iso_date!\"\n           FROM referenced_dates\n           WHERE entity_id IN (SELECT id FROM entities\n                               WHERE (?1 IS NULL OR structure_type = ?1)\n                                 AND (?2 IS NULL OR id IN (SELECT value FROM json_each(?2))))\n           ORDER BY entity_id, iso_date",
+  "query": "SELECT entity_id AS \"entity_id!\", iso_date AS \"iso_date!\"\n               FROM referenced_dates WHERE entity_id IN (SELECT value FROM json_each(?1))\n               ORDER BY entity_id, iso_date",
   "describe": {
     "columns": [
       {
@@ -27,12 +27,12 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 1
     },
     "nullable": [
       false,
       false
     ]
   },
-  "hash": "ed27bacb7742b53d3d685b44029f65804097a1443341e10c32c628e39f5726eb"
+  "hash": "6d83cf572b986231ad9d704ffc23f206d58819fe2162c02d13d126ef8471145e"
 }

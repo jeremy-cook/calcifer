@@ -67,6 +67,7 @@ impl From<&PropertyDef> for proto::PropertyDef {
                 .collect(),
             default_option: def.default_option.unwrap_or_default().to_string(),
             target_structure: def.target_structure.unwrap_or_default().to_string(),
+            on_calendar: def.on_calendar,
         }
     }
 }

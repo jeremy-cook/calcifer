@@ -37,6 +37,8 @@ pub struct PropertyDef {
     pub default_option: Option<&'static str>,
     /// Relation/relations only; `None` = any structure.
     pub target_structure: Option<&'static str>,
+    /// Date only: its values are days on the calendar (`ListCalendar`).
+    pub on_calendar: bool,
 }
 
 /// Where a natural key's value comes from.
@@ -205,6 +207,15 @@ const fn prop(id: &'static str, kind: PropertyKind, label: &'static str) -> Prop
         options: &[],
         default_option: None,
         target_structure: None,
+        on_calendar: false,
+    }
+}
+
+/// A date property whose values are days on the calendar.
+const fn calendar_date(id: &'static str, label: &'static str) -> PropertyDef {
+    PropertyDef {
+        on_calendar: true,
+        ..prop(id, PropertyKind::Date, label)
     }
 }
 
@@ -275,7 +286,7 @@ pub const STRUCTURES: &[StructureDef] = &[
         plural: "Daily Notes",
         description: "a journal entry for a calendar day",
         properties: &[
-            prop("date", PropertyKind::Date, ""),
+            calendar_date("date", ""),
             prop("content", PropertyKind::Richtext, ""),
         ],
         // Created per day by Resolve's date key, never from "+ New"; the server
@@ -317,7 +328,7 @@ pub const FACETS: &[FacetDef] = &[FacetDef {
             ],
             "none",
         ),
-        prop("todo.due", PropertyKind::Date, "Due"),
+        calendar_date("todo.due", "Due"),
     ],
 }];
 
@@ -381,6 +392,31 @@ pub fn facet_relation_properties(facet: &FacetDef) -> Vec<&'static str> {
         .filter(|p| matches!(p.kind, PropertyKind::Relation | PropertyKind::Relations))
         .map(|p| p.id)
         .collect()
+}
+
+/// Every declaration of `property_id`: the structures' and the facets'. A
+/// structure property id may be declared by several structures; a facet's is
+/// declared once, by its facet.
+pub fn declarations(property_id: &str) -> impl Iterator<Item = &'static PropertyDef> + '_ {
+    let structure_props = STRUCTURES.iter().flat_map(|s| s.properties);
+    let facet_props = FACETS.iter().flat_map(|f| f.properties);
+    structure_props
+        .chain(facet_props)
+        .filter(move |p| p.id == property_id)
+}
+
+/// The ids of the properties flagged `on_calendar`, each once.
+pub fn calendar_properties() -> Vec<&'static str> {
+    let structure_props = STRUCTURES.iter().flat_map(|s| s.properties);
+    let facet_props = FACETS.iter().flat_map(|f| f.properties);
+    let mut ids: Vec<&str> = structure_props
+        .chain(facet_props)
+        .filter(|p| p.on_calendar)
+        .map(|p| p.id)
+        .collect();
+    ids.sort_unstable();
+    ids.dedup();
+    ids
 }
 
 fn properties_of(structure_type: &str) -> impl Iterator<Item = &'static PropertyDef> {
@@ -680,6 +716,28 @@ mod tests {
             .expect("DailyNote")
             .relates_to
             .is_empty());
+    }
+
+    #[test]
+    fn only_date_properties_are_on_the_calendar() {
+        let structure_props = STRUCTURES.iter().flat_map(|s| s.properties);
+        let facet_props = FACETS.iter().flat_map(|f| f.properties);
+        for p in structure_props.chain(facet_props) {
+            assert!(
+                !p.on_calendar || p.kind == PropertyKind::Date,
+                "{} is on the calendar but isn't a date",
+                p.id
+            );
+        }
+        assert_eq!(calendar_properties(), ["date", "todo.due"]);
+    }
+
+    #[test]
+    fn declarations_cover_structures_and_facets() {
+        let due: Vec<_> = declarations("todo.due").map(|p| p.kind).collect();
+        assert_eq!(due, [PropertyKind::Date]);
+        assert_eq!(declarations("content").count(), 2);
+        assert_eq!(declarations("nope").count(), 0);
     }
 
     // `@` ids are reserved for link scopes the server derives (ADR 12, rule 9).

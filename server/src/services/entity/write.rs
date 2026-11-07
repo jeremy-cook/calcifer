@@ -2,6 +2,7 @@ use tonic::Status;
 
 use super::keys::{declared_keys, key_value, map_unique_violation, set_key, shown_key_value};
 use super::validate::validate_properties;
+use super::value_key::value_key;
 use super::EntityService;
 use crate::db::begin_write;
 use crate::error::AppError;
@@ -86,11 +87,14 @@ impl EntityService {
                 return Err(AppError::Invalid("property missing value".to_string()));
             }
             let blob = prost::Message::encode_to_vec(value);
+            let key = value_key(value.value.as_ref());
             sqlx::query!(
-                "INSERT INTO properties (entity_id, property_id, value_blob) VALUES (?, ?, ?)",
+                "INSERT INTO properties (entity_id, property_id, value_blob, value_key)
+                 VALUES (?, ?, ?, ?)",
                 entity.id,
                 property_id,
                 blob,
+                key,
             )
             .execute(&mut **tx)
             .await?;

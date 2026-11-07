@@ -7,6 +7,7 @@ mod delete;
 mod facets;
 mod list;
 mod names;
+mod reads;
 mod relation_targets;
 mod relationships;
 mod resolve;
@@ -32,7 +33,7 @@ use calcifer::v1::{
     entity_service_server::EntityService as EntityServiceTrait, property_value,
     resolve_entity_request, watch_entities_response, AddRelationTargetRequest,
     AddRelationshipRequest, AttachFacetRequest, Backlink, CreateEntityRequest, DeleteEntityRequest,
-    DetachFacetRequest, Entity, EntityRef, EntityRefList, ListBacklinksRequest,
+    DetachFacetRequest, Entity, EntityRef, EntityRefList, GetEntityRequest, ListBacklinksRequest,
     ListEntitiesRequest, PropertyValue, RemoveRelationTargetRequest, RemoveRelationshipRequest,
     RenameEntityRequest, ResolveEntityRequest, ResolveEntityResponse, SetEntityPropertyRequest,
     WatchEntitiesRequest, WatchEntitiesResponse,
